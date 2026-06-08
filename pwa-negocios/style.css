@@ -1,0 +1,370 @@
+:root {
+  --bg-maquina: #08050a;
+  --bg-tarjeta: #120e17;
+  --border-color: #291f33;
+
+  --neon-green: #00ff66;
+  --neon-blue: #00e5ff;
+  --neon-purple: #b359ff;
+  --neon-amber: #ffaa00;
+  --text-white: #f1ecf5;
+  --font-machine: "Fira Code", "JetBrains Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-maquina);
+  color: var(--neon-purple);
+  font-family: var(--font-machine);
+  padding: 15px;
+  padding-bottom: 45px;
+  font-size: 0.9rem;
+}
+
+h1 {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-top: 4px;
+}
+h2 {
+  font-size: 0.95rem;
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: var(--text-white);
+}
+
+.panel-negocios {
+  background-color: var(--bg-tarjeta);
+  border: 1px solid var(--border-color);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.meta-sistema {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 4px;
+}
+
+/* --- GRILLA RESPONSIVA DEL FORMULARIO --- */
+.grid-formulario {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 15px;
+  width: 100%;
+}
+
+@media (min-width: 600px) {
+  .grid-formulario {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* --- CONTENEDORES DE CAMPOS --- */
+.campo-maquina-hibrido {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  grid-column: 1 / -1; /* Ocupa el ancho completo de la grilla */
+  width: 100%;
+}
+
+.campo-maquina {
+  display: flex;
+  flex-direction: column; /* Cambiado a columna para que el input se estire bajo el label */
+  gap: 6px;
+  width: 100%;
+}
+
+.label-maquina {
+  font-size: 0.75rem;
+  color: #a18ca8;
+  font-weight: bold;
+  display: block;
+}
+
+/* --- COMPONENTE HÍBRIDO: INPUT + BOTÓN CORREGIDO --- */
+.input-con-boton {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%; /* CORRECCIÓN: Del 15% al 100% para expandir el vector */
+}
+
+.input-con-boton .input-maquina {
+  flex-grow: 1;    /* El input se estira al máximo espacio disponible */
+  min-width: 0;    /* Evita colapsos de caja en pantallas pequeñas */
+}
+
+.input-con-boton .btn-terminal {
+  flex-shrink: 0;  /* Impide que el botón se deforme al achicar la pantalla */
+  width: auto;     /* Evita que tome el 100% dentro del contenedor flex */
+  height: 36px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- ENFOQUE DE CAJA DE TEXTO ADAPTATIVO --- */
+.input-maquina {
+  background-color: #0c080f;
+  border: 1px solid var(--border-color);
+  color: #fff;
+  font-family: inherit;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  width: 100%;              
+  box-sizing: border-box;   
+  height: 36px;
+}
+
+.input-maquina:focus {
+  outline: none;
+  border-color: var(--neon-purple);
+}
+
+/* --- REGISTRO FOTO Y MONITOR DE MASA --- */
+.bloque-hash-foto {
+  background-color: #0c080f;
+  border: 1px dashed var(--border-color);
+  padding: 10px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.input-file-contenedor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+#foto-paquete {
+  color: var(--text-white);
+  font-size: 0.8rem;
+}
+
+/* --- TABLAS --- */
+.tabla-contenedor-scroller {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 8px;
+}
+
+.tabla-maquina {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.tabla-maquina th,
+.tabla-maquina td {
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  text-align: left;
+}
+
+.tabla-maquina th {
+  background-color: #191321;
+  color: var(--text-white);
+}
+
+.tabla-maquina td {
+  color: #fff;
+}
+
+/* --- BOTONERA TÁCTICA --- */
+.btn-terminal {
+  background: transparent;
+  color: var(--neon-purple);
+  border: 1px solid var(--neon-purple);
+  font-family: inherit;
+  padding: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+}
+
+.btn-terminal:active {
+  background: var(--neon-purple);
+  color: #000;
+}
+
+/* Botones de acción rápidos */
+.btn-ir-origen,
+.btn-ir-destino {
+  width: auto;
+}
+
+.btn-agregar-lote {
+  width: 100%;
+  margin-top: 5px;
+}
+
+.btn-maquina {
+  width: 100%;
+  background: transparent;
+  font-family: inherit;
+  padding: 12px;
+  font-weight: bold;
+  border: 1px solid;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.btn-crypto {
+  border-color: var(--neon-green);
+  color: var(--neon-green);
+}
+
+.btn-crypto:disabled {
+  border-color: #243329;
+  color: #243329;
+  cursor: not-allowed;
+}
+
+/* --- STREAM CRIPTO DE CONSOLA --- */
+.panel-cripto-bloque {
+  background-color: #040205;
+  border: 1px solid var(--neon-purple);
+  padding: 10px;
+  margin-top: 15px;
+}
+
+.titulo-cifrado {
+  font-size: 0.75rem;
+  color: var(--neon-purple);
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.terminal-stream {
+  font-size: 0.7rem;
+  color: #79578a;
+  white-space: pre-wrap;
+  max-height: 100px;
+  overflow-y: hidden;
+}
+
+.txt-consola-info {
+  font-size: 0.75rem;
+  color: #6d5875;
+  line-height: 1.3;
+}
+
+.barra-estado {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--bg-maquina);
+  border-top: 1px solid var(--border-color);
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  display: flex;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.indicador-red {
+  color: var(--neon-green);
+}
+
+/* --- REORDENAMIENTO INTERACTIVO DE FILAS --- */
+.tabla-maquina tbody tr {
+  transition: all 0.25s ease;
+}
+
+.fila-levantada {
+  transform: translateY(-2px);
+  background-color: #1a1026 !important;
+  border: 1px solid var(--neon-purple) !important;
+  box-shadow: 0 4px 12px rgba(179, 89, 255, 0.2);
+}
+
+.selector-posicion-nodo {
+  background: #0c080f;
+  color: var(--neon-green);
+  border: 1px solid var(--neon-green);
+  font-family: monospace;
+  font-size: 0.75rem;
+  padding: 2px 5px;
+  border-radius: 0;
+  outline: none;
+  cursor: pointer;
+}
+/* --- NUEVA ARQUITECTURA RESPONSIVA HÍBRIDA MACONDO --- */
+
+/* Estructura base por defecto (Mobile-First / Smartphone Vertical) */
+.contenedor-split-telematico {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+}
+
+.columna-formulario,
+.columna-telemetria-mapa {
+  width: 100%;
+}
+
+/* Modificación táctica para pantallas horizontales (PC / Monitor grande) */
+@media (min-width: 992px) {
+  .contenedor-split-telematico {
+    flex-direction: row; /* Cambia a disposición horizontal lado a lado */
+    align-items: stretch; /* Fuerza a que ambas columnas tengan la misma altura */
+    gap: 20px;
+  }
+
+  .columna-formulario {
+    flex: 1; /* Toma la mitad izquierda de la pantalla */
+    display: flex;
+    flex-direction: column;
+    justify-content:间;
+  }
+
+  .columna-telemetria-mapa {
+    flex: 1; /* Toma la mitad derecha de la pantalla */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  /* Ajustamos el tamaño del mapa en PC para que guarde perfecta simetría con el formulario */
+  #mapa-telemetria {
+    height: 100% !important; /* Se estira para rellenar el espacio intermedio de forma dinámica */
+    min-height: 280px;
+    flex-grow: 1;
+    margin-top: 0 !important; /* Removemos márgenes antiguos */
+  }
+}
+/* --- DISEÑO DE FILTRO ANTI-EXTRACCIÓN EN MATRIZ --- */
+.bloque-anti-extraccion {
+  font-family: monospace;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  padding: 4px 6px;
+  background: #060408;
+  border-left: 2px solid var(--neon-green);
+}
+
+/* Optimización para que la tabla distribuya el espacio de forma inteligente en PC */
+.tabla-maquina th:nth-child(5),
+.tabla-maquina td:nth-child(5) {
+  min-width: 110px;
+}
+
+.tabla-maquina th:nth-child(6),
+.tabla-maquina td:nth-child(6) {
+  min-width: 250px; /* Le damos buen espacio al bloque comparativo */
+}

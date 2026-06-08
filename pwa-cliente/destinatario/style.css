@@ -1,0 +1,114 @@
+:root {
+  --bg-maquina: #06090e;
+  --bg-tarjeta: #0e121a;
+  --border-color: #1b2433;
+  
+  --neon-green: #00ff66;
+  --neon-blue: #00e5ff;
+  --neon-amber: #ffaa00;
+  --neon-red: #ff3333;
+  --text-white: #ecf2f8;
+  --font-machine: 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background-color: var(--bg-maquina);
+  color: var(--neon-blue);
+  font-family: var(--font-machine);
+  padding: 15px;
+  padding-bottom: 45px;
+  font-size: 0.9rem;
+}
+
+h1 { font-size: 1.2rem; font-weight: bold; margin-top: 4px; }
+h2 { font-size: 0.95rem; font-weight: bold; margin-bottom: 8px; color: var(--text-white); }
+
+.panel-destinatario {
+  background-color: var(--bg-tarjeta);
+  border: 1px solid var(--border-color);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.meta-sistema {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 4px;
+}
+
+.input-grupo-boton { display: flex; gap: 4px; }
+
+.input-maquina {
+  width: 100%;
+  background-color: #080a0f;
+  border: 1px solid var(--border-color);
+  color: #fff;
+  font-family: inherit;
+  padding: 10px;
+  font-size: 0.85rem;
+}
+.input-maquina:focus { outline: none; border-color: var(--neon-blue); }
+
+.btn-terminal {
+  background: transparent;
+  color: var(--neon-blue);
+  border: 1px solid var(--neon-blue);
+  font-family: inherit;
+  padding: 10px 16px;
+  font-weight: bold;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.btn-terminal:active { background: var(--neon-blue); color: var(--bg-maquina); }
+
+.header-status-entrega {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.bloque-telemetria-recepcion {
+  background-color: #04060a;
+  border: 1px solid var(--border-color);
+  padding: 10px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  color: var(--text-white);
+}
+
+.token-visual {
+  background-color: #04060a;
+  border: 1px dashed var(--neon-green);
+  color: var(--neon-green);
+  text-align: center;
+  padding: 12px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  margin-top: 6px;
+}
+
+.txt-consola-info { font-size: 0.75rem; color: #5c708c; margin-bottom: 10px; line-height: 1.3; }
+.label-maquina { display: block; font-size: 0.75rem; color: var(--text-white); }
+.txt-secure { color: var(--neon-green); }
+.txt-amber { color: var(--neon-amber); }
+
+.barra-estado {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background-color: var(--bg-maquina);
+  border-top: 1px solid var(--border-color);
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  display: flex;
+  justify-content: space-between;
+}
+.indicador-red { color: var(--neon-green); }

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protocolo Macondo - Consola Ciudadana</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- CABECERA DE OPERACIÓN CRIPTO -->
+  <header class="panel-cliente header-consola">
+    <div class="meta-sistema">
+      <span style="color: var(--neon-blue);">[MACONDO_CITIZEN_TERMINAL_v1.1]</span>
+      <span id="reloj-nodo">00:00:00 UTC_NODE</span>
+    </div>
+    <h1>CONSOLA_CIUDADANA</h1>
+  </header>
+
+  <!-- MÓDULO: SOLICITUD DE MENSAJERÍA DIRECTA -->
+  <main id="vista-comun">
+    <section class="panel-cliente">
+      <h2>[1] DESPACHO_INDIVIDUAL_Y_SOBERANO</h2>
+      <p class="txt-consola-info">La información de ubicación y contacto se encriptará localmente usando PGP antes de ser transmitida al Relevo Ciego.</p>
+      
+      <div class="formulario-maquina">
+        <!-- PUNTO A: ORIGEN -->
+        <div class="input-contenedor-geo">
+          <label class="label-maquina">>>> PUNTO_A (RECOLECCIÓN):</label>
+          <div class="input-grupo-boton">
+            <input type="text" class="input-maquina" id="comun-origen" placeholder="Dirección o Coordenadas de recogida">
+            <button class="btn-terminal btn-geo" onclick="capturarGeolocalizacion('origen')">[CAPTURA_GPS]</button>
+          </div>
+          <div class="log-telemetria-geo" id="geo-log-origen">[GPS]: Sensor inactivo.</div>
+        </div>
+        
+        <!-- PUNTO B: DESTINO -->
+        <div class="input-contenedor-geo" style="margin-top: 12px;">
+          <label class="label-maquina">>>> PUNTO_B (ENTREGA):</label>
+          <div class="input-grupo-boton">
+            <input type="text" class="input-maquina" id="comun-destino" placeholder="Dirección o Coordenadas de entrega">
+            <button class="btn-terminal btn-geo" onclick="capturarGeolocalizacion('destino')">[CAPTURA_GPS]</button>
+          </div>
+          <div class="log-telemetria-geo" id="geo-log-destino">[GPS]: Sensor inactivo.</div>
+        </div>
+        
+        <!-- DETALLES ADICIONALES -->
+        <div class="formulario-grid" style="margin-top: 12px;">
+          <div>
+            <label class="label-maquina">TELEFONO_CONTACTO:</label>
+            <input type="tel" class="input-maquina" id="comun-tel" placeholder="Celular para validación local">
+          </div>
+          <div>
+            <label class="label-maquina">DESCRIPCIÓN_CARGA:</label>
+            <input type="text" class="input-maquina" id="comun-carga" placeholder="Ej: Paquete documentos / 1kg">
+          </div>
+        </div>
+
+        <!-- MÓDULO COMPARATIVO ANTI-EXTRACCIÓN (Educación Popular y Desglose Matemático) -->
+        <div class="panel-contra-monopolio" id="modulo-contra-monopolio" style="display: none;">
+          <div class="header-status-contra">
+            <span>[ANÁLISIS_ALGORÍTMICO_DE_MERCADO_LOCAL]</span>
+          </div>
+          
+          <table class="tabla-comparativa-precios">
+            <tr>
+              <td>TARIFA_PROMEDIO_CORPORATIVA (Extracción del 30%)</td>
+              <td class="txt-fail" id="precio-corpo">$0.00 COP</td>
+            </tr>
+            <tr>
+              <td>TARIFA_JUSTA_MACONDO (100% para el Gremio)</td>
+              <td class="txt-secure" id="precio-macondo">$0.00 COP</td>
+            </tr>
+            <tr class="fila-resaltada">
+              <td>DIFERENCIA / EXCEDENTE RETENIDO EN TU BOLSILLO</td>
+              <td class="txt-blue" id="precio-ahorro">$0.00 COP (0%)</td>
+            </tr>
+          </table>
+
+          <!-- Desglose Ético Transparente -->
+          <div class="desglose-interno-tarifa">
+            <div class="titulo-desglose">>>> DESGLOSE_MATEMÁTICO_DE_TARIFA_JUSTA:</div>
+            <div class="item-desglose"><span>Compensación Base por Tiempo Custodio:</span> <span id="calc-tiempo">$0 COP</span></div>
+            <div class="item-desglose"><span>Reserva Fija Rodamiento Moto (SOAT/Gas):</span> <span id="calc-rodamiento">$0 COP</span></div>
+            <div class="item-desglose"><span>Aporte Comunitario (Fondo Mutual):</span> <span id="calc-mutual">$0 COP</span></div>
+          </div>
+          
+          <p class="nota-seguridad">* El Relevo Ciego no calcula esta tarifa. Se procesa de forma aislada en tu hardware mediante funciones matemáticas inmutables.</p>
+        </div>
+
+        <!-- ACCIONES BINARIAS -->
+        <div class="botonera-acciones" style="margin-top: 15px;">
+          <button class="btn-maquina btn-secundario" onclick="calcularTarifaSoberanaReal()">CALCULAR_TARIFA_ÉTICA</button>
+          <button class="btn-maquina btn-crypto" id="btn-comun-lanzar" onclick="lanzarPedidoComun()" disabled>CIFRAR_Y_PUBLICAR_CONTRATO</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- PANTALLA CRIPTOGRÁFICA DE BLINDAJE (OVERLAY) -->
+  <div class="overlay-cripto" id="overlay-cifrando" style="display: none;">
+    <div class="caja-terminal-cifrado">
+      <div class="loader-lineas">[EJECUTANDO_BLINDAJE_LOCAL_PGP]</div>
+      <div class="logs-cifrado" id="log-consola-cifrado"></div>
+    </div>
+  </div>
+
+  <!-- BARRA DE ESTADO INFERIOR FIJA -->
+  <footer class="barra-estado">
+    <span>KEY_PAIR: OPEN_PGP_ACTIVE</span>
+    <span class="indicador-red">[RED: LINK_ESTABLE]</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

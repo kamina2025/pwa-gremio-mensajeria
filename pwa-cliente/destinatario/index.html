@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protocolo Macondo - Receptor Nodal</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="panel-destinatario header-consola">
+    <div class="meta-sistema">
+      <span style="color: var(--neon-blue);">[MACONDO_RECEIVER_NODE_v1.0]</span>
+      <span id="reloj-nodo">00:00:00 UTC_NODE</span>
+    </div>
+    <h1>ESTACIÓN_DE_RECEPCIÓN</h1>
+  </header>
+
+  <main>
+    <!-- MONITOREO DE CARGA EN ENTRADA -->
+    <section class="panel-destinatario">
+      <h2>[1] MONITOREO_DE_CUSTODIA_ENTRANTE</h2>
+      <p class="txt-consola-info">Introduzca el ID del contrato de entrega para verificar el estado de la firma en la pool distribuida.</p>
+      
+      <div class="input-grupo-boton">
+        <input type="text" class="input-maquina" id="id-contrato-buscar" placeholder="Ej: #MAC-9942">
+        <button class="btn-terminal btn-crypto" onclick="buscarContratoEntrante()">RUST_TRACK</button>
+      </div>
+    </section>
+
+    <!-- PANEL DINÁMICO DE VALIDACIÓN FÍSICA -->
+    <section class="panel-destinatario" id="panel-estado-entrega" style="display: none;">
+      <div class="header-status-entrega">
+        <span class="txt-amber">[CONTRATO_COMPROMETIDO]</span>
+        <span id="txt-id-activo">#MAC-9942</span>
+      </div>
+
+      <div class="bloque-telemetria-recepcion">
+        <p><strong>[ESTADO]:</strong> <span class="txt-secure">CUSTODIO_EN_RUTA</span></p>
+        <p><strong>[CARGA]:</strong> Paquete documentos / 1kg</p>
+        <p><strong>[VALOR_RECAUDO]:</strong> $0.00 COP (Saldado en origen)</p>
+      </div>
+
+      <!-- LLAVE DE LIBERACIÓN DE CUSTODIA -->
+      <div class="bloque-firma-liberacion">
+        <label class="label-maquina">>>> LLAVE_DE_CIERRE_DE_CONTRATO (Firma Token):</label>
+        <p class="txt-consola-info">Muestre este token al Custodio cuando el paquete esté físicamente en sus manos para liberar el fondo mutuo.</p>
+        <div class="token-visual" id="token-display">MACONDO_KEY_ERR_INIT</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="barra-estado">
+    <span>RECEIVER_STATUS: IDLE</span>
+    <span class="indicador-red">[XAMPP_LOCAL_SERVER]</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

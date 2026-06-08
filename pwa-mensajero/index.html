@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Protocolo Macondo - Terminal Nodal v1.0</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="panel-maquina header-principal">
+      <div class="header-status">
+        <span style="color: var(--crypto-secure)">[INFRAESTRUCTURA_LOGISTICA_SOBERANA]</span>
+        <span id="txt-reloj">00:00:00 UTC</span>
+      </div>
+      <h1>PROTOCOLO_MACONDO_CORE</h1>
+
+      <nav class="menu-terminal">
+        <button class="btn-terminal active" data-mod="tabloide">1.POOL_PEDIDOS</button>
+        <button class="btn-terminal" data-mod="en-transito">EN_TRANSITO</button>
+        <button class="btn-terminal" data-mod="justicia">2.JUSTICIA_NODAL</button>
+        <button class="btn-terminal" data-mod="billetera">3.LIBRO_CONTABLE</button>
+      </nav>
+    </header>
+
+    <section class="panel-maquina" style="border-color: var(--border-rigid); margin-bottom: 12px">
+      <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px">[ENTORNO_DE_PRUEBA_HARDWARE]:</div>
+      <button
+        class="btn-terminal"
+        id="btn-toggle-red"
+        onclick="simularEstadoRed()"
+        style="border-color: var(--amber-alert); color: var(--amber-alert)">
+        INTERRUMPIR_ENLACE_DE_RED (Simular Offline)
+      </button>
+    </section>
+
+    <main id="mod-tabloide" class="modulo-vista">
+      <div id="pool-pedidos-dinamico"></div>
+
+      <div class="panel-maquina contenedor-blindaje" id="pantalla-cifrado" style="display: none">
+        <div class="consola-logs" id="logCripto"></div>
+        <pre class="bloque-pgp">
+-----BEGIN PGP MESSAGE-----
+Version: OpenPGP.js v4.10.2
+Comment: Protocolo Macondo - Red Descentralizada
+
+hQEMA81X0zW7v8bSAQgAk9yR1BvLqj4Wx9mZ3K5zL9kPQXnC...
+[PAYLOAD BLINDADO LOCALMENTE / INACCESIBLE AL SERVIDOR]
+-----END PGP MESSAGE-----</pre>
+      </div>
+    </main>
+
+    <main id="mod-en-transito" class="modulo-vista" style="display: none">
+      <div class="panel-maquina">
+        <div class="header-status">
+          <span style="color: var(--neon-blue); font-weight: bold;">[HARDWARE_CHASIS: DISCOVER_125]</span>
+          <span style="color: var(--neon-purple);">MONITOR_DE_RUTA</span>
+        </div>
+        <p style="font-family: monospace; font-size: 0.75rem; color: #888; margin: 8px 0;">
+          Lotes activos asignados de forma voluntaria a su firma digital. Cumpla la ruta con detención regulada.
+        </p>
+        <div id="transito-pedidos-dinamico">
+          <div class="panel-maquina" style="text-align:center; color:var(--text-muted)">
+            [CONTRATO_VACÍO] No tiene vectores en tránsito sobre el asfalto.
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <section id="mod-justicia" class="modulo-vista" style="display: none">
+      <div class="panel-maquina panel-auditoria">
+        <div class="header-status">
+          <span style="color: var(--amber-alert)">[AUDIT_MODE: COMPROMISO_NODAL]</span>
+          <span id="auditoria-id-contrato">ID_CONTRATO: NO_SELECTED</span>
+        </div>
+        <div class="bloque-telemetria" id="contenedor-logs-telemetria"></div>
+        <div class="formulario-maquina">
+          <label class="label-consola">>>> INGRESE_DESCARGO_TEXTUAL (JUSTIFICACIÓN_OPERATIVA):</label>
+          <textarea
+            class="input-terminal"
+            id="txt-descargo"
+            rows="3"
+            placeholder="Ej: Retén de control vial en la salida de Miranda / Avería mecánica..."></textarea>
+          <div class="indicador-ayuda">
+            * Los retrasos por fuerza mayor mitigan automáticamente la Hoja de Confianza.
+          </div>
+          <button class="btn-terminal btn-crypto" onclick="broadcastDescargo()">FIRM_AND_BROADCAST_DESCARGO</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="mod-billetera" class="modulo-vista" style="display: none">
+      <div class="panel-maquina panel-billetera">
+        <div class="header-status">
+          <span style="color: var(--crypto-secure)" id="ledger-status">[LEDGER_STATUS: SYNCHRONIZED]</span>
+          <span>CUSTODIO_SIGN: 0x8a2f...3c91</span>
+        </div>
+        <div class="grid-balance-monolitico">
+          <div class="sub-panel-datos">
+            <div class="label-titulo">[CAPITAL_NETO_DISPONIBLE]</div>
+            <div class="valor-balance credit" id="balance-capital">$0 COP</div>
+          </div>
+          <div class="sub-panel-datos">
+            <div class="label-titulo">[FONDO_MUTUAL_RETENIDO]</div>
+            <div class="valor-balance mutual" id="balance-mutual">$0 COP</div>
+          </div>
+        </div>
+        <label class="label-consola">>>> REGISTRO_DE_TRANSACCIONES_RECIENTES (HISTORIAL_RAW):</label>
+        <div class="tabla-contenedor-scroll">
+          <table class="tabla-contable">
+            <thead>
+              <tr>
+                <th>TIMESTAMP</th>
+                <th>ID_CONTRATO</th>
+                <th>TARIFA</th>
+                <th>MOTO_ROD</th>
+                <th>MUTUAL</th>
+                <th>NETO</th>
+              </tr>
+            </thead>
+            <tbody id="historial-transacciones-dinamico"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer class="barra-estado-fija">
+      <span>NODAL_CORE_v1.0</span>
+      <span class="status-indicator online">[LINK: BLIND_RELAY_ACTIVE]</span>
+    </footer>
+
+    <script src="modulos/motor-crypto.js"></script>
+    <script src="modulos/libro-contable.js"></script>
+    <script src="modulos/justicia-nodal.js"></script>
+    <script src="modulos/mensajero-persistencia.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>

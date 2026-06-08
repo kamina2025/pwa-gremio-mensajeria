@@ -1,0 +1,242 @@
+:root {
+  /* Paleta Cripto-Industrial (Fósforo y Acero) */
+  --bg-terminal: #0a0c10;
+  --bg-surface: #12161f;
+  --border-rigid: #2d3748;
+  
+  /* Estados de Operación Técnica */
+  --text-primary: #00ff66;
+  --text-muted: #8af7b3;
+  --amber-alert: #ffb300;
+  --crypto-secure: #00e5ff;
+  --alert-fail: #ff3333;
+  
+  /* Libro Contable */
+  --ledger-credit: #00ff66;
+  --ledger-debit: #ff3333;
+  --ledger-mutual: #00e5ff;
+  --ledger-text: #e2e8f0;
+
+  /* Tipografía y Cuadrícula */
+  --font-machine: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+  --terminal-pad: 12px;
+  --border-width: 1px;
+}
+
+/* Reset y Base de Máquina */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-terminal);
+  color: var(--text-primary);
+  font-family: var(--font-machine);
+  padding: var(--terminal-pad);
+  padding-bottom: 50px; /* Margen para evitar solapamiento con la barra fija */
+  line-height: 1.4;
+  -webkit-font-smoothing: none;
+}
+
+h1 {
+  font-size: 1.2rem;
+  font-weight: bold;
+  letter-spacing: -0.5px;
+  margin-top: 6px;
+}
+
+/* Paneles Monolíticos */
+.panel-maquina {
+  background-color: var(--bg-surface);
+  border: var(--border-width) solid var(--border-rigid);
+  padding: var(--terminal-pad);
+  margin-bottom: var(--terminal-pad);
+}
+
+.header-status {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: var(--border-width) solid var(--border-rigid);
+  padding-bottom: 6px;
+  font-size: 0.75rem;
+  gap: 10px;
+}
+
+/* Menú Superior */
+.menu-terminal {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--terminal-pad);
+}
+
+.menu-terminal .btn-terminal {
+  font-size: 0.75rem;
+  padding: 8px 4px;
+}
+
+/* Botones de Comando Mecánicos */
+.btn-terminal {
+  background-color: transparent;
+  color: var(--text-primary);
+  border: var(--border-width) solid var(--text-primary);
+  font-family: var(--font-machine);
+  padding: 10px 14px;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  font-weight: bold;
+  text-transform: uppercase;
+  transition: background 0.1s ease;
+}
+
+.btn-terminal:active, .btn-terminal.active {
+  background-color: var(--text-primary) !important;
+  color: var(--bg-terminal) !important;
+}
+
+.btn-crypto {
+  border-color: var(--crypto-secure);
+  color: var(--crypto-secure);
+}
+.btn-crypto:active {
+  background-color: var(--crypto-secure);
+  color: var(--bg-terminal);
+}
+
+/* Estructura de Tablas Notificadas */
+.tabla-datos-pedido {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--terminal-pad);
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+.tabla-datos-pedido td {
+  border: var(--border-width) solid var(--border-rigid);
+  padding: 6px 8px;
+}
+
+.tabla-datos-pedido td:first-child {
+  width: 38%;
+  color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.01);
+}
+
+/* Consola de Cifrado */
+.bloque-pgp {
+  background-color: rgba(0, 229, 255, 0.03);
+  border: var(--border-width) dashed var(--crypto-secure);
+  color: var(--crypto-secure);
+  padding: var(--terminal-pad);
+  font-size: 0.7rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  margin-top: 8px;
+}
+
+.consola-logs {
+  font-size: 0.75rem;
+  color: var(--amber-alert);
+  border-left: 2px solid var(--amber-alert);
+  padding-left: 8px;
+  min-height: 20px;
+}
+
+/* Módulo Justicia Nodal */
+.panel-auditoria { border-color: var(--amber-alert); }
+
+.bloque-telemetria {
+  background-color: #05070a;
+  border: var(--border-width) solid var(--border-rigid);
+  padding: 8px;
+  font-size: 0.75rem;
+  color: #a6da95;
+  margin: 8px 0 var(--terminal-pad) 0;
+}
+
+.log-line { margin-bottom: 4px; }
+.log-line.warning { color: var(--amber-alert); background-color: rgba(255,179,0,0.03); }
+.log-line .timestamp { color: #707a8a; }
+.log-line .action { font-weight: bold; color: var(--crypto-secure); }
+
+.label-consola {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.input-terminal {
+  width: 100%;
+  background-color: #161b22;
+  border: var(--border-width) solid var(--border-rigid);
+  color: #ffffff;
+  font-family: var(--font-machine);
+  padding: 8px;
+  font-size: 0.85rem;
+  resize: none;
+  margin-bottom: 6px;
+}
+
+.input-terminal:focus { outline: none; border-color: var(--amber-alert); }
+.indicador-ayuda { font-size: 0.7rem; color: #707a8a; margin-bottom: var(--terminal-pad); }
+
+/* Módulo Libro Contable */
+.grid-balance-monolitico {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0 var(--terminal-pad) 0;
+}
+
+.sub-panel-datos {
+  background-color: #0d1117;
+  border: var(--border-width) solid var(--border-rigid);
+  padding: 8px;
+}
+
+.label-titulo { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; }
+.valor-balance { font-size: 1.1rem; font-weight: bold; }
+.valor-balance.credit { color: var(--ledger-credit); }
+.valor-balance.mutual { color: var(--ledger-mutual); }
+
+.tabla-contenedor-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: var(--border-width) solid var(--border-rigid);
+  background-color: #05070a;
+  margin-top: 4px;
+}
+
+.tabla-contable { width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left; }
+.tabla-contable th, .tabla-contable td { padding: 6px 8px; border-bottom: var(--border-width) solid var(--border-rigid); white-space: nowrap; }
+.tabla-contable th { background-color: #161b22; color: var(--text-primary); }
+
+td.credit { color: var(--ledger-credit); font-weight: bold; }
+td.debit { color: var(--ledger-debit); }
+td.mutual { color: var(--ledger-mutual); }
+td.hash { color: #707a8a; }
+
+/* Barra Fija Inferior */
+.barra-estado-fija {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background-color: var(--bg-terminal);
+  border-top: var(--border-width) solid var(--border-rigid);
+  display: flex;
+  justify-content: space-between;
+  padding: 6px var(--terminal-pad);
+  font-size: 0.7rem;
+  z-index: 100;
+}
+
+.status-indicator.online { color: var(--text-primary); }
+.status-indicator.offline { color: var(--alert-fail); animation: parpadeo 1s infinite; }
+
+@keyframes parpadeo {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

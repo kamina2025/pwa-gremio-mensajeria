@@ -1,0 +1,207 @@
+:root {
+  --bg-maquina: #080a0f;
+  --bg-tarjeta: #10141d;
+  --border-color: #242f41;
+  
+  --neon-green: #00ff66;
+  --neon-blue: #00e5ff;
+  --neon-amber: #ffaa00;
+  --neon-red: #ff3333;
+  --text-white: #f0f4f8;
+  --font-machine: 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-maquina);
+  color: var(--neon-green);
+  font-family: var(--font-machine);
+  padding: 15px;
+  padding-bottom: 45px;
+  font-size: 0.9rem;
+}
+
+h1 { font-size: 1.3rem; font-weight: bold; margin-top: 4px; }
+h2 { font-size: 0.95rem; font-weight: bold; margin-bottom: 8px; color: var(--text-white); }
+
+.panel-cliente {
+  background-color: var(--bg-tarjeta);
+  border: 1px solid var(--border-color);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.meta-sistema {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 4px;
+}
+
+/* Manejo de Inputs y captura GPS incorporada */
+.input-contenedor-geo {
+  display: flex;
+  flex-direction: column;
+}
+
+.input-grupo-boton {
+  display: flex;
+  gap: 4px;
+}
+
+.input-maquina {
+  width: 100%;
+  background-color: #0c0f16;
+  border: 1px solid var(--border-color);
+  color: #fff;
+  font-family: inherit;
+  padding: 10px;
+  font-size: 0.85rem;
+}
+.input-maquina:focus { outline: none; border-color: var(--neon-green); }
+
+.btn-geo {
+  width: auto;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  border-color: var(--neon-blue);
+  color: var(--neon-blue);
+  padding: 0 10px;
+}
+
+.log-telemetria-geo {
+  font-size: 0.7rem;
+  color: #526685;
+  margin-top: 3px;
+  font-style: italic;
+}
+
+.formulario-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+@media (min-width: 600px) {
+  .formulario-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* Botonera de comandos */
+.botonera-acciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-maquina {
+  background: transparent;
+  font-family: inherit;
+  padding: 12px;
+  font-weight: bold;
+  border: 1px solid;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+}
+
+.btn-primario { border-color: var(--neon-green); color: var(--neon-green); }
+.btn-secundario { border-color: var(--border-color); color: var(--text-white); }
+.btn-crypto { border-color: var(--neon-blue); color: var(--neon-blue); }
+
+.btn-maquina:disabled { opacity: 0.2; cursor: not-allowed; }
+
+/* Herramienta Política: Anti-Monopolio y Desglose */
+.panel-contra-monopolio {
+  background-color: #0f1016;
+  border: 1px dashed var(--neon-amber);
+  padding: 12px;
+  margin-top: 14px;
+}
+
+.header-status-contra { font-size: 0.75rem; color: var(--neon-amber); margin-bottom: 8px; font-weight: bold; }
+
+.tabla-comparativa-precios {
+  width: 100%;
+  font-size: 0.75rem;
+  border-collapse: collapse;
+  margin-bottom: 10px;
+}
+
+.tabla-comparativa-precios td { padding: 5px 0; }
+.tabla-comparativa-precios td:last-child { text-align: right; font-weight: bold; }
+.fila-resaltada { border-top: 1px solid var(--border-color); font-weight: bold; }
+
+.desglose-interno-tarifa {
+  background-color: rgba(0, 229, 255, 0.02);
+  border-left: 2px solid var(--neon-blue);
+  padding: 8px;
+  margin-top: 8px;
+  font-size: 0.75rem;
+}
+
+.titulo-desglose {
+  color: var(--neon-blue);
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.item-desglose {
+  display: flex;
+  justify-content: space-between;
+  color: #7390bc;
+  padding: 2px 0;
+}
+
+.item-desglose span:last-child {
+  color: var(--text-white);
+}
+
+.nota-seguridad { font-size: 0.65rem; color: #526685; margin-top: 8px; line-height: 1.3; }
+
+/* Textos informativos */
+.txt-consola-info { font-size: 0.75rem; color: #7390bc; margin-bottom: 12px; line-height: 1.4; }
+.label-maquina { display: block; font-size: 0.75rem; color: var(--text-white); margin-bottom: 4px; }
+.txt-secure { color: var(--neon-green); }
+.txt-fail { color: var(--neon-red); }
+.txt-blue { color: var(--neon-blue); }
+
+/* Pantalla de Bloqueo Criptográfico (Overlay) */
+.overlay-cripto {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(8, 10, 15, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.caja-terminal-cifrado {
+  width: 100%;
+  max-width: 450px;
+  background-color: #0c0f16;
+  border: 1px solid var(--neon-blue);
+  padding: 16px;
+}
+
+.loader-lineas { font-size: 0.85rem; color: var(--neon-blue); font-weight: bold; margin-bottom: 12px; text-align: center; }
+.logs-cifrado { font-size: 0.7rem; color: var(--neon-green); height: 140px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4; }
+
+/* Barra Baja */
+.barra-estado {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background-color: var(--bg-maquina);
+  border-top: 1px solid var(--border-color);
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  display: flex;
+  justify-content: space-between;
+}

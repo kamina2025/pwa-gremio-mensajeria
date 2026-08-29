@@ -1,0 +1,34 @@
+# ==========================================
+# PROTOCOLO MACONDO - GIT IGNORE SPECIFICATION
+# ==========================================
+
+# --- PERSISTENCIA LOCAL Y BASE DE DATOS JSON ---
+# Archivos de datos locales dinámicos generados por la API PHP
+*.json
+
+# Excepción: Conservar la plantilla JSON original/base en el repositorio
+!pool_pedidos-origenal.json
+
+# --- ARCHIVOS DE ENTORNO Y CONFIGURACIÓN ---
+.env
+.env.local
+*.log
+
+# --- SISTEMA OPERATIVO Y SERVIDOR LOCAL (XAMPP / APACHE) ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- CONFIGURACIONES DE EDITORES E IDEs ---
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# --- ARCHIVOS TEMPORALES Y DE CACHÉ ---
+*.tmp
+*.temp
+*.swp

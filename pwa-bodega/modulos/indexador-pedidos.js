@@ -1,6 +1,6 @@
 /**
- * PROTOCOLO MACONDO - LOGISTICS SUBSYSTEM: INDEXADOR DE PEDIDOS LOCALES (PWA-NEGOCIOS)
- * Ubicación: modulos/indexador-pedidos.js
+ * PROTOCOLO MACONDO - SUBSISTEMA BODEGA: INDEXADOR DE PUNTOS DE ACOPIO (MODELO CRÉDITOS)
+ * Ubicación: pwa-bodega/modulos/indexador-pedidos.js
  */
 
 function simularHashFoto() {
@@ -36,8 +36,8 @@ function agregarPedidoALote(event) {
         return;
     }
 
-    const idPedido = "#MAC-" + Math.floor(1000 + Math.random() * 9000);
-    const nuevoPedido = {
+    const idPedido = "#PNT-" + Math.floor(1000 + Math.random() * 9000);
+    const nuevoPunto = {
         id: idPedido,
         destinatario: document.getElementById("doc-cliente").value.trim(),
         direccion: document.getElementById("dir-cliente").value.trim(),
@@ -45,13 +45,12 @@ function agregarPedidoALote(event) {
         carga: textoCarga,
         pesoKg: pesoEstePedido,
         testigoOptico: window.hashFotoActual,
-        kmEspecifico: 0,
-        tiempoEspecificoMin: 0,
-        precioEspecifico: 0
+        creditos: 1,
+        precioEspecifico: 500 // 1 Crédito = $500 COP comisión API
     };
 
     if (!window.loteActualPedidos) window.loteActualPedidos = [];
-    window.loteActualPedidos.push(nuevoPedido);
+    window.loteActualPedidos.push(nuevoPunto);
     window.pesoAcumuladoLote = (window.pesoAcumuladoLote || 0) + pesoEstePedido;
 
     if (typeof window.actualizarMonitorMasaUI === "function") {
@@ -61,18 +60,18 @@ function agregarPedidoALote(event) {
     const origenInput = document.getElementById("origen-cliente") ? document.getElementById("origen-cliente").value.trim() : "";
     const CONTEXTO_GEOGRAFICO = ", Cali, Colombia";
     let origConContexto = origenInput.toLowerCase().includes("cali") || origenInput.toLowerCase().includes("miranda") ? origenInput : origenInput + CONTEXTO_GEOGRAFICO;
-    let destConContexto = nuevoPedido.direccion.toLowerCase().includes("cali") || nuevoPedido.direccion.toLowerCase().includes("miranda") ? nuevoPedido.direccion : nuevoPedido.direccion + CONTEXTO_GEOGRAFICO;
+    let destConContexto = nuevoPunto.direccion.toLowerCase().includes("cali") || nuevoPunto.direccion.toLowerCase().includes("miranda") ? nuevoPunto.direccion : nuevoPunto.direccion + CONTEXTO_GEOGRAFICO;
 
-    // Cálculo telemático dinámico por distancia y tiempo
+    // Actualización telemática basada en créditos y puntos de acopio
     if (typeof window.previsualizarRutaInmediata === "function") {
         window.previsualizarRutaInmediata(origConContexto, destConContexto);
-    } else if (typeof window.evaluarTarifaModoLocalInmediata === "function") {
-        window.evaluarTarifaModoLocalInmediata();
+    } else if (typeof window.actualizarTableroUI === "function") {
+        window.actualizarTableroUI(0, 0, window.loteActualPedidos.length);
     }
 
     actualizarTablaCola();
 
-    // Limpieza de inputs del formulario
+    // Resetear campos del formulario
     document.getElementById("doc-cliente").value = "";
     document.getElementById("dir-cliente").value = "";
     document.getElementById("tel-cliente").value = "";
@@ -92,7 +91,7 @@ function actualizarTablaCola() {
     if (!tbody) return;
 
     if (!window.loteActualPedidos || window.loteActualPedidos.length === 0) {
-        tbody.innerHTML = `<tr id="fila-vacia"><td colspan="8" style="text-align: center; color: #524359; padding: 20px;">[BUFFER_VACÍO] No hay datos en la cola de salida.</td></tr>`;
+        tbody.innerHTML = `<tr id="fila-vacia"><td colspan="8" style="text-align: center; color: #524359; padding: 20px;">[BUFFER_VACÍO] No hay datos en la cola de salida de bodega.</td></tr>`;
         if (btnPublicar) btnPublicar.disabled = true;
         return;
     }
@@ -108,25 +107,17 @@ function actualizarTablaCola() {
         window.loteActualPedidos.forEach((_, optIndice) => {
             const letraPosicionOpt = String.fromCharCode(65 + optIndice);
             const seleccionado = optIndice === indice ? "selected" : "";
-            opcionesSelector += `<option value="${optIndice}" ${seleccionado}>Mover a la Parada ${letraPosicionOpt}</option>`;
+            opcionesSelector += `<option value="${optIndice}" ${seleccionado}>Mover a Parada ${letraPosicionOpt}</option>`;
         });
 
-        const kmTramo = pedido.kmEspecifico ? `${pedido.kmEspecifico.toFixed(1)} km` : "Calculando...";
-        const tiempoTramo = pedido.tiempoEspecificoMin ? `${Math.round(pedido.tiempoEspecificoMin)} min` : "---";
-        const precioTramo = pedido.precioEspecifico ? `$${Math.round(pedido.precioEspecifico).toLocaleString('es-CO')}` : "---";
+        const valorCreditoCOP = 500;
+        const costoPuntoCOP = pedido.precioEspecifico || valorCreditoCOP;
 
-        // Comparativa contra monopolios tradicionales
-        const tarifaSimuladaDiDi = pedido.precioEspecifico ? Math.round(pedido.precioEspecifico * 1.42) : 0;
-        const tarifaSimuladaYango = pedido.precioEspecifico ? Math.round(pedido.precioEspecifico * 1.28) : 0;
-
-        const bloqueComparativoHTML = pedido.precioEspecifico
-            ? `
-            <div class="bloque-anti-extraccion" style="font-size:0.75rem; font-family:monospace; line-height:1.3;">
-                <div style="color: #ff3366;"><span style="font-weight:bold;">DiDi Max:</span> $${tarifaSimuladaDiDi.toLocaleString('es-CO')}</div>
-                <div style="color: var(--neon-amber); margin-top: 2px;"><span style="font-weight:bold;">Yango Urgente:</span> $${tarifaSimuladaYango.toLocaleString('es-CO')}</div>
-                <div style="color: var(--neon-green); font-weight: bold; margin-top: 3px; font-size: 0.7rem;">>>> AHORRO RETENIDO: $${Math.round(tarifaSimuladaDiDi - pedido.precioEspecifico).toLocaleString('es-CO')} COP</div>
-            </div>`
-            : `<span style="color:#524359;">[ESPERANDO_VECTORES]</span>`;
+        const bloqueModoBodegaHTML = `
+            <div class="bloque-soporte-bodega" style="font-size:0.75rem; font-family:monospace; line-height:1.3;">
+                <div style="color: var(--neon-blue);"><span style="font-weight:bold;">Soporte Logístico:</span> Activo</div>
+                <div style="color: var(--neon-green); font-weight: bold; margin-top: 3px; font-size: 0.7rem;">>>> TASA API: $${costoPuntoCOP.toLocaleString('es-CO')} COP</div>
+            </div>`;
 
         nuevaFila.innerHTML = `
             <td style="color: var(--neon-blue); font-weight: bold; font-family: monospace;">[${letraParadaActual}] ${pedido.id}</td>
@@ -134,10 +125,10 @@ function actualizarTablaCola() {
             <td>${pedido.direccion}</td>
             <td>${pedido.carga}</td>
             <td style="color: var(--neon-amber); font-family: monospace; font-size: 0.8rem; text-align: center;">
-                <span style="color:var(--neon-blue);">${kmTramo}</span> <br> ${tiempoTramo} <br>
-                <span style="color: var(--neon-green); font-weight: bold;">${precioTramo} COP</span>
+                <span style="color:var(--neon-blue);">1 CRÉDITO</span> <br>
+                <span style="color: var(--neon-green); font-weight: bold;">$${costoPuntoCOP.toLocaleString('es-CO')} COP</span>
             </td>
-            <td>${bloqueComparativoHTML}</td>
+            <td>${bloqueModoBodegaHTML}</td>
             <td>
                 <select class="selector-posicion-nodo" data-idx="${indice}" onchange="intercambiarPosicionNodo(this.dataset.idx, this.value)" style="background:#0c080f; color:var(--neon-purple); border:1px solid rgba(138,43,226,0.5); font-family:monospace; font-size:0.7rem; padding:2px;">
                     ${opcionesSelector}
@@ -175,36 +166,33 @@ function intercambiarPosicionNodo(indiceOrigen, indiceDestino) {
 }
 
 async function cerrarLoteYCompilarElRevelo() {
-    console.log(">>> [COMPILADOR_INIT]: Empaquetando lote inmutable para el Relevo Ciego...");
+    console.log(">>> [COMPILADOR_BODEGA]: Empaquetando lote inmutable de puntos...");
 
     try {
         if (!window.loteActualPedidos || window.loteActualPedidos.length === 0) {
-            alert("El buffer está vacío. Indexa tramos en Cali antes de compilar.");
+            alert("El buffer de bodega está vacío. Indexe puntos de acopio antes de compilar.");
             return;
         }
 
-        // Reseteo de estructuras de datos en memoria local
         window.loteActualPedidos = [];
         if (window.lotePedidosMemoria) window.lotePedidosMemoria = [];
         window.pesoAcumuladoLote = 0;
 
-        // Limpieza de capas visuales en Google Maps
         if (typeof window.limpiarGraficosDelMapa === "function") {
             window.limpiarGraficosDelMapa();
         }
 
-        // Reseteo del tablero telemático dinámico
         if (typeof window.actualizarTableroUI === "function") {
-            window.actualizarTableroUI(0, 0, 0, null);
+            window.actualizarTableroUI(0, 0, 0);
         }
 
         actualizarTablaCola();
 
-        console.log(">>> [UI_REFRESH]: Matriz de despacho y telemetría multipunto reseteadas a cero.");
-        alert("Lote compilado con éxito. Datos propagados al pool descentralizado.");
+        console.log(">>> [UI_REFRESH]: Matriz de puntos reseteada a cero.");
+        alert("Lote de bodega compilado con éxito. Datos propagados al pool descentralizado.");
 
     } catch (error) {
-        console.error(">>> [COMPILADOR_FAIL]: Error crítico al cerrar el lote logístico.", error);
+        console.error(">>> [COMPILADOR_FAIL]: Error crítico al compilar el lote de bodega.", error);
     }
 }
 

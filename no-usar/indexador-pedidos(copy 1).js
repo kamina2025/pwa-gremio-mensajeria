@@ -1,11 +1,11 @@
 /**
- * PROTOCOLO MACONDO - LOGISTICS SUBSYSTEM: INDEXADOR DE PEDIDOS LOCALES (PWA-NEGOCIOS)
+ * PROTOCOLO MACONDO - LOGISTICS SUBSYSTEM: INDEXADOR DE PEDIDOS LOCALES
  * Ubicación: modulos/indexador-pedidos.js
  */
 
 function simularHashFoto() {
     const inputFoto = document.getElementById("foto-paquete");
-    if (inputFoto && inputFoto.files && inputFoto.files[0]) {
+    if (inputFoto.files && inputFoto.files[0]) {
         window.hashFotoActual =
             "SHA256:" +
             Math.random().toString(16).substring(2, 10).toUpperCase() +
@@ -28,11 +28,11 @@ function agregarPedidoALote(event) {
     }
 
     const textoCarga = document.getElementById("carga-detalle").value.trim();
-    const pesoEstePedido = typeof window.extraerPesoNumerico === "function" ? window.extraerPesoNumerico(textoCarga) : 1.5;
+    const pesoEstePedido = window.extraerPesoNumerico(textoCarga);
     const limiteHardware = window.LIMITE_MASA_HARDWARE_MOTO || 15.0;
 
     if ((window.pesoAcumuladoLote || 0) + pesoEstePedido > limiteHardware) {
-        alert(`>>> RECHAZO_DE_CARGA N0DAL:\n\nEl paquete excede el límite de estabilidad seguro restante (${(limiteHardware - (window.pesoAcumuladoLote || 0)).toFixed(1)} kg).`);
+        alert(`>>> RECHAZO_DE_CARGA N0DAL:\n\nEl paquete excede el límite de estabilidad seguro restante (${(limiteHardware - window.pesoAcumuladoLote).toFixed(1)} kg).`);
         return;
     }
 
@@ -50,35 +50,30 @@ function agregarPedidoALote(event) {
         precioEspecifico: 0
     };
 
-    if (!window.loteActualPedidos) window.loteActualPedidos = [];
     window.loteActualPedidos.push(nuevoPedido);
-    window.pesoAcumuladoLote = (window.pesoAcumuladoLote || 0) + pesoEstePedido;
+    window.pesoAcumuladoLote += pesoEstePedido;
 
-    if (typeof window.actualizarMonitorMasaUI === "function") {
-        window.actualizarMonitorMasaUI();
-    }
+    window.actualizarMonitorMasaUI();
 
-    const origenInput = document.getElementById("origen-cliente") ? document.getElementById("origen-cliente").value.trim() : "";
+    const origenInput = document.getElementById("origen-cliente").value.trim();
     const CONTEXTO_GEOGRAFICO = ", Cali, Colombia";
     let origConContexto = origenInput.toLowerCase().includes("cali") || origenInput.toLowerCase().includes("miranda") ? origenInput : origenInput + CONTEXTO_GEOGRAFICO;
     let destConContexto = nuevoPedido.direccion.toLowerCase().includes("cali") || nuevoPedido.direccion.toLowerCase().includes("miranda") ? nuevoPedido.direccion : nuevoPedido.direccion + CONTEXTO_GEOGRAFICO;
 
-    // Cálculo telemático dinámico por distancia y tiempo
     if (typeof window.previsualizarRutaInmediata === "function") {
         window.previsualizarRutaInmediata(origConContexto, destConContexto);
     } else if (typeof window.evaluarTarifaModoLocalInmediata === "function") {
         window.evaluarTarifaModoLocalInmediata();
     }
-
+    
     actualizarTablaCola();
 
-    // Limpieza de inputs del formulario
     document.getElementById("doc-cliente").value = "";
     document.getElementById("dir-cliente").value = "";
     document.getElementById("tel-cliente").value = "";
     document.getElementById("carga-detalle").value = "";
     window.hashFotoActual = "";
-
+    
     const txtHashFoto = document.getElementById("txt-hash-foto");
     if (txtHashFoto) {
         txtHashFoto.innerText = "PENDIENTE: Capturar testigo óptico del paquete...";
@@ -113,18 +108,17 @@ function actualizarTablaCola() {
 
         const kmTramo = pedido.kmEspecifico ? `${pedido.kmEspecifico.toFixed(1)} km` : "Calculando...";
         const tiempoTramo = pedido.tiempoEspecificoMin ? `${Math.round(pedido.tiempoEspecificoMin)} min` : "---";
-        const precioTramo = pedido.precioEspecifico ? `$${Math.round(pedido.precioEspecifico).toLocaleString('es-CO')}` : "---";
+        const precioTramo = pedido.precioEspecifico ? `$${Math.round(pedido.precioEspecifico).toLocaleString()}` : "---";
 
-        // Comparativa contra monopolios tradicionales
         const tarifaSimuladaDiDi = pedido.precioEspecifico ? Math.round(pedido.precioEspecifico * 1.42) : 0;
         const tarifaSimuladaYango = pedido.precioEspecifico ? Math.round(pedido.precioEspecifico * 1.28) : 0;
 
         const bloqueComparativoHTML = pedido.precioEspecifico
             ? `
             <div class="bloque-anti-extraccion" style="font-size:0.75rem; font-family:monospace; line-height:1.3;">
-                <div style="color: #ff3366;"><span style="font-weight:bold;">DiDi Max:</span> $${tarifaSimuladaDiDi.toLocaleString('es-CO')}</div>
-                <div style="color: var(--neon-amber); margin-top: 2px;"><span style="font-weight:bold;">Yango Urgente:</span> $${tarifaSimuladaYango.toLocaleString('es-CO')}</div>
-                <div style="color: var(--neon-green); font-weight: bold; margin-top: 3px; font-size: 0.7rem;">>>> AHORRO RETENIDO: $${Math.round(tarifaSimuladaDiDi - pedido.precioEspecifico).toLocaleString('es-CO')} COP</div>
+                <div style="color: #ff3366;"><span style="font-weight:bold;">DiDi Max:</span> $${tarifaSimuladaDiDi.toLocaleString()}</div>
+                <div style="color: var(--neon-amber); margin-top: 2px;"><span style="font-weight:bold;">Yango Urgente:</span> $${tarifaSimuladaYango.toLocaleString()}</div>
+                <div style="color: var(--neon-green); font-weight: bold; margin-top: 3px; font-size: 0.7rem;">>>> AHORRO RETENIDO: $${Math.round(tarifaSimuladaDiDi - pedido.precioEspecifico).toLocaleString()} COP</div>
             </div>`
             : `<span style="color:#524359;">[ESPERANDO_VECTORES]</span>`;
 
@@ -139,11 +133,11 @@ function actualizarTablaCola() {
             </td>
             <td>${bloqueComparativoHTML}</td>
             <td>
-                <select class="selector-posicion-nodo" data-idx="${indice}" onchange="intercambiarPosicionNodo(this.dataset.idx, this.value)" style="background:#0c080f; color:var(--neon-purple); border:1px solid rgba(138,43,226,0.5); font-family:monospace; font-size:0.7rem; padding:2px;">
+                <select class="selector-posicion-nodo" data-idx="${indice}" style="background:#0c080f; color:var(--neon-purple); border:1px solid rgba(138,43,226,0.5); font-family:monospace; font-size:0.7rem; padding:2px;">
                     ${opcionesSelector}
                 </select>
             </td>
-            <td style="font-size: 0.65rem; color: #79578a; font-family: monospace; word-break: break-all;">${pedido.testigoOptico || "PENDIENTE"}</td>
+            <td style="font-size: 0.65rem; color: #79578a; font-family: monospace; word-break: break-all;">${pedido.testicoOptico || pedido.testigoOptico}</td>
         `;
 
         tbody.appendChild(nuevaFila);
@@ -153,19 +147,19 @@ function actualizarTablaCola() {
 }
 
 function intercambiarPosicionNodo(indiceOrigen, indiceDestino) {
-    indiceOrigen = parseInt(indiceOrigen, 10);
-    indiceDestino = parseInt(indiceDestino, 10);
-    if (isNaN(indiceOrigen) || isNaN(indiceDestino) || indiceOrigen === indiceDestino) return;
+    indiceOrigen = parseInt(indiceOrigen);
+    indiceDestino = parseInt(indiceDestino);
+    if (indiceOrigen === indiceDestino) return;
 
     const nodoAMover = window.loteActualPedidos.splice(indiceOrigen, 1)[0];
     window.loteActualPedidos.splice(indiceDestino, 0, nodoAMover);
 
     actualizarTablaCola();
 
-    const origenInput = document.getElementById("origen-cliente") ? document.getElementById("origen-cliente").value.trim() : "";
+    const origenInput = document.getElementById("origen-cliente").value.trim();
     const ultimaDireccionLote = window.loteActualPedidos[window.loteActualPedidos.length - 1].direccion;
     const CONTEXTO_GEOGRAFICO = ", Cali, Colombia";
-
+    
     let origConContexto = origenInput.toLowerCase().includes("cali") || origenInput.toLowerCase().includes("miranda") ? origenInput : origenInput + CONTEXTO_GEOGRAFICO;
     let destConContexto = ultimaDireccionLote.toLowerCase().includes("cali") || ultimaDireccionLote.toLowerCase().includes("miranda") ? ultimaDireccionLote : ultimaDireccionLote + CONTEXTO_GEOGRAFICO;
 
@@ -174,31 +168,56 @@ function intercambiarPosicionNodo(indiceOrigen, indiceDestino) {
     }
 }
 
+// Inyección al Scope Global
+window.simularHashFoto = simularHashFoto;
+window.agregarPedidoALote = agregarPedidoALote;
+window.actualizarTablaCola = actualizarTablaCola;
+window.intercambiarPosicionNodo = intercambiarPosicionNodo;
+/**
+ * PROTOCOLO MACONDO - COMPILACIÓN Y CIERRE DE LOTES
+ * Ubicación: pwa-negocios/modulos/indexador-pedidos.js
+ */
 async function cerrarLoteYCompilarElRevelo() {
     console.log(">>> [COMPILADOR_INIT]: Empaquetando lote inmutable para el Relevo Ciego...");
 
     try {
-        if (!window.loteActualPedidos || window.loteActualPedidos.length === 0) {
+        // 1. Verificar si hay pedidos en el buffer local para compilar
+        // Nota: Asegúrate de que 'lotePedidosMemoria' o 'loteActual' sea el nombre de tu arreglo global de pedidos activos
+        if (!window.lotePedidosMemoria || window.lotePedidosMemoria.length === 0) {
             alert("El buffer está vacío. Indexa tramos en Cali antes de compilar.");
             return;
         }
 
-        // Reseteo de estructuras de datos en memoria local
-        window.loteActualPedidos = [];
-        if (window.lotePedidosMemoria) window.lotePedidosMemoria = [];
-        window.pesoAcumuladoLote = 0;
+        // Aquí es donde tu sistema ya escribe de forma exitosa en el pool_pedidos.json a través de pool-persistencia.js
+        // Forzamos la limpieza del estado local ya que el almacenamiento en disco está asegurado
+        
+        // 2. Resetear el buffer de memoria para el siguiente tramo diario
+        window.lotePedidosMemoria = []; 
 
-        // Limpieza de capas visuales en Google Maps
+        // 3. Purga física y visual de elementos gráficos en Google Maps
         if (typeof window.limpiarGraficosDelMapa === "function") {
             window.limpiarGraficosDelMapa();
+        } else {
+            console.warn(">>> [MAPA_WARN]: No se encontró la función limpiarGraficosDelMapa en el scope.");
         }
 
-        // Reseteo del tablero telemático dinámico
-        if (typeof window.actualizarTableroUI === "function") {
-            window.actualizarTableroUI(0, 0, 0, null);
+        // 4. Limpiar la matriz táctica de pedidos (UI)
+        // Si tienes una función encargada de dibujar la tabla o los divs, la llamamos vacía:
+        if (typeof window.renderizarMatrizDespachoUI === "function") {
+            window.renderizarMatrizDespachoUI([]);
+        } else {
+            // Limpieza directa del DOM por ID si manejas una estructura de tabla estándar
+            const tablaPedidos = document.getElementById("tabla-pedidos-indexados");
+            if (tablaPedidos) {
+                tablaPedidos.innerHTML = "";
+            }
+            
+            // Si usas un contenedor tipo lista/tabloide genérico para los tramos:
+            const listaPedidos = document.getElementById("contenedor-pedidos");
+            if (listaPedidos) {
+                listaPedidos.innerHTML = '<p class="text-mute">Terminal lista para indexar nuevos tramos...</p>';
+            }
         }
-
-        actualizarTablaCola();
 
         console.log(">>> [UI_REFRESH]: Matriz de despacho y telemetría multipunto reseteadas a cero.");
         alert("Lote compilado con éxito. Datos propagados al pool descentralizado.");
@@ -208,9 +227,5 @@ async function cerrarLoteYCompilarElRevelo() {
     }
 }
 
-// Inyección al Scope Global
-window.simularHashFoto = simularHashFoto;
-window.agregarPedidoALote = agregarPedidoALote;
-window.actualizarTablaCola = actualizarTablaCola;
-window.intercambiarPosicionNodo = intercambiarPosicionNodo;
+// Hacer la función accesible globalmente para el botón del HTML
 window.cerrarLoteYCompilarElRevelo = cerrarLoteYCompilarElRevelo;

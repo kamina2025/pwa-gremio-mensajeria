@@ -32,7 +32,6 @@
 }
 
 body {
-  background-color: var(--bg-terminal);
   color: var(--text-primary);
   font-family: var(--font-machine);
   padding: var(--terminal-pad);
@@ -50,8 +49,11 @@ h1 {
 
 /* Paneles Monolíticos */
 .panel-maquina {
-  background-color: var(--bg-surface);
+  background: transparent;
   border: var(--border-width) solid var(--border-rigid);
+  backdrop-filter: blur(15px);
+  border-radius: 12px;
+  
   padding: var(--terminal-pad);
   margin-bottom: var(--terminal-pad);
 }

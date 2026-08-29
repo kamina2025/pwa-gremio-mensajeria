@@ -4,32 +4,64 @@
  * Servidor no-custodial de datos. No descifra, solo transporta y audita.
  */
 
-// Configuración de cabeceras para permitir peticiones desde cualquier PWA local o en la nube
+// 1. INICIAR BUFFER DE SALIDA PARA ATRAPAR WARNINGS HTML
+ob_start();
+
+error_reporting(0);
+ini_set('display_errors', '0');
+
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 header('Content-Type: application/json');
 
-// Manejo de peticiones de control pre-vuelo (CORS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-// Rutas de almacenamiento en texto plano local (XAMPP / Producción)
+/**
+ * Función centralizada para garantizar respuesta JSON pura
+ * Destruye cualquier advertencia HTML ( <br><b> ) en el buffer antes de imprimir
+ */
+function responderJSON($data, $httpCode = 200) {
+    http_response_code($httpCode);
+    $bufferLength = ob_get_length();
+    if ($bufferLength !== false && $bufferLength > 0) {
+        ob_clean(); // Limpia la basura HTML acumulada
+    }
+    echo json_encode($data);
+    exit;
+}
+
+function cargarVariablesEntornoEnv($rutaEnv) {
+    if (!file_exists($rutaEnv)) return;
+    $lineas = file($rutaEnv, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lineas as $linea) {
+        $lineaLimpia = trim($linea);
+        if (empty($lineaLimpia) || strpos($lineaLimpia, '#') === 0) continue;
+        if (strpos($lineaLimpia, '=') !== false) {
+            list($nombre, $valor) = explode('=', $lineaLimpia, 2);
+            $nombreLimpio = trim($nombre);
+            $valorLimpio = trim($valor, " \t\n\r\0\x0B\"'");
+            putenv("{$nombreLimpio}={$valorLimpio}");
+            $_ENV[$nombreLimpio] = $valorLimpio;
+        }
+    }
+}
+
+cargarVariablesEntornoEnv(__DIR__ . '/.env');
+
 define('POOL_FILE', __DIR__ . '/pool_pedidos.json');
 define('HISTORIAL_FILE', __DIR__ . '/historial_pedidos.json');
 define('BODEGA_FILE', __DIR__ . '/bodega_puntos.json');
 define('BILLETERA_FILE', __DIR__ . '/billetera_transacciones.json');
 
-/**
- * Función auxiliar para leer JSON con bloqueo compartido (LOCK_SH)
- */
 function leerJsonSeguro($filepath) {
     if (!file_exists($filepath)) return [];
     $fp = fopen($filepath, 'r');
     if ($fp && flock($fp, LOCK_SH)) {
         $size = filesize($filepath);
-        $content =$size > 0 ? fread($fp,$size) : '{}';
+        $content = $size > 0 ? fread($fp, $size) : '{}';
         flock($fp, LOCK_UN);
         fclose($fp);
         return json_decode($content, true) ?? [];
@@ -37,10 +69,7 @@ function leerJsonSeguro($filepath) {
     return [];
 }
 
-/**
- * Función auxiliar para escribir JSON con bloqueo exclusivo (LOCK_EX)
- */
-function escribirJsonSeguro($filepath,$data) {
+function escribirJsonSeguro($filepath, $data) {
     $fp = fopen($filepath, 'c+');
     if ($fp && flock($fp, LOCK_EX)) {
         ftruncate($fp, 0);
@@ -54,27 +83,84 @@ function escribirJsonSeguro($filepath,$data) {
     return false;
 }
 
-$method =$_SERVER['REQUEST_METHOD'];
-$action =$_GET['action'] ?? '';
+function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
+    $keyLimpia = trim($apiKey);
+    
+    // Prioridad absoluta al modelo validado en tu entorno
+    $candidatos = [
+        "gemini-3.6-flash",
+        "gemini-1.5-flash",
+        "gemini-2.0-flash-exp"
+    ];
+
+    $ultimoErrorData = null;
+    $ultimoHttpCode = 500;
+
+    foreach ($candidatos as $modelo) {
+        $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$modelo}:generateContent?key=" . $keyLimpia;
+
+        $headers = [
+            'Content-Type: application/json',
+            'X-goog-api-key: ' . $keyLimpia
+        ];
+
+        $ch = curl_init($endpoint);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payloadBody));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response !== false) {
+            $resData = json_decode($response, true);
+            
+            // Validación defensiva para evitar "Undefined array key"
+            if ($httpCode === 200 && isset($resData['candidates'][0]['content']['parts'][0]['text'])) {
+                return [
+                    'exito' => true,
+                    'modelo' => $modelo,
+                    'text' => $resData['candidates'][0]['content']['parts'][0]['text']
+                ];
+            }
+            $ultimoErrorData = $resData ?? ["raw_response" => $response];
+            $ultimoHttpCode = $httpCode;
+        }
+    }
+
+    return [
+        'exito' => false,
+        'http_code' => $ultimoHttpCode,
+        'detalles' => $ultimoErrorData
+    ];
+}
+
+$method = $_SERVER['REQUEST_METHOD'];
+$action = $_GET['action'] ?? '';
 
 switch ($method) {
     case 'POST':
         $inputJSON = file_get_contents('php://input');
         $payload = json_decode($inputJSON, true) ?? [];
 
-        // =========================================================================
-        // ACCIÓN: PROXY SEGURO PARA GEMINI CLOUD (PWA-BODEGA / NEGOCIOS)
-        // =========================================================================
         if ($action === 'optimizar_ia_cloud') {
-            if (!isset($payload['lote']) \vert{}\vert{} !is_array($payload['lote'])) {
-                http_response_code(400);
-                echo json_encode(["error" => "ESTRUCTURA_LOTE_INVALIDA"]);
-                break;
+            if (!isset($payload['lote']) || !is_array($payload['lote'])) {
+                responderJSON(["error" => "ESTRUCTURA_LOTE_INVALIDA"], 400);
             }
 
-            // Clave privada del backend (reemplazar por variable de entorno o tu API Key)
-            $apiKeyGemini = getenv('GEMINI_API_KEY') ?: "TU_API_KEY_DE_GOOGLE_AQUI";
-            $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $apiKeyGemini;
+            $apiKeyGemini = getenv('GEMINI_API_KEY') ?: ($_ENV['GEMINI_API_KEY'] ?? ($payload['api_key'] ?? ""));
+
+            if (empty($apiKeyGemini)) {
+                responderJSON([
+                    "status" => "FALLBACK_TRINCHERA",
+                    "mensaje" => "No se detectó GEMINI_API_KEY en el servidor.",
+                    "lote_optimizado" => $payload['lote']
+                ]);
+            }
 
             $promptText = "Actúa como el motor logístico del Protocolo Macondo en Cali, Colombia. " .
                           "Optimiza la secuencia de entrega para minimizar tiempo y distancia del siguiente lote: " . 
@@ -88,49 +174,94 @@ switch ($method) {
                 ]
             ];
 
-            $ch = curl_init($endpoint);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($bodyData));
+            $resultado = ejecutarGeneracionGeminiMultimodelo($bodyData, $apiKeyGemini);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode !== 200 \vert{}\vert{} !$response) {
-                http_response_code(502);
-                echo json_encode(["error" => "ERROR_COMUNICACION_GEMINI_CLOUD"]);
-                break;
+            if (!$resultado['exito']) {
+                responderJSON([
+                    "status" => "FALLBACK_TRINCHERA",
+                    "error_cloud" => "ERROR_COMUNICACION_GEMINI_CLOUD",
+                    "http_code" => $resultado['http_code'],
+                    "detalles_google" => $resultado['detalles'],
+                    "lote_optimizado" => $payload['lote']
+                ]);
             }
 
-            $resData = json_decode($response, true);
-            $rawText =$resData['candidates'][0]['content']['parts'][0]['text'] ?? '';
-            
-            // Sanitización contra markdown ```json
+            $rawText = $resultado['text'];
             $cleanJsonText = trim(preg_replace('/^```json\s*|```$/m', '', $rawText));
             $parsedLote = json_decode($cleanJsonText, true);
 
-            if (json_last_error() === JSON_ERROR_NONE) {
-                echo json_encode([
+            if (json_last_error() === JSON_ERROR_NONE && is_array($parsedLote)) {
+                responderJSON([
                     "status" => "SUCCESS",
+                    "modelo" => $resultado['modelo'],
                     "lote_optimizado" => $parsedLote
                 ]);
             } else {
-                http_response_code(500);
-                echo json_encode(["error" => "RESPUESTA_IA_NO_ES_JSON_VALIDO", "raw" => $rawText]);
+                responderJSON([
+                    "status" => "FALLBACK_TRINCHERA",
+                    "error" => "RESPUESTA_IA_NO_ES_JSON_VALIDO",
+                    "raw" => $rawText,
+                    "lote_optimizado" => $payload['lote']
+                ]);
             }
-            break;
         }
 
-        // =========================================================================
-        // ACCIÓN: RECARGA Y COMPRA DE CRÉDITOS DE BILLETERA
-        // =========================================================================
+        if ($action === 'extraer_puntos_documento') {
+            if (!isset($payload['file_data']) || !isset($payload['mime_type'])) {
+                responderJSON(['status' => 'error', 'message' => 'Estructura de archivo no válida.'], 400);
+            }
+
+            $apiKeyGemini = getenv('GEMINI_API_KEY') ?: ($_ENV['GEMINI_API_KEY'] ?? ($payload['api_key'] ?? ""));
+
+            if (empty($apiKeyGemini)) {
+                responderJSON(['status' => 'error', 'message' => 'GEMINI_API_KEY no configurada en el archivo .env del servidor.'], 400);
+            }
+
+            $promptText = "Actúa como un extractor de datos logísticos exacto. Analiza el documento u imagen adjunta y extrae la lista de entregas. " .
+                          "Devuelve EXCLUSIVAMENTE un JSON plano (un array de objetos) con la siguiente estructura: " .
+                          "[{\"destinatario\": \"Nombre\", \"direccion\": \"Direccion completa en Cali o alrededores\", \"telefono\": \"Numero de contacto\", \"carga\": \"Detalle paquete\"}]. " .
+                          "Sin formato markdown, ni texto explicativo adicional.";
+
+            $bodyData = [
+                "contents" => [
+                    [
+                        "parts" => [
+                            ["text" => $promptText],
+                            [
+                                "inline_data" => [
+                                    "mime_type" => $payload['mime_type'],
+                                    "data" => $payload['file_data']
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ];
+
+            $resultado = ejecutarGeneracionGeminiMultimodelo($bodyData, $apiKeyGemini);
+
+            if (!$resultado['exito']) {
+                responderJSON([
+                    'status' => 'error', 
+                    'message' => 'Fallo al procesar el documento en la nube. Verifique la clave o formato.', 
+                    'detalles' => $resultado['detalles']
+                ], 502);
+            }
+
+            $rawText = $resultado['text'];
+            $cleanJsonText = trim(preg_replace('/^```json\s*|```$/m', '', $rawText));
+            $parsedPuntos = json_decode($cleanJsonText, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($parsedPuntos)) {
+                responderJSON(['status' => 'success', 'modelo' => $resultado['modelo'], 'puntos' => $parsedPuntos]);
+            } else {
+                responderJSON(['status' => 'error', 'message' => 'No se pudo interpretar la estructura del documento.', 'raw' => $rawText], 500);
+            }
+        }
+
         if ($action === 'comprar_creditos_bodega' || (isset($payload['action']) && $payload['action'] === 'comprar_creditos_bodega')) {
             if (!isset($payload['bodega_id']) || !isset($payload['creditos']) || !isset($payload['monto_cop'])) {
-                http_response_code(400);
-                echo json_encode(["error" => "DATOS_COMPRA_INCOMPLETOS"]);
-                break;
+                responderJSON(["error" => "DATOS_COMPRA_INCOMPLETOS"], 400);
             }
 
             $recibo = [
@@ -147,29 +278,18 @@ switch ($method) {
             $transacciones[] = $recibo;
 
             if (escribirJsonSeguro(BILLETERA_FILE, $transacciones)) {
-                echo json_encode([
-                    "status" => "SUCCESS",
-                    "msg" => "CREDITOS_RECARGADOS",
-                    "transaccion" => $recibo
-                ]);
+                responderJSON(["status" => "SUCCESS", "msg" => "CREDITOS_RECARGADOS", "transaccion" => $recibo]);
             } else {
-                http_response_code(500);
-                echo json_encode(["error" => "ERROR_ESCRITURA_BILLETERA"]);
+                responderJSON(["error" => "ERROR_ESCRITURA_BILLETERA"], 500);
             }
-            break;
         }
 
-        // =========================================================================
-        // FLUJO BODEGA: CREACIÓN Y TARIFADO DE PUNTOS (500 COP / 1 CRÉDITO)
-        // =========================================================================
         if ($action === 'crear_punto_bodega' || (isset($payload['action']) && $payload['action'] === 'crear_punto_bodega')) {
             if (!isset($payload['bodega_id']) || !isset($payload['latitud']) || !isset($payload['longitud'])) {
-                http_response_code(400);
-                echo json_encode(["error" => "DATOS_BODEGA_INCOMPLETOS"]);
-                break;
+                responderJSON(["error" => "DATOS_BODEGA_INCOMPLETOS"], 400);
             }
 
-            $tarifaAporte = 500; // Tarifa fija en COP por punto generado
+            $tarifaAporte = 500;
             $nuevoPunto = [
                 'id' => 'PNT-' . uniqid(),
                 'bodega_id' => $payload['bodega_id'],
@@ -184,36 +304,21 @@ switch ($method) {
             $puntos[] = $nuevoPunto;
 
             if (escribirJsonSeguro(BODEGA_FILE, $puntos)) {
-                echo json_encode([
-                    "status" => "SUCCESS",
-                    "msg" => "PUNTO_BODEGA_REGISTRADO",
-                    "punto" => $nuevoPunto,
-                    "aporte_desarrollador" => $tarifaAporte
-                ]);
+                responderJSON(["status" => "SUCCESS", "msg" => "PUNTO_BODEGA_REGISTRADO", "punto" => $nuevoPunto, "aporte_desarrollador" => $tarifaAporte]);
             } else {
-                http_response_code(500);
-                echo json_encode(["error" => "ERROR_ESCRITURA_BODEGA"]);
+                responderJSON(["error" => "ERROR_ESCRITURA_BODEGA"], 500);
             }
-            break;
         }
 
-        // VALIDACIÓN PARA FLUJOS REGULARES DE CONTRATO
         if (!$payload || !isset($payload['id'])) {
-            http_response_code(400);
-            echo json_encode(["error" => "PAYLOAD_INVALIDO_O_VACIO"]);
-            break;
+            responderJSON(["error" => "PAYLOAD_INVALIDO_O_VACIO"], 400);
         }
 
         $loteId = $payload['id'];
         $pool = leerJsonSeguro(POOL_FILE);
 
-        // =========================================================================
-        // FLUJO A: FINALIZACIÓN Y MUTACIÓN DE CONTRATO
-        // =========================================================================
         if (isset($pool[$loteId]) && isset($payload['status']) && $payload['status'] === 'CONTRATO_COMPLETADO') {
-            
             $loteCompletado = $pool[$loteId];
-            
             $loteCompletado['status'] = "CONTRATO_COMPLETADO";
             $loteCompletado['estado'] = "HISTORIAL_ARCHIVADO"; 
             $loteCompletado['transaccion'] = [
@@ -227,42 +332,25 @@ switch ($method) {
 
             $historial = leerJsonSeguro(HISTORIAL_FILE);
             $historial[$loteId] = $loteCompletado;
-            
             escribirJsonSeguro(HISTORIAL_FILE, $historial);
 
             unset($pool[$loteId]);
             escribirJsonSeguro(POOL_FILE, $pool);
 
-            echo json_encode([
-                "status" => "SUCCESS", 
-                "msg" => "CONTRATO_MUTADO_Y_ARCHIVADO", 
-                "id" => $loteId
-            ]);
-            break;
+            responderJSON(["status" => "SUCCESS", "msg" => "CONTRATO_MUTADO_Y_ARCHIVADO", "id" => $loteId]);
         }
 
-        // =========================================================================
-        // FLUJO B: CREACIÓN / INDEXACIÓN DE NUEVO CONTRATO
-        // =========================================================================
         $payload['timestamp_relevo'] = time();
         $payload['estado'] = 'POOL_DISPONIBLE';
-
         $pool[$loteId] = $payload;
         
         if (escribirJsonSeguro(POOL_FILE, $pool)) {
-            echo json_encode([
-                "status" => "SUCCESS", 
-                "msg" => "CONTRATO_INDEXADO_EN_RELEVO_CIEGO", 
-                "id" => $loteId
-            ]);
+            responderJSON(["status" => "SUCCESS", "msg" => "CONTRATO_INDEXADO_EN_RELEVO_CIEGO", "id" => $loteId]);
         } else {
-            http_response_code(500);
-            echo json_encode(["error" => "ERROR_ESCRITURA_POOL"]);
+            responderJSON(["error" => "ERROR_ESCRITURA_POOL"], 500);
         }
-        break;
 
     case 'GET':
-        // CONSULTAR HISTORIAL Y MOVIMIENTOS DE BILLETERA
         if ($action === 'obtener_billetera_bodega') {
             $bodegaId = $_GET['bodega_id'] ?? '';
             $transacciones = leerJsonSeguro(BILLETERA_FILE);
@@ -272,23 +360,16 @@ switch ($method) {
                     return isset($tx['bodega_id']) && $tx['bodega_id'] === $bodegaId;
                 }));
             }
-            
-            echo json_encode($transacciones, JSON_PRETTY_PRINT);
-            break;
+            responderJSON($transacciones);
         }
 
-        // CONSULTA DE POOL POR DEFECTO
         $pool = leerJsonSeguro(POOL_FILE);
-
         $disponibles = array_filter($pool, function($lote) {
             return is_array($lote) && isset($lote['estado']) && $lote['estado'] === 'POOL_DISPONIBLE';
         });
 
-        echo json_encode($disponibles ? $disponibles : new stdClass(), JSON_PRETTY_PRINT);
-        break;
+        responderJSON($disponibles ? $disponibles : new stdClass());
 
     default:
-        http_response_code(405);
-        echo json_encode(["error" => "METODO_NO_PERMITIDO"]);
-        break;
+        responderJSON(["error" => "METODO_NO_PERMITIDO"], 405);
 }

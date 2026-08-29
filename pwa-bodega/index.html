@@ -67,6 +67,19 @@
           <h2>[1] INDEXACIÓN DE PUNTOS DE DESPACHO Y ACOPIO</h2>
           <div class="contenedor-split-telematico">
             <div class="columna-formulario">
+              
+              <!-- SECCIÓN DE CARGA MASIVA DE DESTINATARIOS POR ARCHIVO / IA -->
+              <div class="bloque-hash-foto" style="margin-bottom: 15px; border-color: var(--neon-purple); background: #12091b;">
+                <label class="label-maquina" style="color: var(--neon-purple);">[📄/🖼️] INGESTIÓN MASIVA DE DESTINATARIOS (PDF, TXT, WORD, FOTO):</label>
+                <div class="input-file-contenedor" style="margin-top: 8px;">
+                  <input type="file" id="archivo-base-datos" accept=".pdf,.doc,.docx,.txt,image/*" class="input-maquina" style="height: auto; padding: 6px;" />
+                  <span id="txt-estado-ingestion" class="txt-consola-info">Soporta manifiestos en PDF, fotos de guías, documentos de Word o listas TXT.</span>
+                  <button type="button" class="btn-terminal" id="btn-procesar-archivo-masivo" style="border-color: var(--neon-purple); color: var(--neon-purple); margin-top: 6px; font-size: 0.8rem;">
+                    [⚙️] PROCESAR_DOCUMENTO_Y_EXTRAER_PUNTOS
+                  </button>
+                </div>
+              </div>
+
               <form id="formulario-pedido" onsubmit="agregarPedidoALote(event)">
                 <div class="grid-formulario">
                   <div class="campo-maquina-hibrido">
@@ -256,6 +269,7 @@
     <script src="modulos/maps.js"></script>
     <script src="modulos/masa-sensor.js"></script>
     <script src="modulos/indexador-pedidos.js"></script>
+    <script type="module" src="modulos/importador-masivo.js"></script>
     <script type="module" src="modulos/tablero-bodega.js"></script>
     <script type="module" src="modulos/billetera-ui.js"></script>
     <script src="modulos/cedula-nodal.js"></script>
@@ -265,12 +279,13 @@
     <script src="modulos/ai-agent.js"></script> 
     
     <!-- Carga Segura y Restringida de Google Maps JavaScript API -->
-<script
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCP6Wc3JRQIRXu6cXM8KkPasuy8asTIWUE&callback=inicializarMapaMacondo&libraries=places"
-  async 
-  defer 
-  onerror="activarCapaContingenciaOffline()">
-</script>
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCP6Wc3JRQIRXu6cXM8KkPasuy8asTIWUE&callback=inicializarMapaMacondo&libraries=places"
+      async 
+      defer 
+      onerror="activarCapaContingenciaOffline()">
+    </script>
+
     <script type="module">
       import { verificarAccesoCedulaAlArranque } from './modulos/billetera-ui.js';
       window.onload = () => {

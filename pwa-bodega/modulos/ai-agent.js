@@ -6,7 +6,7 @@
 async function procesarCargaConAI(datosRutaRaw) {
     console.log(">>> [AI_INIT]: Evaluando arquitectura de niveles de inteligencia...");
 
-    // --- PRIORIDAD 1: INTENTAR EDGE AI LOCAL NATIVO (Gemini Nano Embedding) ---
+    // --- PRIORIDAD 1: INTENTAR EDGE AI LOCAL NATIVO (Gemini Nano) ---
     if (window.ai && typeof window.ai.createTextSession === "function") {
         try {
             console.log(">>> [AI_LOCAL]: Procesando optimización multipunto con Gemini Nano...");
@@ -34,22 +34,28 @@ async function procesarCargaConAI(datosRutaRaw) {
     try {
         console.log(">>> [AI_CLOUD]: Conectando con Google Gemini API REST vía Nodal Proxy...");
         
-        const res = await fetch('/api.php?action=optimizar_ia_cloud', {
+        const targetUrl = (window.ENDPOINT_API_PHP || '../api.php') + '?action=optimizar_ia_cloud';
+
+        const res = await fetch(targetUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ lote: datosRutaRaw })
         });
 
+        if (!res.ok) {
+            throw new Error(`Servidor HTTP error status ${res.status}`);
+        }
+
         const data = await res.json();
         
-        if (res.ok && data.status === 'success' && Array.isArray(data.lote_optimizado)) {
+        if (data.status === 'success' && Array.isArray(data.lote_optimizado)) {
             console.log(">>> [AI_CLOUD_OK]: Vector de optimización satelital recibido exitosamente.");
             return data.lote_optimizado;
         } else {
             throw new Error(data.message || 'Respuesta Cloud no estructurada');
         }
     } catch (err) {
-        console.warn(">>> [AI_CLOUD_FAIL]: Enlace satelital no disponible o sin crédito de API. Conmutando a Trinchera.", err);
+        console.warn(">>> [AI_CLOUD_FAIL]: Enlace satelital no disponible. Conmutando a Trinchera.", err);
     }
 
     // --- PRIORIDAD 3: MODO TRINCHERA (HEURÍSTICA GEOMÉTRICA LOCAL OFFLINE) ---

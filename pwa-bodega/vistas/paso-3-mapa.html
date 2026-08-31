@@ -1,0 +1,38 @@
+<section id="paso-3-mapa" class="paso-panel panel-negocios" style="display: none">
+  <h2>[3] PASO 3: ZONIFICACIÓN Y VISUALIZACIÓN EN MAPA</h2>
+
+  <div class="contenedor-split-telematico">
+    <div class="columna-telemetria-mapa" style="width: 100%">
+      <div class="bloque-hash-foto" style="margin-bottom: 12px; border-color: var(--neon-blue)">
+        <span class="label-maquina" style="color: var(--neon-blue)">&gt;&gt;&gt;&gt; MONITOR DE CAPACIDAD NODAL:</span>
+        <div style="display: flex; align-items: center; gap: 15px; margin-top: 5px">
+          <div style="flex-grow: 1; background: #191321; border: 1px solid #291f33; height: 12px">
+            <div id="barra-peso-carga" style="background: var(--neon-green); width: 0%; height: 100%"></div>
+          </div>
+          <div style="font-family: monospace; font-size: 0.8rem; color: #fff; min-width: 90px; text-align: right">
+            <span id="txt-peso-acumulado" style="color: var(--neon-green)">0.0</span> / 15.0 kg
+          </div>
+        </div>
+      </div>
+
+      <div id="mapa-telemetria" style="width: 100%; height: 320px; background-color: #0c080f"></div>
+
+      <div class="bloque-hash-foto" style="margin-top: 12px; border-color: var(--neon-purple)">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.8rem; color: #fff">
+          <div>Puntos Creados: <span id="meta-distancia" style="color: var(--neon-blue)">0 Puntos</span></div>
+          <div>Costo por Punto: <span id="meta-tiempo" style="color: var(--neon-amber)">1 Crédito</span></div>
+          <div>Valor Crédito: <span id="meta-mutual" style="color: var(--neon-blue)">$500 COP</span></div>
+          <div style="font-weight: bold; color: var(--neon-green)">TASA API: <span id="meta-ahorro">$500 COP</span></div>
+          <div style="font-weight: bold; grid-column: 1 / -1; border-top: 1px dashed var(--border-color); padding-top: 4px">
+            CONSUMO TOTAL ESTIMADO: <span id="meta-neto" style="color: var(--neon-green)">0 CRÉDITOS ($0 COP)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="acciones-paso flex-between" style="display: flex; justify-content: space-between; margin-top: 15px">
+    <button class="btn-terminal" style="border-color: #666; color: #ccc" onclick="cambiarPasoGuiado(2)">⬅ Volver a Revisión</button>
+    <button class="btn-terminal" style="border-color: var(--neon-green); color: var(--neon-green)" onclick="cambiarPasoGuiado(4)">Paso 4: Asignar a Mensajeros ➔</button>
+  </div>
+</section>

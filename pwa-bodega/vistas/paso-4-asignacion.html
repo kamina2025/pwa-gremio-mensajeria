@@ -1,0 +1,37 @@
+<section id="paso-4-asignacion" class="paso-panel panel-negocios" style="display: none">
+  <h2>[4] PASO 4: FRAGMENTACIÓN DE RUTAS Y ASIGNACIÓN A FLOTA</h2>
+
+  <div class="panel-control-fragmentacion" style="background: #0c080f; border: 1px solid var(--border-color); padding: 12px; margin-bottom: 15px">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; align-items: center">
+      <div>
+        <label class="label-maquina">MÉTODO DE FRAGMENTACIÓN:</label>
+        <select id="select-metodo-corte" class="input-maquina" onchange="document.getElementById('box-cupo-max').style.display = (this.value==='CUPO_MAXIMO'?'block':'none')">
+          <option value="ZONAS_CALI">Fragmentar por Sectores de Cali (Norte, Centro, Oeste, Oriente, Sur)</option>
+          <option value="CUPO_MAXIMO">Fragmentar por Mínimos/Máximos de Paquetes</option>
+        </select>
+      </div>
+      <div id="box-cupo-max" style="display: none">
+        <label class="label-maquina">MAX PAQUETES POR MOTO:</label>
+        <input type="number" id="input-max-paquetes" value="30" class="input-maquina" />
+      </div>
+      <div>
+        <button type="button" class="btn-terminal" style="border-color: var(--neon-blue); color: var(--neon-blue); width: 100%; margin-top: 15px" onclick="generarFragmentacionDeRutas()">
+          [⚙️] CALCULAR FRAGMENTACIÓN
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="contenedor-lotes-fragmentados" class="grid-lotes-asignados">
+    <div class="txt-consola-info" style="text-align: center; padding: 20px">
+      Presione [CALCULAR FRAGMENTACIÓN] para dividir los puntos cargados entre la flota disponible.
+    </div>
+  </div>
+
+  <div class="acciones-paso flex-between" style="display: flex; justify-content: space-between; margin-top: 20px; border-top: 1px dashed var(--border-color); padding-top: 15px">
+    <button class="btn-terminal" style="border-color: #666; color: #ccc" onclick="cambiarPasoGuiado(3)">⬅ Volver al Mapa</button>
+    <button type="button" class="btn-maquina btn-crypto" id="btn-publicar" onclick="registrarLoteDespachadoEnPool()" disabled>
+      [🚀 COMPILAR TODAS LAS ZONAS Y DESMITIFICAR CRÉDITOS]
+    </button>
+  </div>
+</section>

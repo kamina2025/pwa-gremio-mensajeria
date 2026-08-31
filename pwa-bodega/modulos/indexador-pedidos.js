@@ -1,202 +1,248 @@
 /**
- * PROTOCOLO MACONDO - SUBSISTEMA BODEGA: INDEXADOR DE PUNTOS DE ACOPIO (MODELO CRÉDITOS)
+ * PROTOCOLO MACONDO - INDEXADOR Y BUFFER LOCAL DE PUNTOS BODEGA
  * Ubicación: pwa-bodega/modulos/indexador-pedidos.js
+ * Compatibilidad: Script Global Estándar (Sin módulos ES6 / Export)
  */
 
+window.loteActualPedidos = window.loteActualPedidos || [];
+window.lotePedidosMemoria = window.loteActualPedidos; // Alias de compatibilidad
+window.pesoAcumuladoLote = 0;
+window.hashFotoProvisional = null;
+
 function simularHashFoto() {
-    const inputFoto = document.getElementById("foto-paquete");
-    if (inputFoto && inputFoto.files && inputFoto.files[0]) {
-        window.hashFotoActual =
-            "SHA256:" +
-            Math.random().toString(16).substring(2, 10).toUpperCase() +
-            "..." +
-            Math.random().toString(16).substring(2, 6).toUpperCase();
-        const lbl = document.getElementById("txt-hash-foto");
-        if (lbl) {
-            lbl.innerText = `[INTEGRIDAD_OK] ${window.hashFotoActual}`;
-            lbl.style.color = "var(--neon-green)";
-        }
+  const inputFoto = document.getElementById("foto-paquete");
+  const txtHash = document.getElementById("txt-hash-foto");
+
+  if (inputFoto && inputFoto.files && inputFoto.files[0]) {
+    const file = inputFoto.files[0];
+    const hashSimulado = "SHA256:" + Math.random().toString(16).substring(2, 10).toUpperCase();
+    window.hashFotoProvisional = hashSimulado;
+
+    if (txtHash) {
+      txtHash.innerText = `[INTEGRIDAD_OK] ${file.name} (${hashSimulado})`;
+      txtHash.style.color = "var(--neon-green)";
     }
+  }
 }
 
-function agregarPedidoALote(event) {
-    event.preventDefault();
+function agregarPedidoALote(evento) {
+  if (evento && typeof evento.preventDefault === "function") {
+    evento.preventDefault();
+  }
+  console.log(">>> [INDEXADOR_MANUAL]: Procesando registro de punto individual manual...");
 
-    if (!window.hashFotoActual) {
-        alert(">>> ERROR CRÍTICO: Debe cargar la fotografía del paquete para calcular su firma de integridad física.");
-        return;
-    }
+  const origenInput = document.getElementById("origen-cliente");
+  const docInput = document.getElementById("doc-cliente");
+  const dirInput = document.getElementById("dir-cliente");
+  const telInput = document.getElementById("tel-cliente");
+  const cargaInput = document.getElementById("carga-detalle");
 
-    const textoCarga = document.getElementById("carga-detalle").value.trim();
-    const pesoEstePedido = typeof window.extraerPesoNumerico === "function" ? window.extraerPesoNumerico(textoCarga) : 1.5;
-    const limiteHardware = window.LIMITE_MASA_HARDWARE_MOTO || 15.0;
+  const origen = origenInput && origenInput.value.trim() ? origenInput.value.trim() : "Cali, Colombia";
+  const alias = docInput && docInput.value.trim() ? docInput.value.trim() : "Punto de Acopio";
+  const direccion = dirInput ? dirInput.value.trim() : "";
+  const telefono = telInput && telInput.value.trim() ? telInput.value.trim() : "3000000000";
+  const detalleCarga = cargaInput && cargaInput.value.trim() ? cargaInput.value.trim() : "Paquete Estándar (1.0 kg)";
 
-    if ((window.pesoAcumuladoLote || 0) + pesoEstePedido > limiteHardware) {
-        alert(`>>> RECHAZO_DE_CARGA N0DAL:\n\nEl paquete excede el límite de estabilidad seguro restante (${(limiteHardware - (window.pesoAcumuladoLote || 0)).toFixed(1)} kg).`);
-        return;
-    }
+  if (!direccion) {
+    alert(">>> ALERTA BODEGA: Debe ingresar una dirección de destino válida.");
+    return;
+  }
 
-    const idPedido = "#PNT-" + Math.floor(1000 + Math.random() * 9000);
-    const nuevoPunto = {
-        id: idPedido,
-        destinatario: document.getElementById("doc-cliente").value.trim(),
-        direccion: document.getElementById("dir-cliente").value.trim(),
-        telefono: document.getElementById("tel-cliente").value.trim(),
-        carga: textoCarga,
-        pesoKg: pesoEstePedido,
-        testigoOptico: window.hashFotoActual,
-        creditos: 1,
-        precioEspecifico: 500 // 1 Crédito = $500 COP comisión API
-    };
+  const idPedido = "#PNT-" + Math.floor(1000 + Math.random() * 9000);
+  const testigoFisico = window.hashFotoProvisional || "MANUAL_MANIFIESTO_PUNTO";
 
-    if (!window.loteActualPedidos) window.loteActualPedidos = [];
-    window.loteActualPedidos.push(nuevoPunto);
-    window.pesoAcumuladoLote = (window.pesoAcumuladoLote || 0) + pesoEstePedido;
+  const pesoEstePedido = typeof window.extraerPesoNumerico === "function" 
+    ? window.extraerPesoNumerico(detalleCarga) 
+    : 1.0;
 
-    if (typeof window.actualizarMonitorMasaUI === "function") {
-        window.actualizarMonitorMasaUI();
-    }
+  const limiteHardware = window.LIMITE_MASA_HARDWARE_MOTO || 15.0;
 
-    const origenInput = document.getElementById("origen-cliente") ? document.getElementById("origen-cliente").value.trim() : "";
-    const CONTEXTO_GEOGRAFICO = ", Cali, Colombia";
-    let origConContexto = origenInput.toLowerCase().includes("cali") || origenInput.toLowerCase().includes("miranda") ? origenInput : origenInput + CONTEXTO_GEOGRAFICO;
-    let destConContexto = nuevoPunto.direccion.toLowerCase().includes("cali") || nuevoPunto.direccion.toLowerCase().includes("miranda") ? nuevoPunto.direccion : nuevoPunto.direccion + CONTEXTO_GEOGRAFICO;
+  if ((window.pesoAcumuladoLote || 0) + pesoEstePedido > limiteHardware) {
+    alert(`>>> RECHAZO_DE_CARGA NODAL:\n\nEl paquete excede el límite de carga seguro restante (${(limiteHardware - (window.pesoAcumuladoLote || 0)).toFixed(1)} kg).`);
+    return;
+  }
 
-    // Actualización telemática basada en créditos y puntos de acopio
-    if (typeof window.previsualizarRutaInmediata === "function") {
-        window.previsualizarRutaInmediata(origConContexto, destConContexto);
-    } else if (typeof window.actualizarTableroUI === "function") {
-        window.actualizarTableroUI(0, 0, window.loteActualPedidos.length);
-    }
+  // Objeto normalizado totalmente compatible con mapa-rutas.js y pool-persistencia.js
+  const nuevoPunto = {
+    id: idPedido,
+    destinatario: alias,
+    direccion: direccion,
+    telefono: telefono,
+    carga: detalleCarga,
+    pesoKg: pesoEstePedido,
+    testigoOptico: testigoFisico,
+    creditos: 1,
+    precioEspecifico: 500
+  };
 
-    actualizarTablaCola();
+  if (!window.loteActualPedidos) window.loteActualPedidos = [];
+  window.loteActualPedidos.push(nuevoPunto);
+  window.lotePedidosMemoria = window.loteActualPedidos;
+  window.pesoAcumuladoLote = (window.pesoAcumuladoLote || 0) + pesoEstePedido;
 
-    // Resetear campos del formulario
-    document.getElementById("doc-cliente").value = "";
-    document.getElementById("dir-cliente").value = "";
-    document.getElementById("tel-cliente").value = "";
-    document.getElementById("carga-detalle").value = "";
-    window.hashFotoActual = "";
+  console.log(`>>> [INDEXADOR_SUCCESS]: Nodo ${idPedido} inyectado al lote. Total en memoria: ${window.loteActualPedidos.length}`);
 
-    const txtHashFoto = document.getElementById("txt-hash-foto");
-    if (txtHashFoto) {
-        txtHashFoto.innerText = "PENDIENTE: Capturar testigo óptico del paquete...";
-        txtHashFoto.style.color = "";
-    }
+  // Reset de campos en formulario
+  if (dirInput) dirInput.value = "";
+  if (docInput) docInput.value = "";
+  if (telInput) telInput.value = "";
+  if (cargaInput) cargaInput.value = "";
+  window.hashFotoProvisional = null;
+
+  const txtHash = document.getElementById("txt-hash-foto");
+  if (txtHash) {
+    txtHash.innerText = "PENDIENTE: Capturar testigo óptico del punto/paquete...";
+    txtHash.style.color = "";
+  }
+
+  if (typeof window.actualizarMonitorMasaUI === "function") {
+    window.actualizarMonitorMasaUI();
+  }
+
+  actualizarTablaCola();
+
+  // Formateo telemático con contexto regional para evitar fallos NOT_FOUND en Google Maps
+  const CONTEXTO_GEOGRAFICO = ", Cali, Colombia";
+  let origConContexto = origen.toLowerCase().includes("cali") || origen.toLowerCase().includes("miranda") 
+    ? origen 
+    : origen + CONTEXTO_GEOGRAFICO;
+
+  let destConContexto = nuevoPunto.direccion.toLowerCase().includes("cali") || nuevoPunto.direccion.toLowerCase().includes("miranda") 
+    ? nuevoPunto.direccion 
+    : nuevoPunto.direccion + CONTEXTO_GEOGRAFICO;
+
+  if (typeof window.previsualizarRutaInmediata === "function") {
+    console.log(">>> [INDEXADOR_MAPS_LINK]: Disparando actualización telemática de marcadores y trayectoria...");
+    window.previsualizarRutaInmediata(origConContexto, destConContexto);
+  } else if (typeof window.actualizarTableroUI === "function") {
+    window.actualizarTableroUI(0, 0, window.loteActualPedidos.length);
+  }
 }
 
 function actualizarTablaCola() {
-    const tbody = document.getElementById("cola-pedidos-body");
-    const btnPublicar = document.getElementById("btn-publicar");
-    if (!tbody) return;
+  const tbody = document.getElementById("cola-pedidos-body");
+  const btnPublicar = document.getElementById("btn-publicar");
+  if (!tbody) return;
 
-    if (!window.loteActualPedidos || window.loteActualPedidos.length === 0) {
-        tbody.innerHTML = `<tr id="fila-vacia"><td colspan="8" style="text-align: center; color: #524359; padding: 20px;">[BUFFER_VACÍO] No hay datos en la cola de salida de bodega.</td></tr>`;
-        if (btnPublicar) btnPublicar.disabled = true;
-        return;
+  if (!window.loteActualPedidos || window.loteActualPedidos.length === 0) {
+    tbody.innerHTML = `
+      <tr id="fila-vacia">
+        <td colspan="8" style="text-align: center; color: var(--neon-amber); padding: 15px">
+          [BUFFER VACÍO] Cargue datos en el Paso 1 o agregue puntos manualmente.
+        </td>
+      </tr>`;
+    
+    if (btnPublicar) btnPublicar.disabled = true;
+    if (typeof window.actualizarTableroUI === "function") {
+      window.actualizarTableroUI(0, 0, 0);
     }
+    return;
+  }
 
-    tbody.innerHTML = "";
+  let totalPeso = 0;
+  tbody.innerHTML = window.loteActualPedidos.map((p, idx) => {
+    totalPeso += p.pesoKg || p.peso || 1.0;
+    const costoPuntoCOP = p.precioEspecifico || 500;
+    const aliasNodo = p.destinatario || p.alias || "Punto de Acopio";
+    const idNodo = p.id || p.hash_id || `#PNT-${idx + 1}`;
 
-    window.loteActualPedidos.forEach((pedido, indice) => {
-        const nuevaFila = document.createElement("tr");
-        nuevaFila.id = `fila-nodo-${indice}`;
-        const letraParadaActual = String.fromCharCode(65 + indice);
+    const bloqueModoBodegaHTML = `
+      <div class="bloque-soporte-bodega" style="font-size:0.75rem; font-family:monospace; line-height:1.3;">
+        <div style="color: var(--neon-blue);"><span style="font-weight:bold;">Soporte Logístico:</span> Activo</div>
+        <div style="color: var(--neon-green); font-weight: bold; margin-top: 3px; font-size: 0.7rem;">>>> TASA API: $${costoPuntoCOP.toLocaleString('es-CO')} COP</div>
+      </div>`;
 
-        let opcionesSelector = "";
-        window.loteActualPedidos.forEach((_, optIndice) => {
-            const letraPosicionOpt = String.fromCharCode(65 + optIndice);
-            const seleccionado = optIndice === indice ? "selected" : "";
-            opcionesSelector += `<option value="${optIndice}" ${seleccionado}>Mover a Parada ${letraPosicionOpt}</option>`;
-        });
+    return `
+      <tr id="fila-nodo-${idx}">
+        <td style="font-family: monospace; color: var(--neon-purple);">${idNodo}</td>
+        <td><strong>${aliasNodo}</strong></td>
+        <td>${p.direccion}</td>
+        <td>${p.carga}</td>
+        <td>${p.pesoKg || p.peso || 1.0} kg</td>
+        <td style="color: var(--neon-green)">1 CR ($500 COP)</td>
+        <td>${bloqueModoBodegaHTML}</td>
+        <td style="font-size: 0.65rem; color: #79578a; font-family: monospace; word-break: break-all;">${p.testigoOptico || p.testigo || "SIN_FOTO"}</td>
+      </tr>`;
+  }).join("");
 
-        const valorCreditoCOP = 500;
-        const costoPuntoCOP = pedido.precioEspecifico || valorCreditoCOP;
+  window.pesoAcumuladoLote = totalPeso;
+  if (btnPublicar) btnPublicar.disabled = false;
 
-        const bloqueModoBodegaHTML = `
-            <div class="bloque-soporte-bodega" style="font-size:0.75rem; font-family:monospace; line-height:1.3;">
-                <div style="color: var(--neon-blue);"><span style="font-weight:bold;">Soporte Logístico:</span> Activo</div>
-                <div style="color: var(--neon-green); font-weight: bold; margin-top: 3px; font-size: 0.7rem;">>>> TASA API: $${costoPuntoCOP.toLocaleString('es-CO')} COP</div>
-            </div>`;
-
-        nuevaFila.innerHTML = `
-            <td style="color: var(--neon-blue); font-weight: bold; font-family: monospace;">[${letraParadaActual}] ${pedido.id}</td>
-            <td>${pedido.destinatario}</td>
-            <td>${pedido.direccion}</td>
-            <td>${pedido.carga}</td>
-            <td style="color: var(--neon-amber); font-family: monospace; font-size: 0.8rem; text-align: center;">
-                <span style="color:var(--neon-blue);">1 CRÉDITO</span> <br>
-                <span style="color: var(--neon-green); font-weight: bold;">$${costoPuntoCOP.toLocaleString('es-CO')} COP</span>
-            </td>
-            <td>${bloqueModoBodegaHTML}</td>
-            <td>
-                <select class="selector-posicion-nodo" data-idx="${indice}" onchange="intercambiarPosicionNodo(this.dataset.idx, this.value)" style="background:#0c080f; color:var(--neon-purple); border:1px solid rgba(138,43,226,0.5); font-family:monospace; font-size:0.7rem; padding:2px;">
-                    ${opcionesSelector}
-                </select>
-            </td>
-            <td style="font-size: 0.65rem; color: #79578a; font-family: monospace; word-break: break-all;">${pedido.testigoOptico || "PENDIENTE"}</td>
-        `;
-
-        tbody.appendChild(nuevaFila);
-    });
-
-    if (btnPublicar) btnPublicar.disabled = false;
+  if (typeof window.actualizarTableroUI === "function") {
+    window.actualizarTableroUI(window.loteActualPedidos.length, 0, window.loteActualPedidos.length);
+  }
 }
 
 function intercambiarPosicionNodo(indiceOrigen, indiceDestino) {
-    indiceOrigen = parseInt(indiceOrigen, 10);
-    indiceDestino = parseInt(indiceDestino, 10);
-    if (isNaN(indiceOrigen) || isNaN(indiceDestino) || indiceOrigen === indiceDestino) return;
+  indiceOrigen = parseInt(indiceOrigen, 10);
+  indiceDestino = parseInt(indiceDestino, 10);
 
-    const nodoAMover = window.loteActualPedidos.splice(indiceOrigen, 1)[0];
-    window.loteActualPedidos.splice(indiceDestino, 0, nodoAMover);
+  if (
+    isNaN(indiceOrigen) ||
+    isNaN(indiceDestino) ||
+    indiceOrigen < 0 ||
+    indiceDestino < 0 ||
+    indiceOrigen >= window.loteActualPedidos.length ||
+    indiceDestino >= window.loteActualPedidos.length ||
+    indiceOrigen === indiceDestino
+  ) {
+    return;
+  }
 
-    actualizarTablaCola();
+  const nodoAMover = window.loteActualPedidos.splice(indiceOrigen, 1)[0];
+  window.loteActualPedidos.splice(indiceDestino, 0, nodoAMover);
+  window.lotePedidosMemoria = window.loteActualPedidos;
 
-    const origenInput = document.getElementById("origen-cliente") ? document.getElementById("origen-cliente").value.trim() : "";
-    const ultimaDireccionLote = window.loteActualPedidos[window.loteActualPedidos.length - 1].direccion;
-    const CONTEXTO_GEOGRAFICO = ", Cali, Colombia";
+  actualizarTablaCola();
 
-    let origConContexto = origenInput.toLowerCase().includes("cali") || origenInput.toLowerCase().includes("miranda") ? origenInput : origenInput + CONTEXTO_GEOGRAFICO;
-    let destConContexto = ultimaDireccionLote.toLowerCase().includes("cali") || ultimaDireccionLote.toLowerCase().includes("miranda") ? ultimaDireccionLote : ultimaDireccionLote + CONTEXTO_GEOGRAFICO;
+  const origenInput = document.getElementById("origen-cliente") ? document.getElementById("origen-cliente").value.trim() : "Cali, Colombia";
+  const ultimaDireccionLote = window.loteActualPedidos[window.loteActualPedidos.length - 1].direccion;
+  const CONTEXTO_GEOGRAFICO = ", Cali, Colombia";
 
-    if (typeof window.previsualizarRutaInmediata === "function") {
-        window.previsualizarRutaInmediata(origConContexto, destConContexto);
-    }
+  let origConContexto = origenInput.toLowerCase().includes("cali") || origenInput.toLowerCase().includes("miranda") ? origenInput : origenInput + CONTEXTO_GEOGRAFICO;
+  let destConContexto = ultimaDireccionLote.toLowerCase().includes("cali") || ultimaDireccionLote.toLowerCase().includes("miranda") ? ultimaDireccionLote : ultimaDireccionLote + CONTEXTO_GEOGRAFICO;
+
+  if (typeof window.previsualizarRutaInmediata === "function") {
+    window.previsualizarRutaInmediata(origConContexto, destConContexto);
+  }
 }
 
 async function cerrarLoteYCompilarElRevelo() {
-    console.log(">>> [COMPILADOR_BODEGA]: Empaquetando lote inmutable de puntos...");
+  console.log(">>> [COMPILADOR_BODEGA]: Empaquetando lote inmutable de puntos...");
 
+  if (!window.loteActualPedidos || window.loteActualPedidos.length === 0) {
+    alert("El buffer de bodega está vacío. Indexe puntos de acopio antes de compilar.");
+    return;
+  }
+
+  if (window.visorAnimaciones && typeof window.visorAnimaciones.mostrarAnimacionCompilacionLote === "function") {
+    window.visorAnimaciones.mostrarAnimacionCompilacionLote();
+  }
+
+  setTimeout(() => {
     try {
-        if (!window.loteActualPedidos || window.loteActualPedidos.length === 0) {
-            alert("El buffer de bodega está vacío. Indexe puntos de acopio antes de compilar.");
-            return;
-        }
+      window.loteActualPedidos = [];
+      window.lotePedidosMemoria = [];
+      window.pesoAcumuladoLote = 0;
 
-        window.loteActualPedidos = [];
-        if (window.lotePedidosMemoria) window.lotePedidosMemoria = [];
-        window.pesoAcumuladoLote = 0;
+      if (typeof window.limpiarGraficosDelMapa === "function") {
+        window.limpiarGraficosDelMapa();
+      }
 
-        if (typeof window.limpiarGraficosDelMapa === "function") {
-            window.limpiarGraficosDelMapa();
-        }
-
-        if (typeof window.actualizarTableroUI === "function") {
-            window.actualizarTableroUI(0, 0, 0);
-        }
-
-        actualizarTablaCola();
-
-        console.log(">>> [UI_REFRESH]: Matriz de puntos reseteada a cero.");
-        alert("Lote de bodega compilado con éxito. Datos propagados al pool descentralizado.");
-
+      actualizarTablaCola();
+      console.log(">>> [UI_REFRESH]: Matriz de puntos y telemetría reseteadas a cero.");
     } catch (error) {
-        console.error(">>> [COMPILADOR_FAIL]: Error crítico al compilar el lote de bodega.", error);
+      console.error(">>> [COMPILADOR_FAIL]: Error crítico al compilar el lote de bodega.", error);
+    } finally {
+      if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
+        window.visorAnimaciones.ocultarModal();
+      }
+      alert("Lote de bodega compilado con éxito. Datos propagados al pool descentralizado.");
     }
+  }, 1500);
 }
 
-// Inyección al Scope Global
+// Inyección explícita al Ámbito Global (Evita errores SyntaxError en scripts tradicionales)
 window.simularHashFoto = simularHashFoto;
 window.agregarPedidoALote = agregarPedidoALote;
 window.actualizarTablaCola = actualizarTablaCola;

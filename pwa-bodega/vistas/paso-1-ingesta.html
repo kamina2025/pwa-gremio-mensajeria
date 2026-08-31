@@ -1,0 +1,28 @@
+<section id="paso-1-ingesta" class="paso-panel panel-negocios">
+  <h2>[1] PASO 1: FUENTE DE DATOS E INGESTIÓN DE DESTINATARIOS</h2>
+  <div class="opciones-ingesta-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-top: 10px">
+    <div class="card-opcion-ingesta" style="background: #0c080f; border: 1px dashed var(--neon-purple); padding: 15px">
+      <h3 style="color: var(--neon-purple); font-size: 0.9rem; margin-bottom: 8px">📄 Opción 1: Archivo o Base de Datos</h3>
+      <p class="txt-consola-info" style="margin-bottom: 12px">Cargue manifiestos en PDF, TXT, Excel (.xlsx) o listas en Word.</p>
+      <input type="file" id="archivo-base-datos" accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,image/*" class="input-maquina" style="height: auto; padding: 6px; margin-bottom: 8px" />
+      <button type="button" class="btn-terminal" id="btn-procesar-archivo-masivo" style="border-color: var(--neon-purple); color: var(--neon-purple); width: 100%">
+        [⚙️] EXTRAER PUNTOS DESDE ARCHIVO
+      </button>
+    </div>
+
+    <div class="card-opcion-ingesta" style="background: #0c080f; border: 1px dashed var(--neon-amber); padding: 15px">
+      <h3 style="color: var(--neon-amber); font-size: 0.9rem; margin-bottom: 8px">📸 Opción 2: Fotografías de Tirillas / Vouchers</h3>
+      <p class="txt-consola-info" style="margin-bottom: 12px">Fotografíe comandas físicas, guías impresas o facturas electrónicas.</p>
+      <input type="file" id="foto-tirilla-ocr" accept="image/*" capture="environment" class="input-maquina" style="height: auto; padding: 6px; margin-bottom: 8px" onchange="if(typeof procesarFotoTirilla === 'function') procesarFotoTirilla(event)" />
+      <button type="button" class="btn-terminal" style="border-color: var(--neon-amber); color: var(--neon-amber); width: 100%" onclick="document.getElementById('foto-tirilla-ocr').click()">
+        [📷] CAPTURAR TIRILLA CON OCR IA
+      </button>
+    </div>
+  </div>
+
+  <div class="acciones-paso" style="margin-top: 15px; text-align: right">
+    <button class="btn-terminal" style="border-color: var(--neon-blue); color: var(--neon-blue)" onclick="cambiarPasoGuiado(2)">
+      PASO 2: REVISAR & ENLISTAR DATOS ➔
+    </button>
+  </div>
+</section>

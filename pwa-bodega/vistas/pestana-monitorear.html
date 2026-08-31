@@ -1,0 +1,26 @@
+<div id="pestana-monitorear" class="contenedor-pestana">
+  <section id="seccion-rutas-pool" class="contenedor-neon panel-negocios">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--neon-purple); padding-bottom: 8px; margin-bottom: 15px">
+      <h3 style="color: var(--neon-purple); font-family: monospace; margin: 0">PANEL DE VECTORES Y PUNTOS DE BODEGA</h3>
+      <div style="font-family: monospace; font-size: 0.8rem">
+        <span style="border: 1px solid var(--neon-amber); padding: 4px 8px; margin-right: 5px; color: var(--neon-amber)">Pendientes: <strong id="count-pendientes">0</strong></span>
+        <span style="border: 1px solid var(--neon-blue); padding: 4px 8px; margin-right: 5px; color: var(--neon-blue)">En Tránsito: <strong id="count-transito">0</strong></span>
+        <span style="border: 1px solid var(--neon-green); padding: 4px 8px; color: var(--neon-green)">Finalizadas: <strong id="count-finalizadas">0</strong></span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px">
+      <div>
+        <h4 style="color: var(--neon-amber); border-bottom: 1px dashed var(--neon-amber); margin-top: 0">[🗂️] PUNTOS EN POOL</h4>
+        <div id="lista-rutas-pendientes"></div>
+      </div>
+      <div>
+        <h4 style="color: var(--neon-blue); border-bottom: 1px dashed var(--neon-blue); margin-top: 0">[🏍️] EN ASFALTO</h4>
+        <div id="lista-rutas-transito"></div>
+      </div>
+      <div>
+        <h4 style="color: var(--neon-green); border-bottom: 1px dashed var(--neon-green); margin-top: 0">[✅] PROCESADOS</h4>
+        <div id="lista-rutas-finalizadas"></div>
+      </div>
+    </div>
+  </section>
+</div>

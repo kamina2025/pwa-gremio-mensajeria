@@ -1,0 +1,63 @@
+<div id="pestana-billetera" class="contenedor-pestana">
+  <section class="panel-negocios">
+    <h2>[3] BILLETERA NODAL - APORTE Y CRÉDITOS BODEGA</h2>
+    <div class="grid-billetera">
+      <div class="tarjeta-creditos">
+        <span class="label-maquina" style="color: var(--neon-purple)">SALDO DISPONIBLE:</span>
+        <div class="monto-creditos" id="saldo-creditos-display">0 CR</div>
+        <p style="color: #aaa; font-family: monospace; font-size: 0.85rem" id="saldo-cop-display">Equivalente a: $0 COP</p>
+        <span style="font-size: 0.75rem; color: var(--neon-blue)">Tasa fija: 1 Crédito = $500 COP</span>
+      </div>
+
+      <div class="panel-negocios" style="background: #0c080f">
+        <h3 style="color: var(--neon-green); font-size: 1rem; margin-top: 0">[+] COMPRAR PAQUETE DE CRÉDITOS</h3>
+
+        <div class="paquete-opcion">
+          <div>
+            <strong>Paquete Básico</strong><br />
+            <span style="color: #aaa; font-size: 0.8rem">10 Créditos (10 Puntos)</span>
+          </div>
+          <button type="button" class="btn-terminal" onclick="comprarCreditos(10, 5000)" style="border-color: var(--neon-green); color: var(--neon-green)">$5,000 COP</button>
+        </div>
+
+        <div class="paquete-opcion">
+          <div>
+            <strong>Paquete Pro-Bodega</strong><br />
+            <span style="color: #aaa; font-size: 0.8rem">50 Créditos (50 Puntos)</span>
+          </div>
+          <button type="button" class="btn-terminal" onclick="comprarCreditos(50, 25000)" style="border-color: var(--neon-green); color: var(--neon-green)">$25,000 COP</button>
+        </div>
+
+        <div class="paquete-opcion">
+          <div>
+            <strong>Paquete Acopio Masivo</strong><br />
+            <span style="color: #aaa; font-size: 0.8rem">100 Créditos (100 Puntos)</span>
+          </div>
+          <button type="button" class="btn-terminal" onclick="comprarCreditos(100, 50000)" style="border-color: var(--neon-green); color: var(--neon-green)">$50,000 COP</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px">
+      <h3>[📜] HISTORIAL DE CONSUMO DE API Y PUNTOS</h3>
+      <div class="tabla-contenedor-scroller">
+        <table class="tabla-maquina">
+          <thead>
+            <tr>
+              <th>FECHA</th>
+              <th>CONCEPTO</th>
+              <th>PUNTOS</th>
+              <th>DEBITO (CR)</th>
+              <th>ESTADO</th>
+            </tr>
+          </thead>
+          <tbody id="historial-billetera-body">
+            <tr>
+              <td colspan="5" style="text-align: center; color: #666">Sin movimientos registrados</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>

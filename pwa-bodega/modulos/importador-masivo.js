@@ -1,25 +1,30 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA BODEGA: IMPORTADOR MASIVO MULTI-FORMATO
  * Ubicación: modulos/importador-masivo.js
+ * Arquitectura: Local-First con Parsing Sanitizado, Fallback IA Cloud Opt-In y Resguardo Telemático
  */
 
 export class ImportadorMasivoBodega {
     constructor() {
-        console.log(">>> [IMPORTADOR_INIT]: Instanciando subsistema de ingestión masiva de destinatarios...");
-        this.regexTelefono = /(?:(?:\+|00)57)?\s*3\d{2}[\s-]?\d{3}[\s-]?\d{4}/g;
-        this.inicializarEscuchas();
+        console.log(">>> [IMPORTADOR_INIT]: Instanciando subsistema de ingestión masiva Local-First...");
+        // Regexp refinada para detectar números celulares colombianos (con o sin +57)
+        this.regexTelefono = /(?:\+?57)?\s*3\d{7,10}\b/g;
     }
 
-    inicializarEscuchas() {
-        document.addEventListener("DOMContentLoaded", () => {
-            const btnProcesar = document.getElementById("btn-procesar-archivo-masivo");
-            if (btnProcesar) {
-                console.log(">>> [IMPORTADOR_LISTENERS]: Botón [⚙️] PROCESAR_DOCUMENTO_Y_EXTRAER_PUNTOS enlazado correctamente.");
-                btnProcesar.addEventListener("click", () => this.ejecutarImportacion());
-            } else {
-                console.warn(">>> [IMPORTADOR_WARN]: No se encontró el elemento #btn-procesar-archivo-masivo en el DOM.");
-            }
-        });
+    /**
+     * Exposición explícita invocada por el Bootstrapper
+     * una vez que la estructura DOM ha sido compilada e inyectada exitosamente.
+     */
+    vincularEscuchas() {
+        const btnProcesar = document.getElementById("btn-procesar-archivo-masivo");
+        if (btnProcesar) {
+            console.log(">>> [IMPORTADOR_LISTENERS]: Botón [⚙️] PROCESAR_DOCUMENTO_Y_EXTRAER_PUNTOS enlazado correctamente.");
+            btnProcesar.removeEventListener("click", this._onProcesarClick);
+            this._onProcesarClick = () => this.ejecutarImportacion();
+            btnProcesar.addEventListener("click", this._onProcesarClick);
+        } else {
+            console.warn(">>> [IMPORTADOR_WARN]: No se encontró el elemento #btn-procesar-archivo-masivo en el DOM.");
+        }
     }
 
     async ejecutarImportacion() {
@@ -33,48 +38,70 @@ export class ImportadorMasivoBodega {
         }
 
         const archivo = inputArchivo.files[0];
-        console.log(`>>> [IMPORTADOR_FILE]: Archivo detectado -> Nombre: "${archivo.name}", Tipo: "${archivo.type}", Tamaño: ${archivo.bytes || archivo.size} bytes`);
+        console.log(`>>> [IMPORTADOR_FILE]: Archivo detectado -> Nombre: "${archivo.name}", Tipo: "${archivo.type}", Tamaño: ${archivo.size || 0} bytes`);
 
         if (lblEstado) {
-            lblEstado.innerText = ">>> PROCESANDO MANIFIESTO EN NODO LOCAL O NUBE...";
+            lblEstado.innerText = ">>> EVALUANDO ESTRUCTURA DEL ARCHIVO...";
             lblEstado.style.color = "var(--neon-amber)";
         }
 
         try {
             let puntosExtraidos = [];
+            const esPDF = archivo.type === "application/pdf" || archivo.name.toLowerCase().endsWith(".pdf");
+            const esImagen = archivo.type.startsWith("image/");
 
-            // --- RAMA 1: Archivo de texto plano local o CSV ---
-            if (archivo.type === "text/plain" || archivo.name.endsWith(".txt") || archivo.name.endsWith(".csv")) {
-                console.log(">>> [IMPORTADOR_BRANCH]: Archivo reconocido como TEXTO PLANO / CSV. Omitiendo IA Cloud, procesando vía regex local.");
-                const texto = await archivo.text();
-                puntosExtraidos = this.parsearTextoPlano(texto);
-            } 
-            // --- RAMA 2: Documentos complejos (PDF, Word, Imágenes) ---
-            else {
-                console.log(">>> [IMPORTADOR_BRANCH]: Archivo reconocido como Binario/PDF/Imagen. Delegando a Proxy IA Cloud (Gemini)...");
-                try {
-                    puntosExtraidos = await this.procesarDocumentoConIA(archivo);
-                    console.log(">>> [CLOUD_IA_SUCCESS]: Gemini procesó el documento y retornó puntos estructurados:", puntosExtraidos);
-                } catch (cloudErr) {
-                    console.warn(">>> [AVISO TRINCHERA]: Cloud falló o no hay API Key configurada. Activando parser local de respaldo para el documento:", cloudErr);
-                    
-                    // Fallback de respaldo: Intentar leer texto plano embebido en el blob si es posible
-                    const textoFallback = await archivo.text().catch(() => "");
-                    if (textoFallback && textoFallback.length > 5) {
-                        console.log(">>> [TRINCHERA_FALLBACK]: Extrayendo puntos mediante heurística local de texto plano.");
-                        puntosExtraidos = this.parsearTextoPlano(textoFallback);
-                    } else {
-                        console.warn(">>> [TRINCHERA_HEURISTIC]: El blob no contiene texto plano legible. Generando entrada base por defecto.");
-                        puntosExtraidos = [
-                            {
-                                destinatario: "Destinatario Acopio " + archivo.name,
-                                direccion: "Calle Principal # 10-20, Cali",
-                                telefono: "3001234567",
-                                carga: "Paquete Estándar (1.0 kg)"
-                            }
-                        ];
-                    }
+            // PASO 1: EVALUAR HEURÍSTICA LOCAL EN TEXTO PLANO/CSV/TXT
+            if (!esPDF && !esImagen) {
+                console.log(">>> [HEURISTICA_LOCAL_INIT]: Archivo de texto/CSV detectado. Ejecutando análisis regex local...");
+                const textoLocal = await archivo.text().catch(() => "");
+                if (textoLocal && textoLocal.trim().length > 5) {
+                    puntosExtraidos = this.parsearTextoPlano(textoLocal);
                 }
+            } else {
+                console.log(">>> [IMPORTADOR_BRANCH]: Archivo binario (PDF/Imagen) detectado. Omitiendo parser local crudo.");
+            }
+
+            // PASO 2: SOLICITAR IA CLOUD SI ES PDF/IMAGEN O SI LA HEURÍSTICA LOCAL SALIÓ VACÍA
+            if (!puntosExtraidos || puntosExtraidos.length === 0) {
+                console.warn(">>> [HEURISTICA_INSUFICIENTE]: Requiere procesamiento multimodal en la Nube.");
+
+                const mensajeConfirmacion = esPDF || esImagen
+                    ? `>>> [ASISTENTE BODEGA]: Se detectó un documento (${archivo.name}).\n\n¿Desea enviarlo a la IA Cloud (Gemini) para extraer los destinatarios y direcciones con precisión?`
+                    : `>>> [ASISTENTE BODEGA]: No se encontraron datos legibles localmente.\n\n¿Desea intentar la extracción avanzada mediante IA Cloud?`;
+
+                const confirmarUsoIA = confirm(mensajeConfirmacion);
+
+                if (confirmarUsoIA) {
+                    if (lblEstado) {
+                        lblEstado.innerText = ">>> PROCESANDO CON IA CLOUD (GEMINI)...";
+                        lblEstado.style.color = "var(--neon-purple)";
+                    }
+
+                    if (window.visorAnimaciones && typeof window.visorAnimaciones.mostrarAnimacionProcesamientoIA === "function") {
+                        window.visorAnimaciones.mostrarAnimacionProcesamientoIA(archivo.name || archivo.type);
+                    }
+
+                    try {
+                        puntosExtraidos = await this.procesarDocumentoConIA(archivo);
+                        console.log(">>> [CLOUD_IA_SUCCESS]: Puntos extraídos mediante IA Cloud:", puntosExtraidos);
+                    } catch (cloudErr) {
+                        console.error(">>> [CLOUD_IA_FAIL]: Error al procesar con IA Cloud:", cloudErr);
+                        throw new Error(`Fallo en extracción Cloud: ${cloudErr.message}`);
+                    } finally {
+                        if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
+                            window.visorAnimaciones.ocultarModal();
+                        }
+                    }
+                } else {
+                    console.log(">>> [PROCESO_ABORTADO]: Ingestión cancelada por el usuario.");
+                    if (lblEstado) {
+                        lblEstado.innerText = ">>> PROCESO CANCELADO POR EL USUARIO.";
+                        lblEstado.style.color = "#ff3366";
+                    }
+                    return;
+                }
+            } else {
+                console.log(`>>> [HEURISTICA_LOCAL_SUCCESS]: ${puntosExtraidos.length} registros extraídos exitosamente sin usar la Nube.`);
             }
 
             if (!puntosExtraidos || puntosExtraidos.length === 0) {
@@ -88,6 +115,7 @@ export class ImportadorMasivoBodega {
                 lblEstado.innerText = `>>> ÉXITO: ${puntosExtraidos.length} PUNTOS EXTRAÍDOS E INYECTADOS AL LOTE.`;
                 lblEstado.style.color = "var(--neon-green)";
             }
+
         } catch (error) {
             console.error(">>> [IMPORTADOR_FAIL]: Error crítico al procesar manifiesto:", error);
             if (lblEstado) {
@@ -100,51 +128,89 @@ export class ImportadorMasivoBodega {
 
     parsearTextoPlano(textoBruto) {
         console.log(">>> [PARSER_LOCAL]: Ejecutando análisis de expresiones regulares sobre texto plano...");
-        const lineas = textoBruto.split(/\r?\n/);
+
+        // Filtro de seguridad: Rechazar si contiene firmas binarias de PDF
+        if (textoBruto.includes("%PDF-") || textoBruto.includes("/Root") || textoBruto.includes("endobj")) {
+            console.warn(">>> [PARSER_LOCAL_ABORT]: Se detectó código binario PDF en la lectura de texto plano. Abortando.");
+            return [];
+        }
+
+        // Sanitización ASCII: Eliminar caracteres especiales de control (ej: \f Form Feed)
+        const textoLimpio = textoBruto.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, "");
+        const lineas = textoLimpio.split(/\r?\n/);
         const puntosExtraidos = [];
 
-        lineas.forEach((linea, idx) => {
-            const trimmed = linea.trim();
-            if (!trimmed || trimmed.toLowerCase().startsWith("nombre") || trimmed.toLowerCase().startsWith("direccion")) return;
+        lineas.forEach((linea) => {
+            let trimmed = linea.trim();
+            if (!trimmed || trimmed.startsWith("%") || /^(nombre|direccion|telefono|alias)/i.test(trimmed)) return;
 
-            const partes = trimmed.split(/[,;\t]+/);
-            if (partes.length >= 3) {
-                puntosExtraidos.push({
-                    destinatario: partes[0].trim(),
-                    direccion: partes[1].trim(),
-                    telefono: partes[2].trim(),
-                    carga: partes[3] ? partes[3].trim() : "Paquete Estándar (1.0 kg)"
-                });
-            } else {
-                const matchTel = trimmed.match(this.regexTelefono);
-                const telefono = matchTel ? matchTel[0] : "3000000000";
-                const textoSinTel = trimmed.replace(this.regexTelefono, "").trim();
+            // 1. Aislamiento y extracción del teléfono
+            let telefonoEncontrado = "";
+            const matchTel = trimmed.match(this.regexTelefono);
 
-                puntosExtraidos.push({
-                    destinatario: "Destinatario Acopio",
-                    direccion: textoSinTel || "Dirección no especificada",
-                    telefono: telefono,
-                    carga: "Paquete Estándar (1.0 kg)"
-                });
+            if (matchTel && matchTel.length > 0) {
+                telefonoEncontrado = matchTel[0].replace(/\s+/g, "").trim();
+                trimmed = trimmed.replace(matchTel[0], "").trim();
             }
+
+            // Sanitizar cualquier remanente numérico suelto al final de la línea
+            const matchNumericoFinal = trimmed.match(/\s*\b\d{7,11}\b\s*$/);
+            if (matchNumericoFinal) {
+                if (!telefonoEncontrado) {
+                    telefonoEncontrado = matchNumericoFinal[0].trim();
+                }
+                trimmed = trimmed.replace(/\s*\b\d{7,11}\b\s*$/, "").trim();
+            }
+
+            if (!telefonoEncontrado) {
+                telefonoEncontrado = "3000000000";
+            }
+
+            if (!trimmed || /^\d+$/.test(trimmed)) return;
+
+            let destinatario = "Destinatario Acopio";
+            let direccion = "Dirección no especificada";
+
+            // 2. Tokenizar cadena residual (Nombre + Dirección)
+            const partes = trimmed.split(/[,;\t]+|\s{2,}/).map(p => p.trim()).filter(Boolean);
+
+            if (partes.length >= 2) {
+                destinatario = partes[0];
+                direccion = partes.slice(1).join(" ");
+            } else {
+                const palabras = trimmed.split(/\s+/);
+                if (palabras.length >= 2) {
+                    destinatario = palabras[0];
+                    direccion = palabras.slice(1).join(" ");
+                } else {
+                    direccion = trimmed;
+                }
+            }
+
+            puntosExtraidos.push({
+                destinatario: destinatario.trim(),
+                direccion: direccion.trim(),
+                telefono: telefonoEncontrado,
+                carga: "Paquete Estándar (1.0 kg)"
+            });
         });
 
-        console.log(`>>> [PARSER_LOCAL_RESULT]: ${puntosExtraidos.length} registros extraídos con éxito del texto plano.`);
+        console.log(`>>> [PARSER_LOCAL_RESULT]: ${puntosExtraidos.length} registros estructurados localmente.`);
         return puntosExtraidos;
     }
 
     async procesarDocumentoConIA(archivoBlob) {
         return new Promise((resolve, reject) => {
-            console.log(">>> [CLOUD_IA_PREP]: Iniciando lectura FileReader para conversión Base64...");
+            console.log(">>> [CLOUD_IA_PREP]: Convirtiendo binario a Base64...");
             const reader = new FileReader();
-            
+
             reader.onload = async () => {
                 try {
                     const base64Data = reader.result.split(",")[1];
                     const mimeType = archivoBlob.type || "application/pdf";
                     const endpoint = (window.ENDPOINT_API_PHP || '../api.php') + '?action=extraer_puntos_documento';
 
-                    console.log(`>>> [CLOUD_IA_FETCH]: Enviando POST a ${endpoint} [MIME: ${mimeType}, Longitud Base64: ${base64Data.length}]`);
+                    console.log(`>>> [CLOUD_IA_FETCH]: Enviando POST a ${endpoint} [MIME: ${mimeType}]`);
 
                     const response = await fetch(endpoint, {
                         method: "POST",
@@ -160,29 +226,24 @@ export class ImportadorMasivoBodega {
                     try {
                         resData = JSON.parse(textoRespuesta);
                     } catch (e) {
-                        console.error(">>> [CLOUD_IA_SYNTAX]: El servidor no devolvió un JSON válido:", textoRespuesta);
-                        return reject(new Error("El servidor devolvió una respuesta no válida (HTML o formato incorrecto)."));
+                        console.error(">>> [CLOUD_IA_SYNTAX]: Respuesta no válida del servidor:", textoRespuesta);
+                        return reject(new Error("Respuesta no válida del backend."));
                     }
-
-                    console.log(">>> [CLOUD_IA_RESPONSE]: Respuesta analizada del servidor:", resData);
 
                     if (response.ok && resData.status === "success" && Array.isArray(resData.puntos)) {
-                        console.log(`>>> [CLOUD_IA_OK]: IA Cloud procesó el archivo usando el modelo [${resData.modelo || 'N/A'}]`);
+                        console.log(`>>> [CLOUD_IA_OK]: IA Cloud extrajo ${resData.puntos.length} puntos con el modelo [${resData.modelo || 'Gemini'}]`);
                         resolve(resData.puntos);
-                    } else if (resData.status === "FALLBACK_TRINCHERA") {
-                        console.warn(">>> [CLOUD_IA_TRINCHERA]: El servidor indicó modo trinchera por clave no configurada.");
-                        reject(new Error("Modo Trinchera activo en la nube: Clave API Key no configurada o rechazada."));
                     } else {
-                        reject(new Error(resData.message || resData.error || "Fallo al procesar el documento en el servidor."));
+                        reject(new Error(resData.message || resData.error || "Fallo al procesar el documento en la nube."));
                     }
                 } catch (err) {
-                    console.error(">>> [CLOUD_IA_ERROR]: Excepción capturada durante fetch IA:", err);
+                    console.error(">>> [CLOUD_IA_ERROR]: Error de comunicación:", err);
                     reject(err);
                 }
             };
 
             reader.onerror = (error) => {
-                console.error(">>> [FILEREADER_ERROR]: Error leyendo archivo binario local:", error);
+                console.error(">>> [FILEREADER_ERROR]: Error al leer archivo:", error);
                 reject(error);
             };
 
@@ -191,7 +252,7 @@ export class ImportadorMasivoBodega {
     }
 
     inyectarPuntosEnMatriz(listaPuntos) {
-        console.log(">>> [MATRIZ_INJECT]: Inyectando puntos extraídos al lote provisional de la bodega...", listaPuntos);
+        console.log(">>> [MATRIZ_INJECT]: Inyectando puntos extraídos al lote provisional...", listaPuntos);
         if (!window.loteActualPedidos) window.loteActualPedidos = [];
 
         listaPuntos.forEach((p) => {
@@ -221,7 +282,24 @@ export class ImportadorMasivoBodega {
         if (typeof window.actualizarTablaCola === "function") {
             window.actualizarTablaCola();
         }
-        console.log(">>> [MATRIZ_OK]: Tabla de cola y monitor de masa sincronizados.");
+
+        // Disparador de enrutamiento y telemetría en mapa
+        const elOrigen = document.getElementById("origen-cliente");
+        const origenInput = elOrigen && elOrigen.value.trim() ? elOrigen.value.trim() : "Cali, Colombia";
+        const ultimaDireccion = window.loteActualPedidos[window.loteActualPedidos.length - 1].direccion;
+
+        const CONTEXTO = ", Cali, Colombia";
+        let origConContexto = origenInput.toLowerCase().includes("cali") ? origenInput : origenInput + CONTEXTO;
+        let destConContexto = ultimaDireccion.toLowerCase().includes("cali")
+            ? ultimaDireccion
+            : ultimaDireccion + CONTEXTO;
+
+        if (typeof window.previsualizarRutaInmediata === "function") {
+            console.log(">>> [MATRIZ_MAPS_LINK]: Proyectando vectores del lote masivo en el mapa...");
+            window.previsualizarRutaInmediata(origConContexto, destConContexto);
+        }
+
+        console.log(">>> [MATRIZ_OK]: Tabla de cola, monitor de masa y mapa telemático sincronizados.");
     }
 }
 

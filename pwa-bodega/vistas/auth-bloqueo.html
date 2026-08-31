@@ -1,0 +1,46 @@
+<section class="panel-negocios pantalla-bloqueo-nodal">
+  <h2>[🔑] COMPROMISO_DE_IDENTIDAD_BODEGA</h2>
+  <p class="txt-consola-info" style="margin-bottom: 15px">
+    El Protocolo Macondo gestiona los nodos de almacenamiento y acopio local. Registre su Cédula Nodal de Bodega para continuar.
+  </p>
+
+  <form
+    id="form-registro-nodal"
+    class="formulario-maquina"
+    style="border-bottom: 1px dashed #291f33; padding-bottom: 20px; margin-bottom: 20px">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+      <div>
+        <label class="label-maquina">>>> NOMBRE / RAZÓN BODEGA:</label>
+        <input type="text" class="input-maquina" id="reg-nombre" placeholder="Ej: Bodega Central Cali" required />
+      </div>
+      <div>
+        <label class="label-maquina">>>> TELEFONO NEXO:</label>
+        <input type="text" class="input-maquina" id="reg-telefono" placeholder="Ej: 315XXXXXXX" required />
+      </div>
+    </div>
+    <div style="margin-top: 10px">
+      <label class="label-maquina">>>> DIRECCIÓN DE MATRIZ FISICA:</label>
+      <input type="text" class="input-maquina" id="reg-direccion" placeholder="Ej: Calle 15 # 8-30, Cali" required />
+    </div>
+    <input type="hidden" id="reg-tipo" value="BODEGA" />
+    <input type="hidden" id="reg-invitador" value="NODO_ORIGEN_LOCAL" />
+
+    <button
+      type="submit"
+      class="btn-terminal"
+      style="border-color: var(--neon-purple); color: var(--neon-purple); width: 100%; margin-top: 12px; font-weight: bold">
+      [⚡] GENERAR_LLAVES_Y_REGISTRAR_BODEGA
+    </button>
+  </form>
+
+  <div class="formulario-maquina">
+    <label class="label-maquina">>>> ACCESO EXPEDITO POR HARDWARE COPLIMITADO:</label>
+    <button
+      type="button"
+      class="btn-terminal"
+      onclick="intentarAutenticacionLocalDirecta()"
+      style="border-color: var(--neon-green); color: var(--neon-green); width: 100%; font-weight: bold">
+      [🔓] VALIDAR_CEDULA_RESIDENTE_EN_HARDWARE
+    </button>
+  </div>
+</section>

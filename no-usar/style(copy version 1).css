@@ -7,7 +7,6 @@
   --neon-blue: #00e5ff;
   --neon-purple: #b359ff;
   --neon-amber: #ffaa00;
-  --neon-red: #ff3366;
   --text-white: #f1ecf5;
   --font-machine: "Fira Code", "JetBrains Mono", monospace;
 }
@@ -73,13 +72,13 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  grid-column: 1 / -1;
+  grid-column: 1 / -1; /* Ocupa el ancho completo de la grilla */
   width: 100%;
 }
 
 .campo-maquina {
   display: flex;
-  flex-direction: column;
+  flex-direction: column; /* Cambiado a columna para que el input se estire bajo el label */
   gap: 6px;
   width: 100%;
 }
@@ -91,22 +90,22 @@ h2 {
   display: block;
 }
 
-/* --- COMPONENTE HÍBRIDO: INPUT + BOTÓN --- */
+/* --- COMPONENTE HÍBRIDO: INPUT + BOTÓN CORREGIDO --- */
 .input-con-boton {
   display: flex;
   gap: 8px;
   align-items: center;
-  width: 100%;
+  width: 100%; /* CORRECCIÓN: Del 15% al 100% para expandir el vector */
 }
 
 .input-con-boton .input-maquina {
-  flex-grow: 1;
-  min-width: 0;
+  flex-grow: 1;    /* El input se estira al máximo espacio disponible */
+  min-width: 0;    /* Evita colapsos de caja en pantallas pequeñas */
 }
 
 .input-con-boton .btn-terminal {
-  flex-shrink: 0;
-  width: auto;
+  flex-shrink: 0;  /* Impide que el botón se deforme al achicar la pantalla */
+  width: auto;     /* Evita que tome el 100% dentro del contenedor flex */
   height: 36px;
   padding: 0 20px;
   display: flex;
@@ -122,8 +121,8 @@ h2 {
   font-family: inherit;
   padding: 8px 12px;
   font-size: 0.85rem;
-  width: 100%;
-  box-sizing: border-box;
+  width: 100%;              
+  box-sizing: border-box;   
   height: 36px;
 }
 
@@ -201,6 +200,7 @@ h2 {
   color: #000;
 }
 
+/* Botones de acción rápidos */
 .btn-ir-origen,
 .btn-ir-destino {
   width: auto;
@@ -303,8 +303,9 @@ h2 {
   outline: none;
   cursor: pointer;
 }
+/* --- NUEVA ARQUITECTURA RESPONSIVA HÍBRIDA MACONDO --- */
 
-/* --- ARQUITECTURA RESPONSIVA HÍBRIDA MACONDO --- */
+/* Estructura base por defecto (Mobile-First / Smartphone Vertical) */
 .contenedor-split-telematico {
   display: flex;
   flex-direction: column;
@@ -317,38 +318,38 @@ h2 {
   width: 100%;
 }
 
+/* Modificación táctica para pantallas horizontales (PC / Monitor grande) */
 @media (min-width: 992px) {
   .contenedor-split-telematico {
-    flex-direction: row;
-    align-items: stretch;
+    flex-direction: row; /* Cambia a disposición horizontal lado a lado */
+    align-items: stretch; /* Fuerza a que ambas columnas tengan la misma altura */
     gap: 20px;
   }
 
   .columna-formulario {
-    flex: 1;
+    flex: 1; /* Toma la mitad izquierda de la pantalla */
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Corrección del caracter corrupto */
+    justify-content:间;
   }
 
   .columna-telemetria-mapa {
-    flex: 1;
+    flex: 1; /* Toma la mitad derecha de la pantalla */
     display: flex;
     flex-direction: column;
     justify-content: space-between;
   }
 
+  /* Ajustamos el tamaño del mapa en PC para que guarde perfecta simetría con el formulario */
   #mapa-telemetria {
-    height: 100% !important;
+    height: 100% !important; /* Se estira para rellenar el espacio intermedio de forma dinámica */
     min-height: 280px;
     flex-grow: 1;
-    margin-top: 0 !important;
+    margin-top: 0 !important; /* Removemos márgenes antiguos */
   }
 }
-
-/* --- DISEÑO DE FILTRO EN MATRIZ BODEGA --- */
-.bloque-anti-extraccion,
-.bloque-soporte-bodega {
+/* --- DISEÑO DE FILTRO ANTI-EXTRACCIÓN EN MATRIZ --- */
+.bloque-anti-extraccion {
   font-family: monospace;
   font-size: 0.75rem;
   line-height: 1.2;
@@ -357,6 +358,7 @@ h2 {
   border-left: 2px solid var(--neon-green);
 }
 
+/* Optimización para que la tabla distribuya el espacio de forma inteligente en PC */
 .tabla-maquina th:nth-child(5),
 .tabla-maquina td:nth-child(5) {
   min-width: 110px;
@@ -364,5 +366,5 @@ h2 {
 
 .tabla-maquina th:nth-child(6),
 .tabla-maquina td:nth-child(6) {
-  min-width: 250px;
+  min-width: 250px; /* Le damos buen espacio al bloque comparativo */
 }

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <title>Runner - Mensajero</title>
+        <!-- Iconos y Fuentes -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+        <!-- Estilos de la PWA -->
+        <link rel="stylesheet" href="./style2.css" />
+        <link rel="stylesheet" href="./style/barra-inferior.css" />
+        <link rel="stylesheet" href="./style/botones-contenedor.css"/>
+
+        <!-- Librería para lectura local de archivos Excel (.xlsx / .xls) sin servidor/IA -->
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+        <!-- Motor OCR Local WebAssembly sin servidor/IA -->
+        <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    </head>
+    <body>
+        <!-- Cabecera Principal (Header Grid Area) -->
+        <header class="header-principal">
+            <button id="toggle-menu-btn" class="nav-btn">
+                <i class="fa-solid fa-bars"></i>
+                <span>_MENU</span>
+            </button>
+            <div class="logo">RUNNER</div>
+            <button id="install-btn" class="nav-btn" style="display: none">_INSTALAR_PWA</button>
+        </header>
+
+        <!-- Contenedor Principal del Dashboard (Grid de 2 Columnas) -->
+        <div class="dashboard-container">
+            <!-- Componente de Barra Lateral (Sidebar Area) -->
+            <div data-include="componentes/siderbar.html"></div>
+
+            <!-- Contenedor de Vistas y Pestañas (Main Area) -->
+            <main class="main-content main-container">
+                <!-- Vista: Ruta Activa (Inyectada dinámicamente) -->
+                <!-- submenu de ruta-->
+                <div
+                    id="pestana-ruta-activa"
+                    class="contenedor-pestana"
+                    data-include="vistas/ruta/ruta-activa.html"></div>
+                <div id="pestana-ruta-crear" class="contenedor-pestana" data-include="vistas/ruta/crear.html"></div>
+                <!-- submenu de monedero-->
+                <div
+                    id="pestana-monedero-historial"
+                    class="contenedor-pestana"
+                    data-include="vistas/monedero/historial.html"></div>
+
+                <div
+                    id="pestana-monedero-saldo"
+                    class="contenedor-pestana"
+                    data-include="vistas/monedero/saldo.html"></div>
+                <!-- menu de reportes-->
+                <div
+                    id="pestana-reportes"
+                    class="contenedor-pestana"
+                    data-include="vistas/notificaciones/reportes.html"></div>
+            </main>
+        </div>
+
+        <nav class="bottom-nav">
+            <a href="#inicio" class="nav-item active">
+                <span class="icon">🏠</span>
+                <span class="label">Inicio</span>
+            </a>
+            <a href="#buscar" class="nav-item">
+                <span class="icon">🔍</span>
+                <span class="label">Buscar</span>
+            </a>
+            <a href="#favoritos" class="nav-item">
+                <span class="icon">⭐</span>
+                <span class="label">Favoritos</span>
+            </a>
+            <a href="#perfil" class="nav-item">
+                <span class="icon">👤</span>
+                <span class="label">Perfil</span>
+            </a>
+        </nav>
+
+        <!-- Modulos de Control JavaScript -->
+        <script src="./app.js"></script>
+        <!-- SDK de Mapas en la raíz de la SPA -->
+        <script
+            src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCP6Wc3JRQIRXu6cXM8KkPasuy8asTIWUE&callback=inicializarMapaMensajero&libraries=places"
+            async
+            defer></script>
+        <script type="module" src="./script2.js"></script>
+    </body>
+</html>

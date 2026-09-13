@@ -1,14 +1,14 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA BODEGA: IMPORTADOR MASIVO MULTI-FORMATO
- * Ubicación: pwa-bodega/modulos/importador-masivo.js
+ * Ubicación: modulos/importador-masivo.js
  * Arquitectura: Local-First con Parsing Sanitizado, Fallback IA Cloud Opt-In y Resguardo Telemático
  */
 
 export class ImportadorMasivoBodega {
     constructor() {
         console.log(">>> [IMPORTADOR_INIT]: Instanciando subsistema de ingestión masiva Local-First...");
-        // Regexp sin bandera /g global para evitar colisiones de estado lastIndex en bucles de iteración
-        this.regexTelefonoBase = /(?:\+?57)?\s*3\d{9}\b/;
+        // Regexp refinada para detectar números celulares colombianos (con o sin +57)
+        this.regexTelefono = /(?:\+?57)?\s*3\d{7,10}\b/g;
     }
 
     /**
@@ -135,7 +135,7 @@ export class ImportadorMasivoBodega {
             return [];
         }
 
-        // Sanitización ASCII: Eliminar caracteres especiales de control
+        // Sanitización ASCII: Eliminar caracteres especiales de control (ej: \f Form Feed)
         const textoLimpio = textoBruto.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, "");
         const lineas = textoLimpio.split(/\r?\n/);
         const puntosExtraidos = [];
@@ -144,10 +144,9 @@ export class ImportadorMasivoBodega {
             let trimmed = linea.trim();
             if (!trimmed || trimmed.startsWith("%") || /^(nombre|direccion|telefono|alias)/i.test(trimmed)) return;
 
-            // 1. Aislamiento y extracción del teléfono (usando regex local sin estado global)
+            // 1. Aislamiento y extracción del teléfono
             let telefonoEncontrado = "";
-            const regexTelLocal = new RegExp(this.regexTelefonoBase.source, "i");
-            const matchTel = trimmed.match(regexTelLocal);
+            const matchTel = trimmed.match(this.regexTelefono);
 
             if (matchTel && matchTel.length > 0) {
                 telefonoEncontrado = matchTel[0].replace(/\s+/g, "").trim();
@@ -284,22 +283,20 @@ export class ImportadorMasivoBodega {
             window.actualizarTablaCola();
         }
 
-        // Disparador de enrutamiento y telemetría con guard clause
-        if (window.loteActualPedidos.length > 0) {
-            const elOrigen = document.getElementById("origen-cliente");
-            const origenInput = elOrigen && elOrigen.value.trim() ? elOrigen.value.trim() : "Cali, Colombia";
-            const ultimaDireccion = window.loteActualPedidos[window.loteActualPedidos.length - 1].direccion;
+        // Disparador de enrutamiento y telemetría en mapa
+        const elOrigen = document.getElementById("origen-cliente");
+        const origenInput = elOrigen && elOrigen.value.trim() ? elOrigen.value.trim() : "Cali, Colombia";
+        const ultimaDireccion = window.loteActualPedidos[window.loteActualPedidos.length - 1].direccion;
 
-            const CONTEXTO = ", Cali, Colombia";
-            let origConContexto = origenInput.toLowerCase().includes("cali") ? origenInput : origenInput + CONTEXTO;
-            let destConContexto = ultimaDireccion.toLowerCase().includes("cali")
-                ? ultimaDireccion
-                : ultimaDireccion + CONTEXTO;
+        const CONTEXTO = ", Cali, Colombia";
+        let origConContexto = origenInput.toLowerCase().includes("cali") ? origenInput : origenInput + CONTEXTO;
+        let destConContexto = ultimaDireccion.toLowerCase().includes("cali")
+            ? ultimaDireccion
+            : ultimaDireccion + CONTEXTO;
 
-            if (typeof window.previsualizarRutaInmediata === "function") {
-                console.log(">>> [MATRIZ_MAPS_LINK]: Proyectando vectores del lote masivo en el mapa...");
-                window.previsualizarRutaInmediata(origConContexto, destConContexto);
-            }
+        if (typeof window.previsualizarRutaInmediata === "function") {
+            console.log(">>> [MATRIZ_MAPS_LINK]: Proyectando vectores del lote masivo en el mapa...");
+            window.previsualizarRutaInmediata(origConContexto, destConContexto);
         }
 
         console.log(">>> [MATRIZ_OK]: Tabla de cola, monitor de masa y mapa telemático sincronizados.");

@@ -1,0 +1,377 @@
+/**
+ * PROTOCOLO MACONDO - MENSAJERO TÁCTICO: HOJA DE ESTILOS UNIFICADA
+ * Ubicación: pwa-mensajero/style.css
+ */
+
+/* =============================================================================
+   1. PALETA CROMÁTICA Y VARIABLES GLOBALES
+   ============================================================================= */
+:root {
+  /* Entorno Base Cripto-Industrial */
+  --bg-terminal: #08050a;
+  --bg-surface: #12091b;
+  --bg-card: #12091b;
+  --border-rigid: #291f33;
+  --border-color: #291f33;
+
+  /* Colores Neón y Estados de Operación */
+  --neon-green: #00ff66;
+  --neon-blue: #00e5ff;
+  --neon-amber: #ffaa00;
+  --neon-red: #ff3366;
+  --neon-purple: #b359ff;
+  
+  --text-primary: #00ff66;
+  --text-muted: #8af7b3;
+  --amber-alert: #ffaa00;
+  --crypto-secure: #00e5ff;
+  --alert-fail: #ff3366;
+
+  /* Contabilidad y Finanzas */
+  --ledger-credit: #00ff66;
+  --ledger-debit: #ff3366;
+  --ledger-mutual: #00e5ff;
+
+  /* Tipografía y Espaciados */
+  --font-machine: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+  --terminal-pad: 12px;
+  --border-width: 1px;
+}
+
+/* Reset Global */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-terminal);
+  color: #ffffff;
+  font-family: var(--font-machine);
+  padding: var(--terminal-pad);
+  padding-bottom: 50px; /* Previene solapamiento con la barra de estado fija */
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: -0.5px;
+  margin-top: 6px;
+  color: var(--neon-purple);
+}
+
+h2, h3 {
+  font-size: 0.9rem;
+  font-weight: bold;
+  font-family: var(--font-machine);
+}
+
+/* =============================================================================
+   2. PANELES Y NAVEGACIÓN TERMINAL
+   ============================================================================= */
+.panel-maquina {
+  background-color: var(--bg-surface);
+  border: var(--border-width) solid var(--border-color);
+  padding: var(--terminal-pad);
+  margin-bottom: var(--terminal-pad);
+  border-radius: 4px;
+}
+
+.header-principal {
+  margin-bottom: 12px;
+}
+
+.header-status {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: var(--border-width) solid var(--border-color);
+  padding-bottom: 6px;
+  font-size: 0.75rem;
+  gap: 10px;
+}
+
+.menu-terminal {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: var(--terminal-pad);
+}
+
+.btn-terminal {
+  background-color: transparent;
+  color: var(--neon-green);
+  border: var(--border-width) solid var(--neon-green);
+  font-family: var(--font-machine);
+  padding: 8px 4px;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  font-weight: bold;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  transition: all 0.15s ease;
+  border-radius: 2px;
+}
+
+.btn-terminal:active, .btn-terminal.active {
+  background-color: var(--neon-green) !important;
+  color: #000000 !important;
+}
+
+.btn-crypto {
+  border-color: var(--crypto-secure);
+  color: var(--crypto-secure);
+}
+
+.btn-crypto:active {
+  background-color: var(--crypto-secure) !important;
+  color: #000000 !important;
+}
+
+/* =============================================================================
+   3. CONSOLA DE OPERACIÓN DE RUTAS Y FLUJO EN 3 PASOS
+   ============================================================================= */
+.card-pedido-activa {
+  background: var(--bg-card);
+  border: 2px solid var(--neon-blue);
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.card-pedido-activa.en_camino { border-color: var(--neon-amber); }
+.card-pedido-activa.llegado { border-color: var(--neon-green); }
+.card-pedido-activa.novedad { border-color: var(--neon-red); }
+
+.card-header-flujo {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+
+.badge-parada {
+  background: var(--neon-blue);
+  color: #000;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.75rem;
+}
+
+.item-parada-lista {
+  background: #0c080f;
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  margin-bottom: 5px;
+  font-size: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item-parada-lista.activa {
+  border-color: var(--neon-blue);
+  box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.15);
+}
+
+.item-parada-lista.finalizado {
+  opacity: 0.5;
+}
+
+/* =============================================================================
+   4. MODAL Y REPORTES DE NOVEDAD AL COORDINADOR
+   ============================================================================= */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 15px;
+  z-index: 1000;
+}
+
+.modal-contenido {
+  background: var(--bg-card);
+  border: 1px solid var(--neon-red);
+  padding: 16px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 0 15px rgba(255, 51, 102, 0.2);
+  border-radius: 4px;
+}
+
+.campo-grupo {
+  margin-bottom: 10px;
+}
+
+.campo-grupo label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--neon-amber);
+  margin-bottom: 4px;
+}
+
+.campo-grupo input[type="file"],
+.campo-grupo textarea {
+  width: 100%;
+  background-color: #0c080f;
+  border: 1px solid var(--border-color);
+  color: #ffffff;
+  font-family: var(--font-machine);
+  padding: 6px;
+  font-size: 0.75rem;
+}
+
+.modal-acciones {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.btn-cancelar {
+  flex: 1;
+  background: transparent;
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 8px;
+  cursor: pointer;
+  font-family: var(--font-machine);
+}
+
+.btn-enviar-novedad {
+  flex: 2;
+  background: var(--neon-red);
+  border: none;
+  color: #ffffff;
+  font-weight: bold;
+  padding: 8px;
+  cursor: pointer;
+  font-family: var(--font-machine);
+}
+
+/* =============================================================================
+   5. AUDITORÍA, CONSOLA PGP Y LIBRO CONTABLE
+   ============================================================================= */
+.bloque-pgp {
+  background-color: rgba(0, 229, 255, 0.03);
+  border: var(--border-width) dashed var(--crypto-secure);
+  color: var(--crypto-secure);
+  padding: var(--terminal-pad);
+  font-size: 0.7rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  margin-top: 8px;
+}
+
+.consola-logs {
+  font-size: 0.75rem;
+  color: var(--amber-alert);
+  border-left: 2px solid var(--amber-alert);
+  padding-left: 8px;
+  min-height: 20px;
+}
+
+.panel-auditoria {
+  border-color: var(--amber-alert);
+}
+
+.bloque-telemetria {
+  background-color: #05070a;
+  border: var(--border-width) solid var(--border-color);
+  padding: 8px;
+  font-size: 0.75rem;
+  color: #a6da95;
+  margin: 8px 0 var(--terminal-pad) 0;
+}
+
+.label-consola {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: var(--neon-amber);
+}
+
+.input-terminal {
+  width: 100%;
+  background-color: #0c080f;
+  border: var(--border-width) solid var(--border-color);
+  color: #ffffff;
+  font-family: var(--font-machine);
+  padding: 8px;
+  font-size: 0.85rem;
+  resize: none;
+  margin-bottom: 6px;
+}
+
+.input-terminal:focus {
+  outline: none;
+  border-color: var(--amber-alert);
+}
+
+.indicador-ayuda {
+  font-size: 0.7rem;
+  color: #707a8a;
+  margin-bottom: var(--terminal-pad);
+}
+
+/* Tabla Contable */
+.tabla-contenedor-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: var(--border-width) solid var(--border-color);
+  background-color: #05070a;
+  margin-top: 4px;
+}
+
+.tabla-contable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.tabla-contable th, .tabla-contable td {
+  padding: 6px 8px;
+  border-bottom: var(--border-width) solid var(--border-color);
+  white-space: nowrap;
+}
+
+.tabla-contable th {
+  background-color: #161b22;
+  color: var(--text-primary);
+}
+
+td.credit { color: var(--ledger-credit); font-weight: bold; }
+td.debit { color: var(--ledger-debit); }
+td.mutual { color: var(--ledger-mutual); }
+
+/* =============================================================================
+   6. BARRA DE ESTADO FIJA INFERIOR
+   ============================================================================= */
+.barra-estado-fija {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background-color: var(--bg-terminal);
+  border-top: var(--border-width) solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  padding: 6px var(--terminal-pad);
+  font-size: 0.7rem;
+  z-index: 100;
+  font-family: var(--font-machine);
+}
+
+.status-indicator.online { color: var(--neon-green); }
+.status-indicator.offline { color: var(--neon-red); animation: parpadeo 1s infinite; }
+
+@keyframes parpadeo {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}

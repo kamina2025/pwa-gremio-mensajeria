@@ -1,0 +1,40 @@
+<!-- pwa-mensajero/vistas/ruta/ruta-activa.html -->
+<div class="vista-header">
+    <h2>// REPORTES</h2>
+    <span class="badge-status online">RUTA_ACTUAL</span>
+</div>
+
+<!-- Contenedor Principal de la Ruta y Mapa -->
+<div class="modulo-ruta-container">
+    <!-- Tarjeta de Estado de Entrega -->
+    <div class="card-info-ruta">
+        <div class="card-header">
+            <i class="fa-solid fa-map-location-dot"></i>
+            <h3>Notificaciones y Reportes de los coordinadores y clientes</h3>
+        </div>
+        <p>AQUÍ VA EL BLOQUE DE TODAS TUS REPORTES</p>
+    </div>
+    <section id="mod-justicia" class="modulo-vista">
+        <div class="panel-maquina panel-auditoria">
+            <div class="header-status">
+                <span style="color: var(--amber-alert, #ffaa00)">[AUDIT_MODE: COMPROMISO_NODAL]</span>
+                <span id="auditoria-id-contrato">ID_CONTRATO: NO_SELECTED</span>
+            </div>
+            <div class="bloque-telemetria" id="contenedor-logs-telemetria"></div>
+            <div class="formulario-maquina">
+                <label class="label-consola">>>> INGRESE_DESCARGO_TEXTUAL (JUSTIFICACIÓN_OPERATIVA):</label>
+                <textarea
+                    class="input-terminal"
+                    id="txt-descargo"
+                    rows="3"
+                    placeholder="Ej: Retén de control vial en la salida de Miranda / Avería mecánica..."></textarea>
+                <div class="indicador-ayuda">
+                    * Los retrasos por fuerza mayor mitigan automáticamente la Hoja de Confianza.
+                </div>
+                <button class="btn-terminal btn-crypto" onclick="broadcastDescargo()">
+                    FIRM_AND_BROADCAST_DESCARGO
+                </button>
+            </div>
+        </div>
+    </section>
+</div>

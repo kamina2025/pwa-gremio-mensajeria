@@ -1,0 +1,97 @@
+<!-- pwa-mensajero/vistas/ruta/ruta-activa.html -->
+<div class="vista-header">
+    <h2>// RUTAS_ACTIVAS</h2>
+    <span class="badge-status online">EN LINEA</span>
+</div>
+
+<!-- CONTENEDOR PRINCIPAL DE LA RUTA Y MAPA -->
+<div class="modulo-ruta-container">
+
+    <!-- ACORDEÓN PARA CARGA MANUAL DE MANIFIESTO O LINK -->
+    <section class="panel-maquina" style="border-color: var(--neon-purple, #b359ff); margin-bottom: 12px">
+        <details style="cursor: pointer">
+            <summary style="color: var(--neon-purple, #b359ff); font-weight: bold; font-size: 0.85rem">
+                [📥] CARGAR / PEGAR RUTA DESDE WHATSAPP O TELEGRAM
+            </summary>
+            <div style="margin-top: 10px">
+                <label class="label-consola" style="font-size: 0.75rem; color: #aaa">
+                    Pegue aquí la URL recibida por WhatsApp/Telegram o el manifiesto codificado:
+                </label>
+                <textarea
+                    id="txt-payload-manual"
+                    rows="3"
+                    class="input-terminal"
+                    placeholder="Ej: https://kamina2025.github.io/pwa-gremio-mensajeria/pwa-mensajero/?payload=%5B%7B..."></textarea>
+                <button
+                    type="button"
+                    class="btn-terminal btn-crypto"
+                    onclick="procesarCargaManualEnlace()"
+                    style="margin-top: 6px; width: 100%">
+                    [⚡] IMPORTAR Y ACTIVAR RUTA EN MI TERMINAL
+                </button>
+            </div>
+        </details>
+    </section>
+
+    <!-- FORMULARIO ACORDEÓN PARA CREAR / EDITAR PARADA MANUALLY -->
+    <section class="panel-maquina" style="border-color: var(--neon-green, #00ff66); margin-bottom: 12px">
+        <details id="details-formulario-parada" style="cursor: pointer">
+            <summary style="color: var(--neon-green, #00ff66); font-weight: bold; font-size: 0.85rem">
+                [➕ / ✏️] GESTIÓN MANUAL DE PARADA (NUEVA O EDICIÓN)
+            </summary>
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                <input type="hidden" id="edit-parada-id" value="" />
+                
+                <input type="text" id="edit-parada-destinatario" class="input-terminal" placeholder="Nombre Destinatario" />
+                <input type="text" id="edit-parada-direccion" class="input-terminal" placeholder="Dirección de Entrega" />
+                <input type="text" id="edit-parada-telefono" class="input-terminal" placeholder="Teléfono Contacto" />
+                <input type="text" id="edit-parada-ssc" class="input-terminal" placeholder="SSC / No. Guía (Opcional)" />
+                <input type="text" id="edit-parada-cuota" class="input-terminal" placeholder="Cuota Moderadora / Copago" />
+                
+                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                    <button type="button" class="btn-terminal" onclick="guardarParadaManualUI()" style="flex: 1; border-color: var(--neon-green, #00ff66); color: var(--neon-green, #00ff66)">
+                        [💾] GUARDAR EN BASE LOCAL
+                    </button>
+                    <button type="button" class="btn-terminal" onclick="limpiarFormularioParadaUI()" style="flex: 0.5; border-color: #aaa; color: #aaa">
+                        [CANCELAR]
+                    </button>
+                </div>
+            </div>
+        </details>
+    </section>
+
+    <!-- RECEPTÁCULO PARA EL MAPA TELESCÓPICO INTERACTIVO -->
+    <div id="cyber-map-container" class="mapa-placeholder" style="margin-bottom: 12px; min-height: 320px;">
+        <div id="mapa-mensajero" style="width: 100%; height: 100%; min-height: 320px;"></div>
+    </div>
+
+    <!-- CONSOLA DEL PASO EN CURSO / TARJETA ACTIVA -->
+    <section
+        id="panel-pedido-activo"
+        class="panel-maquina"
+        style="border-color: var(--neon-blue, #00e5ff); margin-bottom: 12px">
+        <div id="contenedor-tarjeta-activa">
+            <p style="text-align: center; color: var(--text-muted, #aaa); font-family: monospace">
+                [SISTEMA]: Cargando secuencia de la ruta o pool abierta...
+            </p>
+        </div>
+    </section>
+
+    <!-- POOL DINÁMICA DE CONTRATOS DISPONIBLES -->
+    <div id="pool-pedidos-dinamico" style="margin-bottom: 12px"></div>
+
+    <!-- LISTA DE PARADAS ZONIFICADAS CON CONTROLES DE EDICIÓN Y BORRADO -->
+    <section class="panel-maquina">
+        <div class="header-status" style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--neon-blue, #00e5ff)">[📋] HOJA_DE_RUTA_ZONIFICADA</span>
+            <div>
+                <span id="txt-total-paradas" style="margin-right: 8px;">0 PARADAS</span>
+                <button type="button" onclick="purgarTodaLaRutaUI()" class="btn-terminal" style="border-color: #ff3366; color: #ff3366; font-size: 0.7rem; padding: 2px 6px;">
+                    [🗑️ BORRAR RUTA]
+                </button>
+            </div>
+        </div>
+        <div id="lista-paradas-zonificadas" style="max-height: 250px; overflow-y: auto; margin-top: 8px"></div>
+    </section>
+
+</div>

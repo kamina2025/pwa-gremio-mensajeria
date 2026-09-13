@@ -1,41 +1,137 @@
 /**
- * PROTOCOLO MACONDO - MESSENGER SUBSYSTEM: CONTROL DE RELEVOS REALES PHP I/O
+ * PROTOCOLO MACONDO - MESSENGER SUBSYSTEM: PERSISTENCIA NODAL Y RELEVO I/O
  * Ubicación: pwa-mensajero/modulos/mensajero-persistencia.js
  */
-const ENDPOINT_POOL = "http://localhost/pwa-gremio-mensajeria/pool_pedidos.json";
-const ENDPOINT_TRANSITO = "http://localhost/pwa-gremio-mensajeria/transito_pedidos.json";
-const ENDPOINT_FINALIZADOS = "http://localhost/pwa-gremio-mensajeria/finalizados_pedidos.json";
-const ENDPOINT_SAVE_PHP = "http://localhost/pwa-gremio-mensajeria/save_pool.php";
+
+// --- CONFIGURACIÓN DE ENDPOINTS DE RED Y DISCO LOCAL ---
+const ENDPOINT_POOL = "../pool_pedidos.json";
+const ENDPOINT_TRANSITO = "../transito_pedidos.json";
+const ENDPOINT_FINALIZADOS = "../finalizados_pedidos.json";
+const ENDPOINT_SAVE_PHP = "../save_pool.php";
+
+// --- CLAVES DE ALMACENAMIENTO LOCAL-FIRST ---
+const CLAVE_RUTA_ACTIVA = "macondo_mensajero_ruta_activa";
+const CLAVE_HISTORIAL_NOVEDADES = "macondo_mensajero_novedades";
+const CLAVE_POOL_LOCAL = "MACONDO_POOL";
+
+// =============================================================================
+// 1. GESTIÓN Y PERSISTENCIA DE LA MÁQUINA DE ESTADOS LOCAL
+// =============================================================================
+
+export function guardarRutaZonificada(ruta) {
+    console.log(`>>> [PERSISTENCIA]: Guardando ${ruta.length} parada(s) en la base local.`);
+    localStorage.setItem(CLAVE_RUTA_ACTIVA, JSON.stringify(ruta));
+}
+
+export function obtenerRutaZonificada() {
+    const data = localStorage.getItem(CLAVE_RUTA_ACTIVA);
+    return data ? JSON.parse(data) : [];
+}
+
+export function actualizarEstadoPedido(idPedido, nuevoEstado, metadataExtra = {}) {
+    const ruta = obtenerRutaZonificada();
+    const index = ruta.findIndex(p => p.id === idPedido);
+    
+    if (index !== -1) {
+        ruta[index].estado = nuevoEstado;
+        ruta[index].ultimaActualizacion = new Date().toISOString();
+        
+        if (Object.keys(metadataExtra).length > 0) {
+            ruta[index].registroOperaciones = {
+                ...(ruta[index].registroOperaciones || {}),
+                ...metadataExtra
+            };
+        }
+        guardarRutaZonificada(ruta);
+    }
+    return ruta;
+}
+
+export async function capturarCoordenadasGPS() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            resolve({ lat: 0, lng: 0, error: "Geolocalización no soportada" });
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            (err) => resolve({ lat: 0, lng: 0, error: err.message }),
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    });
+}
+
+export function convertirArchivoBase64(file) {
+    return new Promise((resolve, reject) => {
+        if (!file) {
+            resolve(null);
+            return;
+        }
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+    });
+}
 
 /**
- * 1. CONSULTA EL RELEVO CIEGO Y RENDERIZA LOS LOTES DISPONIBLES
+ * Elimina una parada específica de la base local por su ID y actualiza el almacenamiento.
+ * 
+ * @param {string} idParada - ID de la parada a eliminar.
+ * @returns {Array<Object>} Lista de paradas actualizada.
  */
-async function sincronizarYRenderizarPool() {
+export function eliminarParadaLocal(idParada) {
+    console.log(`>>> [PERSISTENCIA]: Eliminando parada local con ID: ${idParada}`);
+    let rutaActual = obtenerRutaZonificada();
+    rutaActual = rutaActual.filter(p => p.id !== idParada);
+    guardarRutaZonificada(rutaActual);
+    return rutaActual;
+}
+
+/**
+ * Purga la totalidad de paradas y datos de ruta de la base de datos local.
+ * 
+ * @returns {Array} Lista vacía de paradas.
+ */
+export function borrarRutaCompletaLocal() {
+    console.log(">>> [PERSISTENCIA]: Purgando todos los datos de ruta de la base local...");
+    localStorage.removeItem(CLAVE_RUTA_ACTIVA);
+    guardarRutaZonificada([]);
+    return [];
+}
+
+// =============================================================================
+// 2. SINCRONIZACIÓN Y CONSULTA DE LA POOL ABIERTA (PHP I/O)
+// =============================================================================
+
+export async function sincronizarYRenderizarPool() {
     const contenedor = document.getElementById("pool-pedidos-dinamico");
     if (!contenedor) return;
 
     let poolRaw = {};
+    const estaOnline = window.estaOnline !== undefined ? window.estaOnline : navigator.onLine;
 
-    if (window.estaOnline) {
+    if (estaOnline) {
         try {
             const response = await fetch(ENDPOINT_POOL, { cache: "no-store" });
             if (response.ok) {
                 poolRaw = await response.json();
-                localStorage.setItem("MACONDO_POOL", JSON.stringify(poolRaw));
+                localStorage.setItem(CLAVE_POOL_LOCAL, JSON.stringify(poolRaw));
+            } else {
+                throw new Error("Respuesta de red no válida");
             }
         } catch (error) {
-            console.warn(">>> [RED]: Relevo inaccesible. Conmutando a buffer LocalStorage.");
-            poolRaw = JSON.parse(localStorage.getItem("MACONDO_POOL")) || {};
+            console.warn(">>> [RED]: Relevo inaccesible. Conmutando a buffer LocalStorage.", error);
+            poolRaw = JSON.parse(localStorage.getItem(CLAVE_POOL_LOCAL)) || {};
         }
     } else {
-        poolRaw = JSON.parse(localStorage.getItem("MACONDO_POOL")) || {};
+        poolRaw = JSON.parse(localStorage.getItem(CLAVE_POOL_LOCAL)) || {};
     }
 
     const lotesConvertidos = Object.values(poolRaw);
     contenedor.innerHTML = "";
 
-    // Filtrar estrictamente ofertas en pool abierta disponibles
-    const disponibles = lotesConvertidos.filter(lote => lote && lote.estado === "POOL_DISPONIBLE");
+    const disponibles = lotesConvertidos.filter(lote => lote && (lote.estado === "POOL_DISPONIBLE" || !lote.estado));
 
     if (disponibles.length === 0) {
         contenedor.innerHTML = `<div class="panel-maquina" style="text-align:center;color:var(--text-muted)">[POOL_IDLE] No hay contratos disponibles en la red local.</div>`;
@@ -47,42 +143,48 @@ async function sincronizarYRenderizarPool() {
         tarjeta.className = "panel-maquina tarjeta-pedido";
         tarjeta.innerHTML = `
             <div class="header-status">
-                <span style="color: var(--crypto-secure);">[ID: ${lote.id}]</span>
-                <span style="color: var(--text-primary);">[PARADAS: ${lote.paradas}]</span>
+                <span style="color: var(--crypto-secure, #00ff66);">[ID: ${lote.id || '#MAC'}]</span>
+                <span style="color: var(--text-primary, #fff);">[PARADAS: ${lote.paradas || (lote.puntos ? lote.puntos.length : 1)}]</span>
             </div>
             <div style="font-family:monospace; font-size:0.8rem; margin: 8px 0; color:#bbb;">
-                • Frente Logístico: <span style="color:var(--crypto-secure);">${lote.destino}</span><br>
+                • Frente Logístico: <span style="color:var(--crypto-secure, #00ff66);">${lote.destino || lote.direccion || "Cali"}</span><br>
                 • Masa Chasis: ${lote.masaTotal || "1.5 kg"}<br>
-                • Valor Retenido: <span style="color:var(--crypto-secure); font-weight:bold;">$${Math.round(lote.tarifa || 0).toLocaleString()} COP</span>
+                • Valor Retenido: <span style="color:var(--crypto-secure, #00ff66); font-weight:bold;">$${Math.round(lote.tarifa || 0).toLocaleString()} COP</span>
             </div>
-            <button class="btn-terminal btn-crypto" onclick="ejecutarCustodia('${lote.id}')">EXECUTE_CUSTODY_ASIGNATION</button>
+            <button class="btn-terminal btn-crypto" onclick="procesarCustodiaEnServidor('${lote.id}', ${JSON.stringify(lote).replace(/"/g, '&quot;')})">
+                EXECUTE_CUSTODY_ASIGNATION
+            </button>
         `;
         contenedor.appendChild(tarjeta);
     });
 }
 
-/**
- * 2. CONMUTADOR I/O ASÍNCRONO DE ENTRADA EN CUSTODIA (PHP MULTI-FILE)
- */
-async function procesarCustodiaEnServidor(idLote, loteObjeto, nuevaTransaccion) {
-    if (!window.estaOnline) return true;
+// =============================================================================
+// 3. CONMUTADOR DE CUSTODIA E INGESTIÓN DE ENTRADA EN TRÁNSITO
+// =============================================================================
+
+export async function procesarCustodiaEnServidor(idLote, loteObjeto) {
+    const estaOnline = window.estaOnline !== undefined ? window.estaOnline : navigator.onLine;
+    if (!estaOnline) return true;
 
     try {
-        // STEP 1: Jalar la pool completa del disco, remover la propiedad del lote tomado y re-escribir pool_pedidos.json
         const resPoolGet = await fetch(ENDPOINT_POOL, { cache: "no-store" });
-        let poolCompleta = await resPoolGet.json();
+        let poolCompleta = resPoolGet.ok ? await resPoolGet.json() : {};
         delete poolCompleta[idLote];
-        
+
         await fetch(ENDPOINT_SAVE_PHP, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Target-File": "pool_pedidos.json" },
             body: JSON.stringify(poolCompleta)
         });
 
-        // STEP 2: Jalar transito_pedidos.json, inyectar el lote modificado con el estado TRANSITO y guardar
-        const resTransitoGet = await fetch(ENDPOINT_TRANSITO, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+        const resTransitoGet = await fetch(ENDPOINT_TRANSITO, { cache: "no-store" })
+            .then(r => r.ok ? r.json() : {})
+            .catch(() => ({}));
+
         loteObjeto.estado = "TRANSITO";
-        loteObjeto.transportador = "Unidad Discover 125 (Custodio #12)";
+        loteObjeto.transportador = "Unidad Discover 125 (Custodio)";
+        loteObjeto.fechaTransito = new Date().toISOString();
         resTransitoGet[idLote] = loteObjeto;
 
         await fetch(ENDPOINT_SAVE_PHP, {
@@ -91,18 +193,22 @@ async function procesarCustodiaEnServidor(idLote, loteObjeto, nuevaTransaccion) 
             body: JSON.stringify(resTransitoGet)
         });
 
-        console.log(`>>> [SYSTEM_IO]: Lote ${idLote} migrado exitosamente de la Pool Abierta a Tránsito.`);
+        console.log(`>>> [SYSTEM_IO]: Lote ${idLote} migrado exitosamente de Pool a Tránsito.`);
+        
+        sincronizarYRenderizarPool();
+        sincronizarYRenderizarTransito();
         return true;
     } catch (e) {
-        console.error(">>> [IO_WRITE_ERROR]: Caída de sincronización de archivos físicos.", e);
+        console.error(">>> [IO_WRITE_ERROR]: Caída de sincronización de archivos físicos PHP.", e);
         return false;
     }
 }
 
-/**
- * 3. RECONOCE Y REDIBUJA EL PANEL DE PEDIDOS EN TRÁNSITO
- */
-async function sincronizarYRenderizarTransito() {
+// =============================================================================
+// 4. RENDIMIENTO Y VISUALIZACIÓN DE PEDIDOS EN TRÁNSITO
+// =============================================================================
+
+export async function sincronizarYRenderizarTransito() {
     const contenedor = document.getElementById("transito-pedidos-dinamico");
     if (!contenedor) return;
 
@@ -119,17 +225,17 @@ async function sincronizarYRenderizarTransito() {
         }
 
         contenedor.innerHTML = lotes.map(lote => `
-            <div class="panel-maquina tarjeta-pedido" style="border-color: var(--neon-blue); box-shadow: 0 0 10px rgba(0,123,255,0.1);">
+            <div class="panel-maquina tarjeta-pedido" style="border-color: var(--neon-blue, #00e5ff); box-shadow: 0 0 10px rgba(0,229,255,0.1);">
                 <div class="header-status">
-                    <span style="color: var(--neon-blue);">[EN_MOTO: ${lote.id}]</span>
-                    <span style="color: #fff;">${lote.destino}</span>
+                    <span style="color: var(--neon-blue, #00e5ff);">[EN_MOTO: ${lote.id}]</span>
+                    <span style="color: #fff;">${lote.destino || lote.direccion || "Zona Asignada"}</span>
                 </div>
                 <div style="font-family:monospace; font-size:0.75rem; margin:6px 0; color:#aaa;">
-                    • Paradas en curso: ${lote.paradas}<br>
-                    • Masa Acumulada: ${lote.masaTotal}<br>
-                    • Ganancia Retenida: <span style="color:var(--crypto-secure); font-weight:bold;">$${Math.round(lote.neto || 0).toLocaleString()} COP</span>
+                    • Paradas en curso: ${lote.paradas || (lote.puntos ? lote.puntos.length : 1)}<br>
+                    • Masa Acumulada: ${lote.masaTotal || "1.5 kg"}<br>
+                    • Ganancia Retenida: <span style="color:var(--crypto-secure, #00ff66); font-weight:bold;">$${Math.round(lote.neto || lote.tarifa || 0).toLocaleString()} COP</span>
                 </div>
-                <button class="btn-terminal" onclick="liquidarEntregaEnAsfalto('${lote.id}')" style="border-color: var(--crypto-secure); color: var(--crypto-secure); width: 100%; font-weight: bold; margin-top: 4px;">
+                <button class="btn-terminal" onclick="liquidarEntregaEnAsfalto('${lote.id}')" style="border-color: var(--crypto-secure, #00ff66); color: var(--crypto-secure, #00ff66); width: 100%; font-weight: bold; margin-top: 4px;">
                     [✅] CONFIRMAR_ENTREGA_Y_LIQUIDAR_BONO
                 </button>
             </div>
@@ -139,15 +245,15 @@ async function sincronizarYRenderizarTransito() {
     }
 }
 
-/**
- * 4. COMPONE LA MUTACIÓN FINAL: DE TRANSITO A REDENCIÓN FINALIZADA
- */
-async function liquidarEntregaEnAsfalto(idLote) {
+// =============================================================================
+// 5. LIQUIDACIÓN DE ENTREGA Y CIERRE DE REDENCIÓN EN DISCO
+// =============================================================================
+
+export async function liquidarEntregaEnAsfalto(idLote) {
     const confirmar = confirm(`>>> PROTOCOLO DE REDENCIÓN:\n\n¿Confirma la entrega física de todas las paradas del ${idLote} y la liberación de los fondos mutuos?`);
     if (!confirmar) return;
 
     try {
-        // 1. Quitar de transito_pedidos.json
         const resTransito = await fetch(ENDPOINT_TRANSITO, { cache: "no-store" });
         let transitoData = await resTransito.json();
         const loteALiquidar = transitoData[idLote];
@@ -159,16 +265,21 @@ async function liquidarEntregaEnAsfalto(idLote) {
             body: JSON.stringify(transitoData)
         });
 
-        // 2. Mover a finalizados_pedidos.json
-        const resFinalizados = await fetch(ENDPOINT_FINALIZADOS, { cache: "no-store" }).then(r => r.ok ? r.json() : {}).catch(() => ({}));
-        loteALiquidar.estado = "FINALIZADA";
-        resFinalizados[idLote] = loteALiquidar;
+        const resFinalizados = await fetch(ENDPOINT_FINALIZADOS, { cache: "no-store" })
+            .then(r => r.ok ? r.json() : {})
+            .catch(() => ({}));
 
-        await fetch(ENDPOINT_SAVE_PHP, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Target-File": "finalizados_pedidos.json" },
-            body: JSON.stringify(resFinalizados)
-        });
+        if (loteALiquidar) {
+            loteALiquidar.estado = "FINALIZADA";
+            loteALiquidar.fechaFinalizacion = new Date().toISOString();
+            resFinalizados[idLote] = loteALiquidar;
+
+            await fetch(ENDPOINT_SAVE_PHP, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Target-File": "finalizados_pedidos.json" },
+                body: JSON.stringify(resFinalizados)
+            });
+        }
 
         alert(`>>> REDENCIÓN EXITOSA:\n\nEl lote ${idLote} pasó a canje consolidado. Fondos inyectados a su billetera.`);
         sincronizarYRenderizarTransito();
@@ -177,8 +288,20 @@ async function liquidarEntregaEnAsfalto(idLote) {
     }
 }
 
-// Inyección limpia y ordenada al Scope Global para el orquestador
-window.sincronizarYRenderizarPool = sincronizarYRenderizarPool;
-window.procesarCustodiaEnServidor = procesarCustodiaEnServidor;
-window.sincronizarYRenderizarTransito = sincronizarYRenderizarTransito;
-window.liquidarEntregaEnAsfalto = liquidarEntregaEnAsfalto;
+// =============================================================================
+// BINDINGS DEFENSIVOS EN EL ÁMBITO GLOBAL (WINDOW)
+// =============================================================================
+
+if (typeof window !== "undefined") {
+    window.guardarRutaZonificada = guardarRutaZonificada;
+    window.obtenerRutaZonificada = obtenerRutaZonificada;
+    window.actualizarEstadoPedido = actualizarEstadoPedido;
+    window.capturarCoordenadasGPS = capturarCoordenadasGPS;
+    window.convertirArchivoBase64 = convertirArchivoBase64;
+    window.eliminarParadaLocal = eliminarParadaLocal;
+    window.borrarRutaCompletaLocal = borrarRutaCompletaLocal;
+    window.sincronizarYRenderizarPool = sincronizarYRenderizarPool;
+    window.procesarCustodiaEnServidor = procesarCustodiaEnServidor;
+    window.sincronizarYRenderizarTransito = sincronizarYRenderizarTransito;
+    window.liquidarEntregaEnAsfalto = liquidarEntregaEnAsfalto;
+}

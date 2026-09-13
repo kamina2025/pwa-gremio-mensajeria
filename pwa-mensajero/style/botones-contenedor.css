@@ -1,0 +1,46 @@
+input[type="file"]::file-selector-button{
+    background: transparent;
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    padding: 12px;
+    font-family: var(--cyber-font);
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    position: relative;
+    clip-path: polygon(0 0, 90% 0, 100% 30%, 100% 100%, 0 100%);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background-color: var(--neon-cyan-hover);
+}
+
+.btn-crypto{ 
+    background: transparent;
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    padding: 12px;
+    font-family: var(--cyber-font);
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    position: relative;
+    clip-path: polygon(0 0, 90% 0, 100% 30%, 100% 100%, 0 100%);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.btn-crypto:hover{
+    background-color: var(--neon-cyan-hover);
+}
+
+

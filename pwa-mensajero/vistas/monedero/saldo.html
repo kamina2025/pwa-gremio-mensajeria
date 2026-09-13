@@ -1,0 +1,82 @@
+<!-- pwa-mensajero/vistas/monedero/saldo.html -->
+<div class="vista-header">
+    <h2>// SALDO</h2>
+    <span class="badge-status online">DISPONIBLE</span>
+</div>
+
+<!-- Contenedor Principal de la Ruta y Mapa -->
+<div class="modulo-ruta-container">
+    <!-- Tarjeta de Estado de Entrega -->
+    <div class="card-info-ruta">
+        <div class="card-header">
+            <i class="fa-solid fa-map-location-dot"></i>
+            <h3>Control de Cobros y Billetera</h3>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted, #aaa); margin-top: 5px">
+            Balance contable descentralizado y registro en tiempo real.
+        </p>
+    </div>
+    <section id="mod-billetera" class="modulo-vista">
+        <div class="panel-maquina panel-billetera">
+            <div class="header-status">
+                <span style="color: var(--crypto-secure, #00ff66)" id="ledger-status"
+                    >[LEDGER_STATUS: SYNCHRONIZED]</span
+                >
+                <span>CUSTODIO_SIGN: 0x8a2f...3c91</span>
+            </div>
+            <div
+                class="grid-balance-monolitico"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0">
+                <div
+                    class="sub-panel-datos"
+                    style="background: #0c080f; padding: 10px; border: 1px solid var(--border-rigid, #291f33)">
+                    <div class="label-titulo" style="font-size: 0.75rem; color: #888">[CAPITAL_NETO_DISPONIBLE]</div>
+                    <div
+                        class="valor-balance credit"
+                        id="balance-capital"
+                        style="font-size: 1.4rem; color: var(--crypto-secure, #00ff66)">
+                        $0 COP
+                    </div>
+                </div>
+                <div
+                    class="sub-panel-datos"
+                    style="background: #0c080f; padding: 10px; border: 1px solid var(--border-rigid, #291f33)">
+                    <div class="label-titulo" style="font-size: 0.75rem; color: #888">[FONDO_MUTUAL_RETENIDO]</div>
+                    <div
+                        class="valor-balance mutual"
+                        id="balance-mutual"
+                        style="font-size: 1.4rem; color: var(--amber-alert, #ffaa00)">
+                        $0 COP
+                    </div>
+                </div>
+                <div
+                    class="sub-panel-datos"
+                    style="background: #0c080f; padding: 10px; border: 1px solid var(--border-rigid, #291f33)">
+                    <div class="label-titulo" style="font-size: 0.75rem; color: #888">[CREDITOS_NANO]</div>
+                    <div
+                        class="valor-balance creditos-nano"
+                        id="creditos-nano"
+                        style="font-size: 1.4rem; color: var(--cyan, #0fdbfb)">
+                        $0 XNO
+                    </div>
+                </div>
+            </div>
+            <label class="label-consola">>>> REGISTRO_DE_TRANSACCIONES_RECIENTES (HISTORIAL_RAW):</label>
+            <div class="tabla-contenedor-scroll" style="max-height: 200px; overflow-y: auto">
+                <table class="tabla-contable" style="width: 100%; font-size: 0.75rem; border-collapse: collapse">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border-rigid, #291f33); text-align: left">
+                            <th>TIMESTAMP</th>
+                            <th>ID_CONTRATO</th>
+                            <th>TARIFA</th>
+                            <th>MOTO_ROD</th>
+                            <th>MUTUAL</th>
+                            <th>NETO</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historial-transacciones-dinamico"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>

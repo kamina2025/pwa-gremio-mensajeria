@@ -1,17 +1,16 @@
 :root {
-  
   /* Paleta Cripto-Industrial (Fósforo y Acero) */
   --bg-terminal: #0a0c10;
   --bg-surface: #12161f;
   --border-rigid: #2d3748;
-  
+
   /* Estados de Operación Técnica */
   --text-primary: #00ff66;
   --text-muted: #8af7b3;
   --amber-alert: #ffb300;
   --crypto-secure: #00e5ff;
   --alert-fail: #ff3333;
-  
+
   /* Libro Contable */
   --ledger-credit: #00ff66;
   --ledger-debit: #ff3333;
@@ -19,25 +18,33 @@
   --ledger-text: #e2e8f0;
 
   /* Tipografía y Cuadrícula */
-  --font-machine: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+  --font-machine: "Fira Code", "JetBrains Mono", "Courier New", monospace;
   --terminal-pad: 12px;
   --border-width: 1px;
+
+  /* Colores Neón */
+  --neon-purple: #b359ff;
+  --neon-green: #00ff66;
+  --neon-blue: #00e5ff;
 }
 
-/* Reset y Base de Máquina */
+/* Reset y Layout Adaptable PWA Android */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-body {
+html, body {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh; /* Dynamic Viewport Height para evitar cortes en Android Chrome */
+  background-color: var(--bg-terminal);
   color: var(--text-primary);
   font-family: var(--font-machine);
-  padding: var(--terminal-pad);
-  padding-bottom: 50px; /* Margen para evitar solapamiento con la barra fija */
   line-height: 1.4;
   -webkit-font-smoothing: none;
+  overflow: hidden; /* Elimina la barra deslizadora global derecha */
 }
 
 h1 {
@@ -47,13 +54,21 @@ h1 {
   margin-top: 6px;
 }
 
+/* Contenedor Raíz de Pantalla */
+#app-container, .main-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* Paneles Monolíticos */
 .panel-maquina {
-  background: transparent;
+  background: var(--bg-surface);
   border: var(--border-width) solid var(--border-rigid);
   backdrop-filter: blur(15px);
   border-radius: 12px;
-  
   padding: var(--terminal-pad);
   margin-bottom: var(--terminal-pad);
 }
@@ -94,7 +109,8 @@ h1 {
   transition: background 0.1s ease;
 }
 
-.btn-terminal:active, .btn-terminal.active {
+.btn-terminal:active,
+.btn-terminal.active {
   background-color: var(--text-primary) !important;
   color: var(--bg-terminal) !important;
 }
@@ -106,6 +122,18 @@ h1 {
 .btn-crypto:active {
   background-color: var(--crypto-secure);
   color: var(--bg-terminal);
+}
+
+/* Campos de entrada genéricos */
+.input-terminal {
+  width: 100%;
+  background: var(--bg-surface);
+  border: var(--border-width) solid var(--border-rigid);
+  color: var(--text-primary);
+  font-family: var(--font-machine);
+  padding: 8px;
+  border-radius: 4px;
+  box-sizing: border-box;
 }
 
 /* Estructura de Tablas Notificadas */
@@ -149,7 +177,9 @@ h1 {
 }
 
 /* Módulo Justicia Nodal */
-.panel-auditoria { border-color: var(--amber-alert); }
+.panel-auditoria {
+  border-color: var(--amber-alert);
+}
 
 .bloque-telemetria {
   background-color: #05070a;
@@ -160,10 +190,20 @@ h1 {
   margin: 8px 0 var(--terminal-pad) 0;
 }
 
-.log-line { margin-bottom: 4px; }
-.log-line.warning { color: var(--amber-alert); background-color: rgba(255,179,0,0.03); }
-.log-line .timestamp { color: #707a8a; }
-.log-line .action { font-weight: bold; color: var(--crypto-secure); }
+.log-line {
+  margin-bottom: 4px;
+}
+.log-line.warning {
+  color: var(--amber-alert);
+  background-color: rgba(255, 179, 0, 0.03);
+}
+.log-line .timestamp {
+  color: #707a8a;
+}
+.log-line .action {
+  font-weight: bold;
+  color: var(--crypto-secure);
+}
 
 .label-consola {
   display: block;
@@ -172,20 +212,11 @@ h1 {
   margin-bottom: 4px;
 }
 
-.input-terminal {
-  width: 100%;
-  background-color: #161b22;
-  border: var(--border-width) solid var(--border-rigid);
-  color: #ffffff;
-  font-family: var(--font-machine);
-  padding: 8px;
-  font-size: 0.85rem;
-  resize: none;
-  margin-bottom: 6px;
+.indicador-ayuda {
+  font-size: 0.7rem;
+  color: #707a8a;
+  margin-bottom: var(--terminal-pad);
 }
-
-.input-terminal:focus { outline: none; border-color: var(--amber-alert); }
-.indicador-ayuda { font-size: 0.7rem; color: #707a8a; margin-bottom: var(--terminal-pad); }
 
 /* Módulo Libro Contable */
 .grid-balance-monolitico {
@@ -201,10 +232,21 @@ h1 {
   padding: 8px;
 }
 
-.label-titulo { font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px; }
-.valor-balance { font-size: 1.1rem; font-weight: bold; }
-.valor-balance.credit { color: var(--ledger-credit); }
-.valor-balance.mutual { color: var(--ledger-mutual); }
+.label-titulo {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.valor-balance {
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+.valor-balance.credit {
+  color: var(--ledger-credit);
+}
+.valor-balance.mutual {
+  color: var(--ledger-mutual);
+}
 
 .tabla-contenedor-scroll {
   width: 100%;
@@ -214,19 +256,43 @@ h1 {
   margin-top: 4px;
 }
 
-.tabla-contable { width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left; }
-.tabla-contable th, .tabla-contable td { padding: 6px 8px; border-bottom: var(--border-width) solid var(--border-rigid); white-space: nowrap; }
-.tabla-contable th { background-color: #161b22; color: var(--text-primary); }
+.tabla-contable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  text-align: left;
+}
+.tabla-contable th,
+.tabla-contable td {
+  padding: 6px 8px;
+  border-bottom: var(--border-width) solid var(--border-rigid);
+  white-space: nowrap;
+}
+.tabla-contable th {
+  background-color: #161b22;
+  color: var(--text-primary);
+}
 
-td.credit { color: var(--ledger-credit); font-weight: bold; }
-td.debit { color: var(--ledger-debit); }
-td.mutual { color: var(--ledger-mutual); }
-td.hash { color: #707a8a; }
+td.credit {
+  color: var(--ledger-credit);
+  font-weight: bold;
+}
+td.debit {
+  color: var(--ledger-debit);
+}
+td.mutual {
+  color: var(--ledger-mutual);
+}
+td.hash {
+  color: #707a8a;
+}
 
-/* Barra Fija Inferior */
+/* Barra Fija Inferior Global */
 .barra-estado-fija {
   position: fixed;
-  bottom: 0; left: 0; right: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
   background-color: var(--bg-terminal);
   border-top: var(--border-width) solid var(--border-rigid);
   display: flex;
@@ -236,8 +302,13 @@ td.hash { color: #707a8a; }
   z-index: 100;
 }
 
-.status-indicator.online { color: var(--text-primary); }
-.status-indicator.offline { color: var(--alert-fail); animation: parpadeo 1s infinite; }
+.status-indicator.online {
+  color: var(--text-primary);
+}
+.status-indicator.offline {
+  color: var(--alert-fail);
+  animation: parpadeo 1s infinite;
+}
 
 @keyframes parpadeo {
   0%, 100% { opacity: 1; }

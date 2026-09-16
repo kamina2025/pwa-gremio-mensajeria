@@ -1,0 +1,99 @@
+.sidebar {
+    grid-area: sidebar;
+    background: var(--panel-bg);
+    border-right: 1px solid var(--neon-magenta);
+    padding: 15px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition:
+        opacity 0.2s ease,
+        padding 0.3s ease;
+    will-change: opacity, padding;
+}
+
+.dashboard-container.collapsed .sidebar {
+    overflow: hidden;
+    padding: 0;
+    opacity: 0;
+    border-right: none;
+    pointer-events: none;
+}
+
+.nav-btn {
+    background: transparent;
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    padding: 12px;
+    font-family: var(--cyber-font);
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    position: relative;
+    clip-path: polygon(0 0, 90% 0, 100% 30%, 100% 100%, 0 100%);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-btn i {
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+    transition:
+        transform 0.2s ease,
+        color 0.2s ease;
+}
+
+.nav-btn:hover,
+.nav-btn.active {
+    background: var(--neon-cyan);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--neon-cyan);
+    font-weight: bold;
+}
+
+/* --- SUBMENÚ CIBERPUNK --- */
+.submenu {
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-left: 15px;
+    transition:
+        max-height 0.3s ease-in-out,
+        opacity 0.3s ease;
+    opacity: 0;
+}
+
+.menu-item-has-submenu.open .submenu {
+    max-height: 200px;
+    opacity: 1;
+    margin-top: 5px;
+}
+
+.arrow-icon {
+    margin-left: auto;
+    font-size: 0.8rem !important;
+    transition: transform 0.3s ease;
+}
+
+.menu-item-has-submenu.open .arrow-icon {
+    transform: rotate(180deg);
+}
+
+.sub-nav-btn {
+    font-size: 0.85rem;
+    padding: 8px 10px;
+    border-color: rgba(0, 243, 255, 0.4);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.sub-nav-btn:hover {
+    border-color: var(--neon-magenta);
+    box-shadow: 0 0 10px var(--neon-magenta);
+}

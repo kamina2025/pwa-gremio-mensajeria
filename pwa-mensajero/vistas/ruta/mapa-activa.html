@@ -1,0 +1,49 @@
+<!-- pwa-mensajero/vistas/ruta/mapa-activa.html -->
+<div class="mapa-fullscreen-wrapper">
+    
+    <!-- 🔍 BOTÓN LUPA Y BUSCADOR FLOTANTE (DERECHA) -->
+    <div class="contenedor-busqueda-mapa">
+        <input 
+            type="text" 
+            id="input-mapa-buscar-dir" 
+            class="input-terminal" 
+            placeholder="Buscar dirección..." />
+        
+        <button 
+            type="button" 
+            id="btn-toggle-busqueda" 
+            class="btn-terminal btn-crypto" 
+            onclick="toggleBuscadorMapaUI()">
+            🔍
+        </button>
+    </div>
+
+    <!-- LIENZO INTERACTIVO DEL MAPA -->
+    <div id="mapa-mensajero"></div>
+
+    <!-- 📌 BARRA DE ACCIONES INFERIOR (COMPLETAMENTE VISIBLE) -->
+    <div class="panel-inferior-mapa">
+        <button 
+            type="button" 
+            class="btn-terminal btn-crypto" 
+            onclick="abrirModalCargarRutaUI()">
+            📥 CARGAR RUTA
+        </button>
+        
+        <button 
+            type="button" 
+            id="btn-modo-crear-parada"
+            class="btn-terminal btn-crypto" 
+            onclick="activarModoSeleccionMapaUI()">
+            ➕ CREAR PARADA
+        </button>
+        
+        <button 
+            type="button" 
+            class="btn-terminal btn-crypto" 
+            onclick="navegarA('vistas/ruta/ruta-activa.html')">
+            📋 VER RUTA
+        </button>
+    </div>
+
+</div>

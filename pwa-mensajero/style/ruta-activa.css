@@ -1,0 +1,28 @@
+.modulo-ruta-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 8px;
+    overflow: hidden;
+}
+
+#lista-paradas-zonificadas {
+    flex: 1;
+    overflow-y: auto;
+    margin-top: 8px;
+    padding-right: 4px;
+    max-height: calc(100vh - 220px);
+}
+
+#lista-paradas-zonificadas::-webkit-scrollbar {
+    width: 5px;
+}
+
+#lista-paradas-zonificadas::-webkit-scrollbar-track {
+    background: #0c080f;
+}
+
+#lista-paradas-zonificadas::-webkit-scrollbar-thumb {
+    background: var(--neon-magenta);
+    border-radius: 3px;
+}

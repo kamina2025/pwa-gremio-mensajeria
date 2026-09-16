@@ -1,0 +1,28 @@
+/* pwa-mensajero/style/formularios.css */
+
+/* Reglas principales para los inputs tipo terminal */
+.input-terminal {
+    width: 100%;
+    background-color: #12131a; /* Fondo oscuro */
+    border: 1px solid var(--border-rigid, #2d3748);
+    color: #00f0ff; /* Texto cyan neón */
+    font-family: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    resize: none;
+    margin-bottom: 8px;
+    outline: none;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Texto del Placeholder */
+.input-terminal::placeholder {
+    color: rgba(0, 240, 255, 0.4);
+}
+
+/* Efecto al hacer clic / enfocar el input */
+.input-terminal:focus {
+    border-color: #00f0ff;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+    color: #ffffff;
+}

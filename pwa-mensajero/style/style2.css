@@ -1,0 +1,12 @@
+/**
+ * HOJA PRINCIPAL DE ESTILOS - PWA MENSAJERO (ORQUESTADOR)
+ * Ubicación: style/style2.css
+ */
+
+@import url("./layout.css");
+@import url("./sidebar.css");
+@import url("./mapa-activa.css");
+@import url("./ruta-activa.css");
+@import url("./formularios.css");
+@import url("./botones-contenedor.css");
+@import url("./barra-inferior.css");

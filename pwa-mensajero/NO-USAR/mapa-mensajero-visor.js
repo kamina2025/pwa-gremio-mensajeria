@@ -4,6 +4,7 @@
  */
 
 import { desplegarZonaMensajeroEnMapa } from "./mapa-mensajero-zonas.js";
+import { crearIconoParadaRadarSVG } from "./mapa-mensajero-iconos.js"; // <--- Importamos el nuevo módulo
 
 window.mapaMensajero = null;
 window.renderRutasMensajero = null;
@@ -11,24 +12,8 @@ window.marcadoresRutaMensajero = [];
 window.infoWindowMensajero = null;
 window.pendientesParaRenderizar = null;
 
-/**
- * Genera un icono vectorial dinámico SVG estilo "cajita" con colores de estado.
- */
-export function crearIconoCajitaSVG(colorFill = "#00e5ff", colorStroke = "#ffffff") {
-    const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="7" width="18" height="14" rx="2" fill="${colorFill}" stroke="${colorStroke}" stroke-width="1.5" />
-        <path d="M3 10H21" stroke="${colorStroke}" stroke-width="1.5" stroke-dasharray="2 2" />
-        <path d="M12 7V21" stroke="${colorStroke}" stroke-width="1.5" />
-        <path d="M7 7L12 10L17 7" stroke="${colorStroke}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="12" cy="14" r="1.5" fill="${colorStroke}" />
-    </svg>`;
-    return {
-        url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-        scaledSize: new google.maps.Size(32, 32),
-        anchor: new google.maps.Point(16, 16)
-    };
-}
+// Re-exportamos para compatibilidad si otros módulos consumían la función desde aquí
+export { crearIconoParadaRadarSVG };
 
 /**
  * Sanitiza la dirección adjuntando el contexto urbano predeterminado.
@@ -46,8 +31,12 @@ function sanitizarDireccionContexto(direccion) {
  * Inicializa el lienzo del mapa de Google Maps con la estética Cyberpunk y controles telemáticos.
  */
 export function inicializarMapaMensajero() {
+    if (typeof google === "undefined" || typeof google.maps === "undefined" || !google.maps.InfoWindow) {
+        console.warn("[MAPA_MENSAJERO]: Esperando a que cargue el SDK de Google Maps...");
+        return;
+    }
     console.log(">>> [MAPA_MENSAJERO_INIT]: Evaluando entorno de hardware...");
-    
+
     const contenedorMapa = document.getElementById("mapa-mensajero");
 
     if (!contenedorMapa) {
@@ -62,7 +51,7 @@ export function inicializarMapaMensajero() {
     try {
         window.infoWindowMensajero = new google.maps.InfoWindow();
         window.mapaMensajero = new google.maps.Map(contenedorMapa, {
-            center: { lat: 3.4516, lng: -76.5320 },
+            center: { lat: 3.4516, lng: -76.532 },
             zoom: 13,
             disableDefaultUI: true,
             styles: [
@@ -75,12 +64,15 @@ export function inicializarMapaMensajero() {
             ]
         });
 
-        // Instanciar el renderizador de polígonos telemáticos entre paradas
         window.renderRutasMensajero = new google.maps.DirectionsRenderer({
             map: window.mapaMensajero,
             suppressMarkers: true,
             polylineOptions: { strokeColor: "#00e5ff", strokeOpacity: 0.8, strokeWeight: 4 }
         });
+
+        if (typeof desplegarZonaMensajeroEnMapa === "function") {
+            desplegarZonaMensajeroEnMapa(window.mapaMensajero);
+        }
 
         console.log(">>> [MAPA_MENSAJERO_READY]: Canvas telemático y motor de trayectos listos.");
 
@@ -89,7 +81,6 @@ export function inicializarMapaMensajero() {
             window.pendientesParaRenderizar = null;
             actualizarPuntosEnMapa(listaPedidos, indiceActivo);
         }
-
     } catch (e) {
         console.error(">>> [MAPA_MENSAJERO_ERROR]: Fallo instanciando el mapa:", e);
     }
@@ -97,10 +88,6 @@ export function inicializarMapaMensajero() {
 
 /**
  * Actualiza los puntos en el mapa, procesa polígonos de zona, dibuja marcadores y recalcula trayectos.
- * Soporta borrado reactivo cuando listaPedidos está vacía.
- * 
- * @param {Array<Object>} listaPedidos - Lista completa de pedidos/paradas.
- * @param {number} indiceActivo - Índice de la parada en curso.
  */
 export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     if (!window.mapaMensajero || typeof google === "undefined" || !google.maps) {
@@ -109,10 +96,14 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     }
 
     // 1. Purgar marcadores anteriores del lienzo
-    window.marcadoresRutaMensajero.forEach(m => m.setMap(null));
+    window.marcadoresRutaMensajero.forEach((m) => m.setMap(null));
     window.marcadoresRutaMensajero = [];
 
-    // 2. Si la lista de paradas se vacía (por borrado manual o purga local), limpiar trazado y salir
+    const zonaDetectada = listaPedidos && listaPedidos.length > 0 ? listaPedidos[0]?.zonaKey || "NORTE" : null;
+    if (typeof desplegarZonaMensajeroEnMapa === "function") {
+        desplegarZonaMensajeroEnMapa(window.mapaMensajero, zonaDetectada);
+    }
+
     if (!listaPedidos || listaPedidos.length === 0) {
         console.log(">>> [MAPA_MENSAJERO_CLEAN]: No hay paradas activas. Limpiando trazado telemático.");
         if (window.renderRutasMensajero) {
@@ -121,17 +112,11 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
         return;
     }
 
-    // 3. Desplegar zonas geográficas coloreadas
-    const zonaDetectada = listaPedidos[0]?.zonaKey || "NORTE";
-    if (typeof desplegarZonaMensajeroEnMapa === "function") {
-        desplegarZonaMensajeroEnMapa(window.mapaMensajero, zonaDetectada);
-    }
-
-    // 4. Preparar el trazado continuo entre los puntos (DirectionsService)
+    // 2. Preparar el trazado continuo entre los puntos
     if (google.maps.DirectionsService && listaPedidos.length >= 1) {
         try {
             const servicioDirecciones = new google.maps.DirectionsService();
-            const paradasWaypoints = listaPedidos.map(p => ({
+            const paradasWaypoints = listaPedidos.map((p) => ({
                 location: sanitizarDireccionContexto(p.direccion),
                 stopover: true
             }));
@@ -158,7 +143,7 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
         }
     }
 
-    // 5. Dibujar marcadores interactivos con soporte de Drag & Drop y edición
+    // 3. Dibujar marcadores interactivos usando el nuevo icono
     const bounds = new google.maps.LatLngBounds();
     const geocoder = new google.maps.Geocoder();
 
@@ -171,21 +156,22 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
                 bounds.extend(pos);
 
                 const esActivo = idx === indiceActivo;
-                const colorCajita = esActivo ? "#00ff66" : (pedido.estado === "FINALIZADO" ? "#555555" : "#00e5ff");
+                const colorFill = esActivo ? "#00ff66" : pedido.estado === "FINALIZADO" ? "#555555" : "#00e5ff";
 
                 const marker = new google.maps.Marker({
                     position: pos,
                     map: window.mapaMensajero,
-                    draggable: true, // Permitir reubicación interactiva
-                    icon: crearIconoCajitaSVG(colorCajita, "#ffffff"),
-                    title: `[${String.fromCharCode(65 + idx)}] ${pedido.destinatario || 'Cliente'}`
+                    draggable: true,
+                    // Uso del nuevo creador de icono SVG desde el módulo de iconos
+                    icon: crearIconoParadaRadarSVG(colorFill, "#ffffff"),
+                    title: `[${String.fromCharCode(65 + idx)}] ${pedido.destinatario || "Cliente"}`
                 });
 
                 const templateInfo = `
-                    <div style="background: #0c080f; color: #fff; padding: 8px 12px; border: 1px solid ${colorCajita}; font-family: monospace; font-size: 0.78rem; border-radius: 4px;">
-                        <strong style="color: ${colorCajita}; font-size: 0.85rem;">[${String.fromCharCode(65 + idx)}] ${pedido.destinatario || 'Cliente'}</strong><br/>
+                    <div style="background: #0c080f; color: #fff; padding: 8px 12px; border: 1px solid ${colorFill}; font-family: monospace; font-size: 0.78rem; border-radius: 4px;">
+                        <strong style="color: ${colorFill}; font-size: 0.85rem;">[${String.fromCharCode(65 + idx)}] ${pedido.destinatario || "Cliente"}</strong><br/>
                         <span style="color: #aaa;">📍 Dir:</span> ${pedido.direccion}<br/>
-                        <span style="color: #aaa;">📞 Tel:</span> ${pedido.telefono || 'N/A'}<br/>
+                        <span style="color: #aaa;">📞 Tel:</span> ${pedido.telefono || "N/A"}<br/>
                         <span style="color: #00ff66;">📦 Estado:</span> ${pedido.estado}
                     </div>`;
 
@@ -200,7 +186,6 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
                     if (window.infoWindowMensajero) window.infoWindowMensajero.close();
                 });
 
-                // Re-trazado telemático dinámico al arrastrar el pin
                 marker.addListener("dragend", (event) => {
                     const nuevaLat = event.latLng.lat();
                     const nuevaLng = event.latLng.lng();
@@ -210,8 +195,7 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
                         if (revStatus === "OK" && revResults[0]) {
                             const nuevaDirString = revResults[0].formatted_address;
                             pedido.direccion = nuevaDirString;
-                            
-                            // Refrescar traza telemática y UI
+
                             if (typeof window.refrescarUI === "function") {
                                 window.refrescarUI();
                             } else {

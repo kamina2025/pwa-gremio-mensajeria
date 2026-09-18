@@ -64,25 +64,39 @@
                     data-include="vistas/notificaciones/reportes.html"></div>
             </main>
         </div>
+        <!-- CONTENEDOR DE LA BARRA INFERIOR DINÁMICA -->
+        <nav id="contenedor-menu"></nav>
 
-        <!-- <nav class="bottom-nav">
-            <a href="#inicio" class="nav-item active">
-                <span class="icon">🏠</span>
-                <span class="label">Inicio</span>
-            </a>
-            <a href="#buscar" class="nav-item">
-                <span class="icon">🔍</span>
-                <span class="label">Buscar</span>
-            </a>
-            <a href="#favoritos" class="nav-item">
-                <span class="icon">⭐</span>
-                <span class="label">Favoritos</span>
-            </a>
-            <a href="#perfil" class="nav-item">
-                <span class="icon">👤</span>
-                <span class="label">Perfil</span>
-            </a>
-        </nav> -->
+        <!-- SCRIPT PARA CARGAR LA BARRA DINÁMICAMENTE -->
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const contenedor = document.getElementById("contenedor-menu");
+                if (!contenedor) return;
+
+                fetch("componentes/barra-inferior/inicio-barra-infe.html")
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.text();
+                    })
+                    .then((html) => {
+                        // 1. Insertamos el HTML dentro del contenedor
+                        contenedor.innerHTML = html;
+
+                        // 2. Activamos el botón de la página actual de forma automática
+                        const paginaActual = window.location.pathname.split("/").pop() || "index2.html";
+                        const enlaces = contenedor.querySelectorAll(".nav-item");
+
+                        enlaces.forEach((enlace) => {
+                            if (enlace.getAttribute("href") === paginaActual) {
+                                enlace.classList.add("active");
+                            }
+                        });
+                    })
+                    .catch((error) => console.error("Error al cargar la barra inferior:", error));
+            });
+        </script>
 
         <!-- Modulos de Control JavaScript -->
         <script src="./app.js"></script>

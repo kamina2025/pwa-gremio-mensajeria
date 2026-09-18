@@ -334,3 +334,33 @@ window.guardarParadaManualUI = function () {
         alert(">>> [ÉXITO]: Parada guardada correctamente.");
     }
 };
+/**
+ * Alterna la visibilidad de las pestañas en la SPA y conmuta la barra inferior.
+ * @param {string} targetId - ID del contenedor de la pestaña (ej: 'mapa-fullscreen-container' o 'pestana-ruta-activa')
+ */
+export function alternarVistaPestaña(targetId) {
+    const contenedores = document.querySelectorAll(".contenedor-pestana");
+    contenedores.forEach((c) => c.classList.remove("activa"));
+
+    const objetivo = document.getElementById(targetId);
+    if (objetivo) {
+        objetivo.classList.add("activa");
+    }
+
+    // CONMUTACIÓN DE BARRA INFERIOR SEGÚN LA VISTA
+    if (targetId === "mapa-fullscreen-container" || targetId === "pestana-ruta-activa") {
+        if (typeof window.cargarBarraInferior === "function") {
+            window.cargarBarraInferior("componentes/barra-inferior/mapa-barra-infe.html");
+        }
+        if (typeof window.inicializarMapaMensajero === "function") {
+            setTimeout(window.inicializarMapaMensajero, 100);
+        }
+    } else {
+        if (typeof window.cargarBarraInferior === "function") {
+            window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
+        }
+    }
+}
+
+// Registro global para navegación por botones o eventos UI
+window.alternarVistaPestaña = alternarVistaPestaña;

@@ -19,7 +19,9 @@ import {
     actualizarEstadoPedido, 
     capturarCoordenadasGPS,
     sincronizarYRenderizarPool,
-    sincronizarYRenderizarTransito
+    sincronizarYRenderizarTransito,
+    eliminarParadaLocal,        // 👈 FIX: Importación agregada
+    borrarRutaCompletaLocal      // 👈 FIX: Importación agregada
 } from "./modulos/mensajero-persistencia.js";
 
 import { inicializarMapaMensajero } from "./modulos/mapa/mapa-visor.js";
@@ -32,7 +34,7 @@ import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
 import { procesarPayloadOStorage, buscarIndiceActivo } from "./modulos/mensajero-rutas.js";
 
-// ⚡ IMPORTANTE: Importar el controlador de mapa para registrar las funciones del mapa y mutaciones neón en `window`
+// ⚡ Controller de mapa
 import "./modulos/mapa/mapa-controlador.js";
 
 console.log(" 🟢 [script2.js] Orquestador PWA modularizado cargado.");
@@ -202,7 +204,7 @@ window.ejecutarProcesamientoIaCloud = function() {
 };
 
 window.refrescarConsolaOperacionesUI = function() {
-    listaPedidosGlobal = obtenerRutaZonificada();
+    listaPedidosGlobal = obtenerRutaZonificada() || [];
     determinarSiguientePedidoActivo();
     refrescarUI();
 };
@@ -227,45 +229,78 @@ window.prepararEdicionParadaUI = function(idParada) {
     const parada = listaPedidosGlobal.find((p) => p.id === idParada);
     if (!parada) return;
 
-    document.getElementById("edit-parada-id").value = parada.id;
-    document.getElementById("edit-parada-destinatario").value = parada.destinatario || "";
-    document.getElementById("edit-parada-direccion").value = parada.direccion || "";
-    document.getElementById("edit-parada-telefono").value = parada.telefono || "";
-    document.getElementById("edit-parada-ssc").value = parada.ssc || "";
-    document.getElementById("edit-parada-cuota").value = parada.cuotaModeradora || "";
+    if (document.getElementById("edit-parada-id")) document.getElementById("edit-parada-id").value = parada.id;
+    if (document.getElementById("edit-parada-destinatario")) document.getElementById("edit-parada-destinatario").value = parada.destinatario || "";
+    if (document.getElementById("edit-parada-direccion")) document.getElementById("edit-parada-direccion").value = parada.direccion || "";
+    if (document.getElementById("edit-parada-telefono")) document.getElementById("edit-parada-telefono").value = parada.telefono || "";
+    if (document.getElementById("edit-parada-ssc")) document.getElementById("edit-parada-ssc").value = parada.ssc || "";
+    if (document.getElementById("edit-parada-cuota")) document.getElementById("edit-parada-cuota").value = parada.cuotaModeradora || "";
 
     const detailsForm = document.getElementById("details-formulario-parada");
     if (detailsForm) detailsForm.open = true;
 };
 
 window.limpiarFormularioParadaUI = function() {
-    document.getElementById("edit-parada-id").value = "";
-    document.getElementById("edit-parada-destinatario").value = "";
-    document.getElementById("edit-parada-direccion").value = "";
-    document.getElementById("edit-parada-telefono").value = "";
-    document.getElementById("edit-parada-ssc").value = "";
-    document.getElementById("edit-parada-cuota").value = "";
+    if (document.getElementById("edit-parada-id")) document.getElementById("edit-parada-id").value = "";
+    if (document.getElementById("edit-parada-destinatario")) document.getElementById("edit-parada-destinatario").value = "";
+    if (document.getElementById("edit-parada-direccion")) document.getElementById("edit-parada-direccion").value = "";
+    if (document.getElementById("edit-parada-telefono")) document.getElementById("edit-parada-telefono").value = "";
+    if (document.getElementById("edit-parada-ssc")) document.getElementById("edit-parada-ssc").value = "";
+    if (document.getElementById("edit-parada-cuota")) document.getElementById("edit-parada-cuota").value = "";
 
     const detailsForm = document.getElementById("details-formulario-parada");
     if (detailsForm) detailsForm.open = false;
 };
 
-window.guardarParadaManualUI = function() {
-    const id = document.getElementById("edit-parada-id").value;
-    const destinatario = document.getElementById("edit-parada-destinatario").value.trim();
-    const direccion = document.getElementById("edit-parada-direccion").value.trim();
-    const telefono = document.getElementById("edit-parada-telefono").value.trim();
-    const ssc = document.getElementById("edit-parada-ssc").value.trim();
-    const cuotaModeradora = document.getElementById("edit-parada-cuota").value.trim();
+// --- BINDING CENTRALIZADO PARA INSERTAR DESDE EL MAPA ---
+window.agregarParadaLocal = function (nuevaParadaDatos) {
+    if (!nuevaParadaDatos || !nuevaParadaDatos.direccion) return;
+
+    let rutaActual = obtenerRutaZonificada() || [];
+
+    const nuevaParada = {
+        id: `#PNT-${Math.floor(1000 + Math.random() * 9000)}`,
+        ssc: nuevaParadaDatos.ssc || "N/A",
+        destinatario: nuevaParadaDatos.destinatario || "Cliente Nuevo",
+        direccion: nuevaParadaDatos.direccion,
+        telefono: nuevaParadaDatos.telefono || "3000000000",
+        puntoOrigen: "Cafam Cali Tequendama",
+        cuotaModeradora: nuevaParadaDatos.cuotaModeradora || "$0",
+        carga: "Medicamentos Dispensación",
+        estado: "ASIGNADO",
+        registroOperaciones: {},
+        lat: nuevaParadaDatos.lat || null,
+        lng: nuevaParadaDatos.lng || null
+    };
+
+    rutaActual.push(nuevaParada);
+    guardarRutaZonificada(rutaActual);
+    
+    // Sincronizar estado global
+    listaPedidosGlobal = rutaActual;
+    determinarSiguientePedidoActivo();
+    refrescarUI();
+
+    console.log(`>>> [PARADA_AGREGADA_OK]: Parada en ${nuevaParada.direccion} guardada exitosamente.`);
+};
+
+// --- FUNCIÓN UNIFICADA Y SIN DUPLICADOS DEL FORMULARIO MANUAL ---
+window.guardarParadaManualUI = function () {
+    const id = document.getElementById("edit-parada-id")?.value;
+    const destinatario = document.getElementById("edit-parada-destinatario")?.value.trim();
+    const direccion = document.getElementById("edit-parada-direccion")?.value.trim();
+    const telefono = document.getElementById("edit-parada-telefono")?.value.trim();
+    const ssc = document.getElementById("edit-parada-ssc")?.value.trim();
+    const cuotaModeradora = document.getElementById("edit-parada-cuota")?.value.trim();
 
     if (!destinatario || !direccion) {
-        alert(">>> ALERTA: Ingrese al menos Destinatario y Dirección.");
+        alert(">>> [ALERTA]: Por favor ingrese al menos el Destinatario y la Dirección.");
         return;
     }
 
-    let rutaActual = obtenerRutaZonificada();
-
     if (id) {
+        // MODO EDICIÓN
+        let rutaActual = obtenerRutaZonificada() || [];
         rutaActual = rutaActual.map((p) => {
             if (p.id === id) {
                 return {
@@ -279,26 +314,23 @@ window.guardarParadaManualUI = function() {
             }
             return p;
         });
-    } else {
-        const nuevaParada = {
-            id: `#PNT-${Math.floor(1000 + Math.random() * 9000)}`,
-            ssc: ssc || "N/A",
-            destinatario: destinatario,
-            direccion: direccion,
-            telefono: telefono || "3000000000",
-            puntoOrigen: "Cafam Cali Tequendama",
-            cuotaModeradora: cuotaModeradora || "$0",
-            carga: "Medicamentos Dispensación",
-            estado: "ASIGNADO",
-            registroOperaciones: {}
-        };
-        rutaActual.push(nuevaParada);
-    }
 
-    guardarRutaZonificada(rutaActual);
-    listaPedidosGlobal = rutaActual;
-    determinarSiguientePedidoActivo();
-    refrescarUI();
-    limpiarFormularioParadaUI();
-    alert(">>> PARADA GUARDADA LOCALMENTE.");
+        guardarRutaZonificada(rutaActual);
+        listaPedidosGlobal = rutaActual;
+        determinarSiguientePedidoActivo();
+        refrescarUI();
+        window.limpiarFormularioParadaUI();
+        alert(">>> [ÉXITO]: Parada actualizada correctamente en la base local.");
+    } else {
+        // MODO CREACIÓN
+        window.agregarParadaLocal({
+            destinatario,
+            direccion,
+            telefono,
+            ssc,
+            cuotaModeradora
+        });
+        window.limpiarFormularioParadaUI();
+        alert(">>> [ÉXITO]: Parada guardada correctamente.");
+    }
 };

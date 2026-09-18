@@ -149,3 +149,22 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
         marker.setIcon(nuevoIcono);
     }
 }
+// BINDING GLOBAL PARA ABRIR EL FORMULARIO DESDE EL BOTÓN DEL INFOWINDOW
+window.cargarEdicionDesdePin = function(idParada) {
+    if (typeof window.navegarA === "function") {
+        window.navegarA("vistas/ruta/ruta-activa.html");
+    } else {
+        const pestanaRuta = document.getElementById("pestana-ruta-activa");
+        if (pestanaRuta) {
+            document.querySelectorAll(".contenedor-pestana").forEach((p) => p.classList.remove("activa"));
+            document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
+            pestanaRuta.classList.add("activa");
+        }
+    }
+
+    setTimeout(() => {
+        if (typeof window.prepararEdicionParadaUI === "function") {
+            window.prepararEdicionParadaUI(idParada);
+        }
+    }, 120);
+};

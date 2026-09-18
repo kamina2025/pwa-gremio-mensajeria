@@ -6,7 +6,12 @@
 import { desplegarZonaMensajeroEnMapa } from "./mapa-mensajero-zonas.js";
 import { trazarPolilineaRuta } from "./mapa-rutas.js";
 import { renderizarMarcadoresInteractivos } from "./mapa-marcadores.js";
-import { registrarEventosClicMapa } from "./mapa-eventos.js";
+import { 
+    registrarEventosClicMapa, 
+    ejecutarBusquedaDireccion, 
+    toggleBuscadorMapaUI, 
+    activarModoSeleccionMapaUI 
+} from "./mapa-eventos.js";
 
 window.mapaMensajero = null;
 window.renderRutasMensajero = null;
@@ -14,9 +19,20 @@ window.marcadoresRutaMensajero = [];
 window.infoWindowMensajero = null;
 window.pendientesParaRenderizar = null;
 
+// Re-exportar funciones telemáticas y de eventos para compatibilidad de módulos
+export { 
+    ejecutarBusquedaDireccion, 
+    toggleBuscadorMapaUI, 
+    activarModoSeleccionMapaUI, 
+    registrarEventosClicMapa 
+};
+
+/**
+ * Inicializa el lienzo de Google Maps con la estética Cyberpunk y registra los escuchadores.
+ */
 export function inicializarMapaMensajero() {
     if (typeof google === "undefined" || !google.maps || !google.maps.InfoWindow) {
-        console.warn("[MAPA_MENSAJERO]: Esperando SDK de Google Maps...");
+        console.warn("[MAPA_MENSAJERO]: Esperando a que cargue el SDK de Google Maps...");
         return;
     }
 
@@ -41,7 +57,8 @@ export function inicializarMapaMensajero() {
                 { featureType: "water", elementType: "geometry", stylers: [{ color: "#040205" }] }
             ]
         });
-        // FIX: Forzar a Google Maps a recalcular el tamaño del lienzo
+
+        // Evento para asegurar ajuste correcto del lienzo al cargar
         setTimeout(() => {
             if (window.mapaMensajero && typeof google !== "undefined") {
                 google.maps.event.trigger(window.mapaMensajero, "resize");
@@ -59,7 +76,7 @@ export function inicializarMapaMensajero() {
             desplegarZonaMensajeroEnMapa(window.mapaMensajero);
         }
 
-        // Registrar listener de creación interactiva de paradas al hacer clic
+        // Suscripción al listener para capturar clics en el mapa
         registrarEventosClicMapa((nuevaParada) => {
             if (typeof window.agregarParadaLocal === "function") {
                 window.agregarParadaLocal(nuevaParada);
@@ -76,6 +93,9 @@ export function inicializarMapaMensajero() {
     }
 }
 
+/**
+ * Actualiza los marcadores, trayectos y polígonos sobre el lienzo del mapa.
+ */
 export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     if (!window.mapaMensajero || typeof google === "undefined" || !google.maps) {
         window.pendientesParaRenderizar = { listaPedidos, indiceActivo };
@@ -87,10 +107,10 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
         desplegarZonaMensajeroEnMapa(window.mapaMensajero, zonaDetectada);
     }
 
-    // Trazar línea de ruta
+    // Trazar línea de ruta en polilínea
     trazarPolilineaRuta(listaPedidos);
 
-    // Dibujar marcadores
+    // Renderizar marcadores de paradas sobre el mapa
     renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, () => {
         if (typeof window.refrescarUI === "function") {
             window.refrescarUI();
@@ -100,5 +120,6 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     });
 }
 
+// Vinculación explicita a window para compatibilidad global
 window.inicializarMapaMensajero = inicializarMapaMensajero;
 window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;

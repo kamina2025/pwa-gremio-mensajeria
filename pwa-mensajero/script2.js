@@ -32,6 +32,9 @@ import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
 import { procesarPayloadOStorage, buscarIndiceActivo } from "./modulos/mensajero-rutas.js";
 
+// ⚡ IMPORTANTE: Importar el controlador de mapa para registrar las funciones del mapa y mutaciones neón en `window`
+import "./modulos/mapa/mapa-controlador.js";
+
 console.log(" 🟢 [script2.js] Orquestador PWA modularizado cargado.");
 
 // --- ESTADOS GLOBALES ---

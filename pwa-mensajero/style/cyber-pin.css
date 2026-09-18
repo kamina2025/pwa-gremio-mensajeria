@@ -1,0 +1,152 @@
+/* ==========================================================================
+   CYBERPUNK MAP PIN MARKER - MUTABLE STATES
+   ========================================================================== */
+
+:root {
+  --pin-bg: #0d1117;
+  --pin-border-width: 1.5px;
+}
+
+/* Contenedor Principal del Pin */
+.cyber-pin-marker {
+  position: relative;
+  width: 42px;
+  height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  cursor: pointer;
+  font-family: var(--font-machine, monospace); /* */
+  user-select: none;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cyber-pin-marker:hover {
+  transform: translateY(-4px) scale(1.08);
+  z-index: 999;
+}
+
+/* Cuerpo Hexagonal/Trapezoidal del Pin */
+.pin-body {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  background-color: var(--pin-bg);
+  border: var(--pin-border-width) solid var(--state-color, var(--neon-blue));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+  /* Recorte Sci-Fi en las esquinas opuestas */
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); /* */
+  filter: drop-shadow(0 0 6px var(--state-glow, rgba(0, 229, 255, 0.4))); /*[cite: 2] */
+}
+
+/* Punta del marcador apuntando a la coordenada GPS */
+.pin-pointer {
+  width: 10px;
+  height: 10px;
+  background-color: var(--state-color, var(--neon-blue));
+  margin-top: -2px;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  filter: drop-shadow(0 0 4px var(--state-color));
+}
+
+/* Tipografía de la secuencia (ej: Parada 01, 02) */
+.pin-index {
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: #ffffff;
+  text-shadow: 0 0 4px var(--state-color);
+}
+
+.pin-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--state-color);
+}
+
+/* Animación de Onda de Radar / Pulse */
+.pin-pulse {
+  display: none;
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  background: var(--state-color);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.5;
+  z-index: -1;
+}
+
+@keyframes cyber-radar {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+}
+
+/* ==========================================================================
+   MUTACIONES SEGÚN EL ESTADO (`data-state`)
+   ========================================================================== */
+
+/* 1. CREACIÓN / DRAFT */
+.cyber-pin-marker[data-state="creacion"] {
+  --state-color: var(--neon-purple, #b359ff); /* */
+  --state-glow: rgba(179, 89, 255, 0.5);
+}
+
+/* 2. ASIGNACIÓN */
+.cyber-pin-marker[data-state="asignado"] {
+  --state-color: var(--neon-blue, #00e5ff); /*[cite: 1, 2] */
+  --state-glow: rgba(0, 229, 255, 0.5);
+}
+
+/* 3. EN CAMINO (Activo con animación de radar) */
+.cyber-pin-marker[data-state="en-camino"] {
+  --state-color: var(--amber-alert, #ffb300); /*[cite: 1] */
+  --state-glow: rgba(255, 179, 0, 0.6);
+}
+.cyber-pin-marker[data-state="en-camino"] .pin-pulse {
+  display: block;
+  animation: cyber-radar 1.6s infinite ease-out;
+}
+
+/* 4. EN EL PUNTO DE LLEGADA */
+.cyber-pin-marker[data-state="en-punto"] {
+  --state-color: var(--neon-green, #00ff66); /*[cite: 1] */
+  --state-glow: rgba(0, 255, 102, 0.8);
+}
+.cyber-pin-marker[data-state="en-punto"] .pin-body {
+  animation: parpadeo 1.2s infinite alternate; /*[cite: 1] */
+}
+
+/* 5. ENTREGADO / COMPLETADO */
+.cyber-pin-marker[data-state="entregado"] {
+  --state-color: #00ffcc;
+  --state-glow: rgba(0, 255, 204, 0.3);
+  opacity: 0.8;
+}
+
+/* 6. NO ENTREGADO / FALLIDO CON CAUSAL */
+.cyber-pin-marker[data-state="no-entregado"] {
+  --state-color: var(--alert-fail, #ff3333); /*[cite: 1] */
+  --state-glow: rgba(255, 51, 51, 0.8);
+}
+
+/* Badge de Causal para Paradas Fallidas */
+.cyber-pin-marker[data-state="no-entregado"]::after {
+  content: attr(data-causal);
+  position: absolute;
+  top: -14px;
+  background: var(--alert-fail, #ff3333); /*[cite: 1] */
+  color: #000;
+  font-size: 0.6rem;
+  font-weight: bold;
+  padding: 1px 4px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  clip-path: polygon(0 0, 100% 0, 85% 100%, 0 100%); /*[cite: 2] */
+}

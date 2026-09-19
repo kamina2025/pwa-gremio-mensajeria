@@ -36,7 +36,9 @@
     white-space: nowrap;
     display: flex;
     align-items: center;
+    justify-content: space-between; /* Alinea texto a la izq y flecha a la der */
     gap: 10px;
+    width: 100%;
 }
 
 .nav-btn i {
@@ -70,19 +72,20 @@
     opacity: 0;
 }
 
-.menu-item-has-submenu.open .submenu {
-    max-height: 200px;
+/* Selector ajustado con > para afectar solo al subménú hijo directo */
+.menu-item-has-submenu.open > .submenu {
+    max-height: 300px;
     opacity: 1;
     margin-top: 5px;
 }
 
 .arrow-icon {
     margin-left: auto;
-    font-size: 0.8rem !important;
+    font-size: 0.7rem !important;
     transition: transform 0.3s ease;
 }
 
-.menu-item-has-submenu.open .arrow-icon {
+.menu-item-has-submenu.open > .btn-submenu-toggle .arrow-icon {
     transform: rotate(180deg);
 }
 

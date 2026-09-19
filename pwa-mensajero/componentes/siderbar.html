@@ -1,43 +1,62 @@
-<!-- pwa-mensajero/componentes/siderbar.html -->
+<!-- pwa-mensajero/componentes/sidebar.html -->
 <aside class="sidebar">
+
+    <!-- SECCIÓN 1: RUTA -->
     <div class="menu-item-has-submenu">
-        <!-- Se agrega la clase nav-btn y el data-target coincidente con la vista -->
-        <button class="nav-btn btn-submenu-toggle">
+        <button class="nav-btn btn-submenu-toggle" onclick="manejarClicSubmenu(this, event)">
             <span>_RUTA</span>
+            <i class="arrow-icon">▼</i>
         </button>
         <div class="submenu">
-            <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-crear">
-            <span>_CREAR
-                </span>
+            <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-crear" onclick="manejarNavegacionSidebar(this)">
+                <span>_CREAR</span>
             </button>
-            <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-activa">
-            <span>_ACTIVAS
-                </span>
+            <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-activa" onclick="manejarNavegacionSidebar(this)">
+                <span>_ACTIVAS</span>
             </button>
-            <button class="nav-btn sub-nav-btn" data-target="mapa-fullscreen-container">
-            <span>_MAPA
-                </span>
+            <button class="nav-btn sub-nav-btn" data-target="mapa-fullscreen-container" onclick="manejarNavegacionSidebar(this)">
+                <span>_MAPA</span>
             </button>
         </div>
-        <button class="nav-btn btn-submenu-toggle">
+    </div>
+
+    <!-- SECCIÓN 2: MONEDERO -->
+    <div class="menu-item-has-submenu">
+        <button class="nav-btn btn-submenu-toggle" onclick="manejarClicSubmenu(this, event)">
             <span>_MONEDERO</span>
+            <i class="arrow-icon">▼</i>
         </button>
-         <div class="submenu">
-            <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-saldo">
-            <span>_SALDO
-                </span>
+        <div class="submenu">
+            <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-saldo" onclick="manejarNavegacionSidebar(this)">
+                <span>_SALDO</span>
             </button>
-            <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-historial">
-            <span>_HISTORIAL
-                </span>
+            <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-historial" onclick="manejarNavegacionSidebar(this)">
+                <span>_HISTORIAL</span>
             </button>
         </div>
-        <button class="nav-btn" data-target="pestana-reportes">
+    </div>
+
+    <!-- SECCIÓN 3: REPORTES -->
+    <div class="menu-item-has-submenu">
+        <button class="nav-btn btn-submenu-toggle" onclick="manejarClicSubmenu(this, event)">
             <span>_REPORTES</span>
+            <i class="arrow-icon">▼</i>
         </button>
-        <button class="nav-btn" data-target="pestana-reportes">
+        <div class="submenu">
+            <button class="nav-btn sub-nav-btn" data-target="pestana-notificaciones-plantillas" onclick="manejarNavegacionSidebar(this)">
+                <span>_PLANILLAS</span>
+            </button>
+            <button class="nav-btn sub-nav-btn" data-target="pestana-notificaciones-reportes" onclick="manejarNavegacionSidebar(this)">
+                <span>_REPORTES</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- SECCIÓN INDEPENDIENTE: CERRAR / SALIR -->
+    <div class="menu-item">
+        <button class="nav-btn" data-target="pestana-reportes" onclick="manejarNavegacionSidebar(this)">
             <span>_CERRAR</span>
         </button>
-        
     </div>
+
 </aside>

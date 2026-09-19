@@ -1,5 +1,5 @@
 /**
- * PROTOCOLO MACONDO - GESTOR DE MARCADORES E INFOWINDOWS CYBERPUNK
+ * PROTOCOLO MACONDO - GESTOR DE MARCADORES E INFOWINDOWS CYBERPUNK CON MODAL DE EVIDENCIAS
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
  */
 
@@ -21,13 +21,128 @@ function sanitizarDireccionContexto(direccion) {
 }
 
 /**
+ * Inyecta y despliega el modal flotante para la gestión completa y subida de evidencias
+ */
+function abrirModalGestionParada(pedido, indice) {
+    let modalExistente = document.getElementById("modal-gestion-parada-mapa");
+    if (modalExistente) {
+        modalExistente.remove();
+    }
+
+    const modalHTML = `
+        <div id="modal-gestion-parada-mapa" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 7, 15, 0.85); backdrop-filter: blur(5px); z-index: 99999; display: flex; align-items: center; justify-content: center; font-family: 'Fira Code', monospace;">
+            <div style="background: #0d1117; border: 2px solid #00e5ff; box-shadow: 0 0 20px rgba(0,229,255,0.3); border-radius: 8px; width: 90%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px; color: #e6edf3;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px;">
+                    <h3 style="color: #00e5ff; margin: 0; font-size: 1.1rem; text-transform: uppercase;">⚡ [PARADA #${indice}] GESTIÓN & EVIDENCIAS</h3>
+                    <button onclick="document.getElementById('modal-gestion-parada-mapa').remove()" style="background: transparent; border: none; color: #ff3366; font-size: 1.5rem; cursor: pointer; font-weight: bold;">&times;</button>
+                </div>
+
+                <form id="form-gestion-pin-mapa" style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="hidden" name="id" value="${pedido.id || ''}">
+
+                    <div>
+                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 3px;">DESTINATARIO:</label>
+                        <input type="text" id="modal-destinatario" value="${pedido.destinatario || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
+                    </div>
+
+                    <div>
+                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 3px;">DIRECCIÓN:</label>
+                        <input type="text" id="modal-direccion" value="${pedido.direccion || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
+                    </div>
+
+                    <div>
+                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 3px;">TELÉFONO:</label>
+                        <input type="text" id="modal-telefono" value="${pedido.telefono || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
+                    </div>
+
+                    <div>
+                        <label style="color: #ffb300; font-size: 0.8rem; display: block; margin-bottom: 3px;">ESTADO DE LA PARADA:</label>
+                        <select id="modal-estado" style="width: 100%; background: #161b22; border: 1px solid #ffb300; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;">
+                            <option value="en-camino" ${pedido.estado === 'en-camino' ? 'selected' : ''}>EN CAMINO</option>
+                            <option value="entregado" ${pedido.estado === 'entregado' ? 'selected' : ''}>ENTREGADO</option>
+                            <option value="no-entregado" ${pedido.estado === 'no-entregado' ? 'selected' : ''}>NO ENTREGADO</option>
+                        </select>
+                    </div>
+
+                    <fieldset style="border: 1px dashed #00e5ff; border-radius: 6px; padding: 10px; margin-top: 5px;">
+                        <legend style="color: #00e5ff; font-size: 0.8rem; padding: 0 5px;">📸 CARGA DE EVIDENCIAS</legend>
+                        
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 0.75rem; color: #d2a8ff; display: block;">📞 Registro / Evidencia de Llamada:</label>
+                            <input type="file" id="evidencia-llamada" accept="image/*,audio/*,.pdf" style="font-size: 0.75rem; color: #8b949e; margin-top: 2px;" />
+                        </div>
+
+                        <div style="margin-bottom: 8px;">
+                            <label style="font-size: 0.75rem; color: #d2a8ff; display: block;">🏠 Foto de Fachada:</label>
+                            <input type="file" id="evidencia-fachada" accept="image/*" capture="environment" style="font-size: 0.75rem; color: #8b949e; margin-top: 2px;" />
+                        </div>
+
+                        <div>
+                            <label style="font-size: 0.75rem; color: #d2a8ff; display: block;">🧾 Foto de Tirilla / Comprobante:</label>
+                            <input type="file" id="evidencia-tirilla" accept="image/*" capture="environment" style="font-size: 0.75rem; color: #8b949e; margin-top: 2px;" />
+                        </div>
+                    </fieldset>
+
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button type="button" onclick="document.getElementById('modal-gestion-parada-mapa').remove()" style="flex: 1; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">CANCELAR</button>
+                        <button type="submit" style="flex: 1; background: #00e5ff; border: none; color: #05070f; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">GUARDAR CAMBIOS</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML("beforeend", modalHTML);
+
+    // Manejador del envío del formulario
+    document.getElementById("form-gestion-pin-mapa").addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const nuevoEstado = document.getElementById("modal-estado").value;
+        pedido.destinatario = document.getElementById("modal-destinatario").value;
+        pedido.direccion = document.getElementById("modal-direccion").value;
+        pedido.telefono = document.getElementById("modal-telefono").value;
+        pedido.estado = nuevoEstado;
+
+        const archivoLlamada = document.getElementById("evidencia-llamada").files[0];
+        const archivoFachada = document.getElementById("evidencia-fachada").files[0];
+        const archivoTirilla = document.getElementById("evidencia-tirilla").files[0];
+
+        // Construcción de la carga útil para la API REST en PHP
+        const formData = new FormData();
+        formData.append("id_parada", pedido.id || `#PNT-${indice}`);
+        formData.append("destinatario", pedido.destinatario);
+        formData.append("direccion", pedido.direccion);
+        formData.append("telefono", pedido.telefono);
+        formData.append("estado", nuevoEstado);
+
+        if (archivoLlamada) formData.append("evidencia_llamada", archivoLlamada);
+        if (archivoFachada) formData.append("evidencia_fachada", archivoFachada);
+        if (archivoTirilla) formData.append("evidencia_tirilla", archivoTirilla);
+
+        try {
+            if (typeof window.guardarEvidenciasParada === "function") {
+                await window.guardarEvidenciasParada(formData);
+            } else {
+                console.log("Datos/Evidencias guardados localmente:", Object.fromEntries(formData));
+            }
+
+            // Actualizar marcador visual en el mapa
+            mutarMarcadorPorId(pedido.id || `#PNT-${indice}`, nuevoEstado);
+
+            document.getElementById("modal-gestion-parada-mapa").remove();
+            alert("Parada y evidencias actualizadas correctamente.");
+        } catch (err) {
+            console.error("Error al procesar la actualización:", err);
+            alert("Ocurrió un error al guardar los cambios.");
+        }
+    });
+}
+
+/**
  * Asigna o actualiza la colección de marcadores interactivos en Google Maps
- * @param {Array} listaPedidos - Arreglo de objetos de tipo parada/pedido
- * @param {number} indiceActivo - Índice de la parada en curso
- * @param {Function} callbackActualizacion - Evento ejecutado tras Drag & Drop
  */
 export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, callbackActualizacion) {
-    // 1. Limpiar marcadores previos del mapa
     if (Array.isArray(window.marcadoresRutaMensajero)) {
         window.marcadoresRutaMensajero.forEach((m) => m.setMap(null));
     }
@@ -39,21 +154,18 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
     const geocoder = new google.maps.Geocoder();
 
     listaPedidos.forEach((pedido, idx) => {
-        // Mapeo automático del estado según reglas de negocio
         let estadoCalculado = pedido.estado ? pedido.estado.toLowerCase() : 'asignado';
         
         if (idx === indiceActivo && estadoCalculado !== 'entregado' && estadoCalculado !== 'no-entregado') {
             estadoCalculado = 'en-camino';
         }
 
-        // Configurar icono dinámico Cyberpunk según estado mutado
         const iconoCyberpunk = crearIconoParadaCyberpunkSVG({
             estado: estadoCalculado,
             secuencia: idx + 1,
             causal: pedido.causal || ''
         });
 
-        // Función interna para instanciar el marcador
         const crearMarcadorEnPosicion = (latLngPos) => {
             bounds.extend(latLngPos);
 
@@ -65,11 +177,10 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 title: `[STOP #${idx + 1}] ${pedido.destinatario || "Cliente"}`
             });
 
-            // Almacenar metadatos en la instancia
             marker.set('idParada', pedido.id || `#PNT-${idx + 1}`);
             marker.set('secuencia', idx + 1);
 
-            // Plantilla Infowindow Cyberpunk
+            // Plantilla para InfoWindow al pasar el mouse
             const templateInfo = `
                 <div style="background: #0d1117; color: #fff; padding: 10px; border: 1px solid #00e5ff; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 4px; min-width: 180px;">
                     <div style="color: #00e5ff; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #2d3748; padding-bottom: 2px;">
@@ -80,8 +191,8 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                     <div style="margin-top: 4px;">
                         <span style="color: #ffb300;">⚡ ESTADO:</span> 
                         <strong style="text-transform: uppercase;">${estadoCalculado}</strong>
-                        ${pedido.causal ? `<br/><span style="color: #ff3333;">⚠️ CAUSAL: ${pedido.causal}</span>` : ''}
                     </div>
+                    <div style="margin-top: 6px; font-size: 0.7rem; color: #00e5ff; text-align: center;">💡 Haz click en el pin para gestionar/evidencias</div>
                 </div>`;
 
             marker.addListener("mouseover", () => {
@@ -95,7 +206,12 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 if (window.infoWindowMensajero) window.infoWindowMensajero.close();
             });
 
-            // Evento Drag & Drop para geocodificación inversa al mover el pin
+            // CLICK EN PIN: Abre el modal completo de edición y subida de evidencias
+            marker.addListener("click", () => {
+                abrirModalGestionParada(pedido, idx + 1);
+            });
+
+            // Drag & Drop
             marker.addListener("dragend", (event) => {
                 const nuevaLat = event.latLng.lat();
                 const nuevaLng = event.latLng.lng();
@@ -117,7 +233,6 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             window.mapaMensajero.fitBounds(bounds);
         };
 
-        // 2. Evaluar si la parada ya posee coordenadas o requiere Geocoding
         if (pedido.lat && pedido.lng) {
             const pos = new google.maps.LatLng(parseFloat(pedido.lat), parseFloat(pedido.lng));
             crearMarcadorEnPosicion(pos);
@@ -133,7 +248,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 }
 
 /**
- * Mutar el marcador en tiempo real cuando el usuario cambia el estado en la lista
+ * Mutar el marcador en tiempo real cuando el usuario cambia el estado
  */
 export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
     if (!window.marcadoresRutaMensajero) return;
@@ -149,7 +264,8 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
         marker.setIcon(nuevoIcono);
     }
 }
-// BINDING GLOBAL PARA ABRIR EL FORMULARIO DESDE EL BOTÓN DEL INFOWINDOW
+
+// BINDING GLOBAL PARA REDIRECCIÓN O EDICIÓN EXTERNA
 window.cargarEdicionDesdePin = function(idParada) {
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/ruta-activa.html");

@@ -1,5 +1,5 @@
 /**
- * PROTOCOLO MACONDO - GESTOR DE MARCADORES E INFOWINDOWS CYBERPUNK CON MODAL DE EVIDENCIAS
+ * PROTOCOLO MACONDO - GESTOR DE MARCADORES E INFOWINDOWS CYBERPUNK CON MODAL Y LLAMADA NATIVA
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
  */
 
@@ -21,6 +21,20 @@ function sanitizarDireccionContexto(direccion) {
 }
 
 /**
+ * Invoca el marcador de llamadas nativo de Android / Dispositivos Móviles
+ * @param {string} numeroTelefono 
+ */
+window.iniciarLlamadaAndroid = function(numeroTelefono) {
+    if (!numeroTelefono || numeroTelefono.trim() === "" || numeroTelefono === "N/A") {
+        alert("⚠️ No hay un número de teléfono válido para esta parada.");
+        return;
+    }
+    // Elimina caracteres que no sean dígitos ni el símbolo '+'
+    const numeroLimpio = numeroTelefono.replace(/[^\d+]/g, '');
+    window.location.href = `tel:${numeroLimpio}`;
+};
+
+/**
  * Inyecta y despliega el modal flotante para la gestión completa y subida de evidencias
  */
 function abrirModalGestionParada(pedido, indice) {
@@ -34,7 +48,7 @@ function abrirModalGestionParada(pedido, indice) {
             <div style="background: #0d1117; border: 2px solid #00e5ff; box-shadow: 0 0 20px rgba(0,229,255,0.3); border-radius: 8px; width: 90%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px; color: #e6edf3;">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px;">
                     <h3 style="color: #00e5ff; margin: 0; font-size: 1.1rem; text-transform: uppercase;">⚡ [PARADA #${indice}] GESTIÓN & EVIDENCIAS</h3>
-                    <button onclick="document.getElementById('modal-gestion-parada-mapa').remove()" style="background: transparent; border: none; color: #ff3366; font-size: 1.5rem; cursor: pointer; font-weight: bold;">&times;</button>
+                    <button type="button" onclick="document.getElementById('modal-gestion-parada-mapa').remove()" style="background: transparent; border: none; color: #ff3366; font-size: 1.5rem; cursor: pointer; font-weight: bold;">&times;</button>
                 </div>
 
                 <form id="form-gestion-pin-mapa" style="display: flex; flex-direction: column; gap: 12px;">
@@ -52,7 +66,14 @@ function abrirModalGestionParada(pedido, indice) {
 
                     <div>
                         <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 3px;">TELÉFONO:</label>
-                        <input type="text" id="modal-telefono" value="${pedido.telefono || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="text" id="modal-telefono" value="${pedido.telefono || ''}" style="flex: 1; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
+                            <button type="button" onclick="window.iniciarLlamadaAndroid(document.getElementById('modal-telefono').value)" title="Llamar a cliente" style="background: #238636; border: 1px solid #2ea043; color: #fff; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <div>
@@ -108,7 +129,7 @@ function abrirModalGestionParada(pedido, indice) {
         const archivoFachada = document.getElementById("evidencia-fachada").files[0];
         const archivoTirilla = document.getElementById("evidencia-tirilla").files[0];
 
-        // Construcción de la carga útil para la API REST en PHP
+        // Carga útil para la API REST en PHP
         const formData = new FormData();
         formData.append("id_parada", pedido.id || `#PNT-${indice}`);
         formData.append("destinatario", pedido.destinatario);
@@ -127,7 +148,6 @@ function abrirModalGestionParada(pedido, indice) {
                 console.log("Datos/Evidencias guardados localmente:", Object.fromEntries(formData));
             }
 
-            // Actualizar marcador visual en el mapa
             mutarMarcadorPorId(pedido.id || `#PNT-${indice}`, nuevoEstado);
 
             document.getElementById("modal-gestion-parada-mapa").remove();
@@ -180,7 +200,6 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             marker.set('idParada', pedido.id || `#PNT-${idx + 1}`);
             marker.set('secuencia', idx + 1);
 
-            // Plantilla para InfoWindow al pasar el mouse
             const templateInfo = `
                 <div style="background: #0d1117; color: #fff; padding: 10px; border: 1px solid #00e5ff; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 4px; min-width: 180px;">
                     <div style="color: #00e5ff; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #2d3748; padding-bottom: 2px;">
@@ -192,7 +211,6 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                         <span style="color: #ffb300;">⚡ ESTADO:</span> 
                         <strong style="text-transform: uppercase;">${estadoCalculado}</strong>
                     </div>
-                    <div style="margin-top: 6px; font-size: 0.7rem; color: #00e5ff; text-align: center;">💡 Haz click en el pin para gestionar/evidencias</div>
                 </div>`;
 
             marker.addListener("mouseover", () => {
@@ -206,12 +224,10 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 if (window.infoWindowMensajero) window.infoWindowMensajero.close();
             });
 
-            // CLICK EN PIN: Abre el modal completo de edición y subida de evidencias
             marker.addListener("click", () => {
                 abrirModalGestionParada(pedido, idx + 1);
             });
 
-            // Drag & Drop
             marker.addListener("dragend", (event) => {
                 const nuevaLat = event.latLng.lat();
                 const nuevaLng = event.latLng.lng();
@@ -265,7 +281,7 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
     }
 }
 
-// BINDING GLOBAL PARA REDIRECCIÓN O EDICIÓN EXTERNA
+// BINDING GLOBAL
 window.cargarEdicionDesdePin = function(idParada) {
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/ruta-activa.html");

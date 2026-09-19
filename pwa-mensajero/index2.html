@@ -37,7 +37,6 @@
             <!-- Contenedor de Vistas y Pestañas (Main Area) -->
             <main class="main-content main-container">
                 <!-- Vista: Ruta Activa (Inyectada dinámicamente) -->
-                <!-- submenu de ruta-->
                 <div
                     id="pestana-ruta-activa"
                     class="contenedor-pestana"
@@ -47,58 +46,58 @@
                     id="mapa-fullscreen-container"
                     class="contenedor-pestana"
                     data-include="vistas/ruta/mapa-activa.html"></div>
-                <!-- submenu de monedero-->
+                <!-- Submenú de Monedero -->
                 <div
                     id="pestana-monedero-historial"
                     class="contenedor-pestana"
                     data-include="vistas/monedero/historial.html"></div>
-
                 <div
                     id="pestana-monedero-saldo"
                     class="contenedor-pestana"
                     data-include="vistas/monedero/saldo.html"></div>
-                <!-- menu de reportes-->
+                <!-- Menú de Reportes -->
                 <div
                     id="pestana-reportes"
                     class="contenedor-pestana"
                     data-include="vistas/notificaciones/reportes.html"></div>
             </main>
         </div>
-        <!-- CONTENEDOR DE LA BARRA INFERIOR DINÁMICA -->
-        <nav id="contenedor-menu"></nav>
 
-        <!-- SCRIPT PARA CARGAR LA BARRA DINÁMICAMENTE -->
+        <!-- UNICO CONTENEDOR DE BARRA INFERIOR FLOTANTE A NIVEL RAÍZ (EVITA ELEMENTOS DUPLICADOS) -->
+        <nav id="contenedor-menu" class="barra-inferior-global"></nav>
+
         <script>
-            document.addEventListener("DOMContentLoaded", () => {
+            /**
+             * Carga dinámicamente el componente de barra inferior indicado.
+             */
+            window.cargarBarraInferior = function (rutaComponente) {
                 const contenedor = document.getElementById("contenedor-menu");
                 if (!contenedor) return;
 
-                fetch("componentes/barra-inferior/inicio-barra-infe.html")
+                // Si ya está cargada la misma ruta, evitamos peticiones duplicadas
+                if (contenedor.dataset.componenteActual === rutaComponente) return;
+
+                fetch(rutaComponente)
                     .then((response) => {
                         if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
+                            throw new Error(`Error HTTP: ${response.status}`);
                         }
                         return response.text();
                     })
                     .then((html) => {
-                        // 1. Insertamos el HTML dentro del contenedor
                         contenedor.innerHTML = html;
-
-                        // 2. Activamos el botón de la página actual de forma automática
-                        const paginaActual = window.location.pathname.split("/").pop() || "index2.html";
-                        const enlaces = contenedor.querySelectorAll(".nav-item");
-
-                        enlaces.forEach((enlace) => {
-                            if (enlace.getAttribute("href") === paginaActual) {
-                                enlace.classList.add("active");
-                            }
-                        });
+                        contenedor.dataset.componenteActual = rutaComponente;
                     })
                     .catch((error) => console.error("Error al cargar la barra inferior:", error));
+            };
+
+            document.addEventListener("DOMContentLoaded", () => {
+                // Carga inicial de la barra por defecto
+                window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
             });
         </script>
 
-        <!-- Modulos de Control JavaScript -->
+        <!-- Módulos de Control JavaScript -->
         <script src="./app.js"></script>
         <!-- SDK de Mapas en la raíz de la SPA -->
         <script

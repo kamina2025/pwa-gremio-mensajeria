@@ -51,14 +51,19 @@ body {
 }
 
 .dashboard-container.collapsed {
-    grid-template-columns: 0px 1fr;
+    grid-template-columns: 1px 1fr;
 }
 
+/* Unificación y anclaje de posición para el área principal */
 .main-container,
 .main-content {
     grid-area: main;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
     overflow: hidden;
-    padding: 5px;
+    padding: 1px;
     height: 100%;
     width: 100%;
 }
@@ -116,4 +121,33 @@ body {
 }
 .label {
     color: #00f3ff;
+}
+
+/* ==========================================================================
+   ENVOLTORIO FLOTANTE Y CENTRADO DE LA BARRA INFERIOR
+   ========================================================================== */
+.barra-inferior-global {
+    position: fixed;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 92%;
+    max-width: 480px;
+    z-index: 9999;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Se eliminan 'background' y 'border' de aquí para evitar la franja o barra fantasma por debajo */
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Sincronización en escritorio cuando el sidebar está desplegado */
+@media (min-width: 768px) {
+    .dashboard-container:not(.collapsed) ~ .barra-inferior-global {
+        left: calc(50% + 120px);
+    }
 }

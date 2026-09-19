@@ -20,8 +20,8 @@ import {
     capturarCoordenadasGPS,
     sincronizarYRenderizarPool,
     sincronizarYRenderizarTransito,
-    eliminarParadaLocal,        // 👈 FIX: Importación agregada
-    borrarRutaCompletaLocal      // 👈 FIX: Importación agregada
+    eliminarParadaLocal,
+    borrarRutaCompletaLocal
 } from "./modulos/mensajero-persistencia.js";
 
 import { inicializarMapaMensajero } from "./modulos/mapa/mapa-visor.js";
@@ -55,10 +55,12 @@ function inicializarConsolaYMenu() {
     inicializarControlSidebar();
 
     if (window.ImportadorMasivoMensajero && typeof window.ImportadorMasivoMensajero.vincularEscuchas === "function") {
+        console.log(" 📥 [PWA_INIT]: Vinculando escuchas del importador masivo...");
         window.ImportadorMasivoMensajero.vincularEscuchas();
     }
 
     try {
+        console.log(" 🗺️ [PWA_INIT]: Invocando inicialización del visor del mapa...");
         inicializarMapaMensajero();
     } catch (err) {
         console.warn(" ⚠️ [MAPA]: Error inicializando el mapa visor:", err);
@@ -76,15 +78,22 @@ function inicializarConsolaYMenu() {
     if (typeof sincronizarYRenderizarTransito === "function") sincronizarYRenderizarTransito();
 }
 
-document.addEventListener("modulosCargados", inicializarConsolaYMenu);
+document.addEventListener("modulosCargados", () => {
+    console.log(" 🔔 [EVENT]: Evento 'modulosCargados' capturado en script2.js.");
+    inicializarConsolaYMenu();
+});
+
 document.addEventListener("DOMContentLoaded", () => {
+    console.log(" 📄 [EVENT]: DOMContentLoaded disparado.");
     if (!document.querySelector("[data-include]")) {
+        console.log(" ⚡ [EVENT]: Carga estática detectada (sin data-include). Ejecutando inicializarConsolaYMenu.");
         inicializarConsolaYMenu();
     }
 });
 
 // --- GESTIÓN DE RUTAS ---
 function inicializarRutaPayload() {
+    console.log(" 📦 [RUTAS]: Procesando payload o lectura de almacenamiento local...");
     listaPedidosGlobal = procesarPayloadOStorage();
     determinarSiguientePedidoActivo();
     refrescarUI();
@@ -92,13 +101,16 @@ function inicializarRutaPayload() {
 
 function determinarSiguientePedidoActivo() {
     indicePedidoActivo = buscarIndiceActivo(listaPedidosGlobal);
+    console.log(` 🎯 [RUTAS]: Indice activo determinado -> ${indicePedidoActivo}`);
 }
 
 function refrescarUI() {
+    console.log(" 🎨 [UI_REFRESH]: Re-renderizando consola de operaciones...");
     renderizarConsolaOperaciones(listaPedidosGlobal, indicePedidoActivo, llamadasRealizadas);
 }
 
 function avanzarAlSiguientePedido() {
+    console.log(" ⏭️ [RUTAS]: Avanzando al siguiente pedido...");
     listaPedidosGlobal = obtenerRutaZonificada();
     determinarSiguientePedidoActivo();
     refrescarUI();
@@ -109,6 +121,7 @@ document.addEventListener("click", (e) => {
     // 1. Submenús (Acordeón)
     const btnSubmenu = e.target.closest(".btn-submenu-toggle");
     if (btnSubmenu) {
+        console.log(" 📂 [DELEGACIÓN]: Clic en submenú toggle.");
         e.stopPropagation();
         manejarClicSubmenu(btnSubmenu);
         return;
@@ -117,9 +130,11 @@ document.addEventListener("click", (e) => {
     // 2. Navegación en el Sidebar
     const btnNav = e.target.closest(".sidebar .nav-btn:not(.btn-submenu-toggle)");
     if (btnNav) {
+        console.log(" 🚀 [DELEGACIÓN]: Clic en botón de navegación de Sidebar:", btnNav);
         manejarNavegacionSidebar(btnNav, (targetId) => {
-            if (targetId === "pestana-ruta-activa" && typeof inicializarMapaMensajero === "function") {
-                setTimeout(inicializarMapaMensajero, 100);
+            console.log(` 📍 [SIDEBAR_NAV]: Cambiando vista objetivo -> ${targetId}`);
+            if (typeof window.alternarVistaPestaña === "function") {
+                window.alternarVistaPestaña(targetId);
             }
         });
         return;
@@ -127,10 +142,12 @@ document.addEventListener("click", (e) => {
 
     // 3. Modales
     if (e.target.classList.contains("cerrar-modal")) {
+        console.log(" ✖️ [MODAL]: Cerrando modal por botón cerrar.");
         const modal = e.target.closest(".modal-overlay");
         if (modal) modal.classList.remove("activo");
     }
     if (e.target.classList.contains("modal-overlay")) {
+        console.log(" ✖️ [MODAL]: Cerrando modal por clic fuera.");
         e.target.classList.remove("activo");
     }
 
@@ -138,51 +155,123 @@ document.addEventListener("click", (e) => {
     const cardBtn = e.target.closest(".card-btn");
     if (cardBtn) {
         const targetId = cardBtn.getAttribute("data-target");
+        console.log(` 🎴 [CARD_BTN]: Clic en tarjeta con data-target="${targetId}"`);
         if (targetId) {
-            const targetElement = document.getElementById(targetId);
-            if (targetElement && targetElement.classList.contains("contenedor-pestana")) {
-                document.querySelectorAll(".contenedor-pestana").forEach((p) => p.classList.remove("activa"));
-                document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
-                targetElement.classList.add("activa");
-
-                const sidebarNavBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetId}"]`);
-                if (sidebarNavBtn) sidebarNavBtn.classList.add("active");
-
-                if (cardBtn.id === "btn-cargar-ruta" && typeof inicializarMapaMensajero === "function") {
-                    setTimeout(inicializarMapaMensajero, 100);
-                }
+            if (typeof window.alternarVistaPestaña === "function") {
+                window.alternarVistaPestaña(targetId);
             }
         }
     }
 });
 
-// --- BINDINGS EN WINDOW ---
+// --- NAVEGACIÓN SPA Y CONMUTACIÓN DE BARRA INFERIOR ---
+/**
+ * Conmuta la pestaña activa y actualiza la barra inferior correspondiente.
+ * @param {string} targetId - ID del contenedor (ej. 'mapa-fullscreen-container' o 'pestana-ruta-activa')
+ */
+export function alternarVistaPestaña(targetId) {
+    console.log(` 🔄 [ALTERNAR_VISTA]: Iniciando transición a -> #${targetId}`);
+    
+    // 1. Ocultar todas las pestañas y activar la requerida
+    const contenedores = document.querySelectorAll(".contenedor-pestana");
+    contenedores.forEach((c) => c.classList.remove("activa"));
+
+    const objetivo = document.getElementById(targetId);
+    if (objetivo) {
+        objetivo.classList.add("activa");
+        console.log(` ✅ [ALTERNAR_VISTA]: Pestaña #${targetId} marcada como activa.`);
+    } else {
+        console.warn(` ⚠️ [ALTERNAR_VISTA]: No se encontró el contenedor con ID '${targetId}' en el DOM.`);
+    }
+
+    // Actualizar resaltado de botones en sidebar
+    document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
+    const sidebarNavBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetId}"]`);
+    if (sidebarNavBtn) sidebarNavBtn.classList.add("active");
+
+    // 2. Evaluar y conmutar la barra inferior
+    if (targetId === "mapa-fullscreen-container") {
+        console.log(" 🗺️ [BARRA_INFERIOR]: Cargando barra dinámica del MAPA (componentes/barra-inferior/mapa-barra-infe.html)...");
+        if (typeof window.cargarBarraInferior === "function") {
+            window.cargarBarraInferior("componentes/barra-inferior/mapa-barra-infe.html");
+        } else {
+            console.error(" ❌ [BARRA_INFERIOR]: 'window.cargarBarraInferior' no está definida en el entorno global.");
+        }
+
+        // Re-ajustar lienzo de Google Maps
+        setTimeout(() => {
+            if (window.mapaMensajero && typeof google !== "undefined") {
+                console.log(" 📐 [MAPA]: Re-calculando dimensiones del mapa (resize)...");
+                google.maps.event.trigger(window.mapaMensajero, "resize");
+            }
+        }, 150);
+    } else {
+        console.log(" 🏠 [BARRA_INFERIOR]: Cargando barra dinámica INICIO (componentes/barra-inferior/inicio-barra-infe.html)...");
+        if (typeof window.cargarBarraInferior === "function") {
+            window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
+        } else {
+            console.error(" ❌ [BARRA_INFERIOR]: 'window.cargarBarraInferior' no está definida en el entorno global.");
+        }
+    }
+}
+
+/**
+ * Función global para navegar utilizando alias de rutas.
+ * @param {string} rutaVista - Ejemplo: 'vistas/ruta/mapa-activa.html'
+ */
+window.navegarA = function(rutaVista) {
+    console.log(` 🧭 [NAVEGAR_A]: Invocado con la ruta -> ${rutaVista}`);
+    if (rutaVista.includes("mapa-activa")) {
+        alternarVistaPestaña("mapa-fullscreen-container");
+    } else if (rutaVista.includes("ruta-activa")) {
+        alternarVistaPestaña("pestana-ruta-activa");
+    } else if (rutaVista.includes("crear")) {
+        alternarVistaPestaña("pestana-ruta-crear");
+    } else if (rutaVista.includes("historial")) {
+        alternarVistaPestaña("pestana-monedero-historial");
+    } else if (rutaVista.includes("saldo")) {
+        alternarVistaPestaña("pestana-monedero-saldo");
+    } else if (rutaVista.includes("reportes")) {
+        alternarVistaPestaña("pestana-reportes");
+    } else {
+        console.warn(` ⚠️ [NAVEGAR_A]: Ruta no reconocida -> ${rutaVista}`);
+    }
+};
+
+window.alternarVistaPestaña = alternarVistaPestaña;
+
+// --- BINDINGS EN WINDOW PARA OPERACIONES EN BD Y UI ---
 window.refrescarUI = refrescarUI;
 
 window.ejecutarPasoAceptarPedido = function(idPedido) {
+    console.log(` 📥 [OPERACION]: Aceptando pedido -> ${idPedido}`);
     listaPedidosGlobal = actualizarEstadoPedido(idPedido, "EN_CAMINO");
     refrescarUI();
 };
 
 window.ejecutarPasoNotificarLlegada = function(idPedido) {
+    console.log(` 🔔 [OPERACION]: Notificando llegada para pedido -> ${idPedido}`);
     llamadasRealizadas = 0;
     listaPedidosGlobal = actualizarEstadoPedido(idPedido, "LLEGADO");
     refrescarUI();
 };
 
 window.ejecutarPasoFinalizarPedido = async function(idPedido) {
+    console.log(` ✅ [OPERACION]: Finalizando pedido -> ${idPedido}`);
     const coords = await capturarCoordenadasGPS();
     listaPedidosGlobal = actualizarEstadoPedido(idPedido, "FINALIZADO", { coordenadasGPS: coords });
     avanzarAlSiguientePedido();
 };
 
 window.registrarIntentoLlamada = function() {
+    console.log(" 📞 [OPERACION]: Registrando intento de llamada...");
     registrarLlamadaFlujo(() => llamadasRealizadas, (v) => llamadasRealizadas = v, refrescarUI);
 };
 
 window.procesarCargaManualEnlace = function() {
     const inputTxt = document.getElementById("txt-payload-manual");
     if (inputTxt) {
+        console.log(" 📝 [OPERACION]: Cargando enlace/payload manual...");
         cargarRutaDesdeTextoOEnlace(inputTxt.value, (nuevasParadas) => {
             listaPedidosGlobal = nuevasParadas;
             indicePedidoActivo = 0;
@@ -192,6 +281,7 @@ window.procesarCargaManualEnlace = function() {
 };
 
 window.ejecutarProcesamientoIaCloud = function() {
+    console.log(" 🤖 [OPERACION]: Ejecutando procesamiento IA Cloud...");
     if (window.ImportadorMasivoMensajero && typeof window.ImportadorMasivoMensajero.ejecutarImportacionArchivo === "function") {
         window.ImportadorMasivoMensajero.ejecutarImportacionArchivo((nuevasParadas) => {
             listaPedidosGlobal = nuevasParadas;
@@ -204,12 +294,14 @@ window.ejecutarProcesamientoIaCloud = function() {
 };
 
 window.refrescarConsolaOperacionesUI = function() {
+    console.log(" 🔄 [OPERACION]: Refrescando consola desde base local...");
     listaPedidosGlobal = obtenerRutaZonificada() || [];
     determinarSiguientePedidoActivo();
     refrescarUI();
 };
 
 window.borrarParadaLocalUI = function(idParada) {
+    console.log(` 🗑️ [OPERACION]: Solicitud para borrar parada ID -> ${idParada}`);
     if (confirm(`>>> ¿Desea borrar la parada ID: ${idParada}?`)) {
         listaPedidosGlobal = eliminarParadaLocal(idParada);
         determinarSiguientePedidoActivo();
@@ -218,6 +310,7 @@ window.borrarParadaLocalUI = function(idParada) {
 };
 
 window.purgarTodaLaRutaUI = function() {
+    console.log(" 🧹 [OPERACION]: Purgando toda la ruta local...");
     if (confirm(">>> ¿Desea borrar TODAS las paradas?")) {
         listaPedidosGlobal = borrarRutaCompletaLocal();
         indicePedidoActivo = 0;
@@ -226,8 +319,12 @@ window.purgarTodaLaRutaUI = function() {
 };
 
 window.prepararEdicionParadaUI = function(idParada) {
+    console.log(` ✏️ [OPERACION]: Cargando parada en formulario para edición ID -> ${idParada}`);
     const parada = listaPedidosGlobal.find((p) => p.id === idParada);
-    if (!parada) return;
+    if (!parada) {
+        console.warn(` ⚠️ [OPERACION]: No se encontró la parada con ID ${idParada}`);
+        return;
+    }
 
     if (document.getElementById("edit-parada-id")) document.getElementById("edit-parada-id").value = parada.id;
     if (document.getElementById("edit-parada-destinatario")) document.getElementById("edit-parada-destinatario").value = parada.destinatario || "";
@@ -241,6 +338,7 @@ window.prepararEdicionParadaUI = function(idParada) {
 };
 
 window.limpiarFormularioParadaUI = function() {
+    console.log(" 🧼 [OPERACION]: Limpiando campos del formulario...");
     if (document.getElementById("edit-parada-id")) document.getElementById("edit-parada-id").value = "";
     if (document.getElementById("edit-parada-destinatario")) document.getElementById("edit-parada-destinatario").value = "";
     if (document.getElementById("edit-parada-direccion")) document.getElementById("edit-parada-direccion").value = "";
@@ -252,10 +350,10 @@ window.limpiarFormularioParadaUI = function() {
     if (detailsForm) detailsForm.open = false;
 };
 
-// --- BINDING CENTRALIZADO PARA INSERTAR DESDE EL MAPA ---
 window.agregarParadaLocal = function (nuevaParadaDatos) {
     if (!nuevaParadaDatos || !nuevaParadaDatos.direccion) return;
 
+    console.log(" ➕ [OPERACION]: Guardando nueva parada recibida:", nuevaParadaDatos);
     let rutaActual = obtenerRutaZonificada() || [];
 
     const nuevaParada = {
@@ -276,15 +374,13 @@ window.agregarParadaLocal = function (nuevaParadaDatos) {
     rutaActual.push(nuevaParada);
     guardarRutaZonificada(rutaActual);
     
-    // Sincronizar estado global
     listaPedidosGlobal = rutaActual;
     determinarSiguientePedidoActivo();
     refrescarUI();
 
-    console.log(`>>> [PARADA_AGREGADA_OK]: Parada en ${nuevaParada.direccion} guardada exitosamente.`);
+    console.log(` >>> [PARADA_AGREGADA_OK]: Parada en ${nuevaParada.direccion} guardada exitosamente.`);
 };
 
-// --- FUNCIÓN UNIFICADA Y SIN DUPLICADOS DEL FORMULARIO MANUAL ---
 window.guardarParadaManualUI = function () {
     const id = document.getElementById("edit-parada-id")?.value;
     const destinatario = document.getElementById("edit-parada-destinatario")?.value.trim();
@@ -299,7 +395,7 @@ window.guardarParadaManualUI = function () {
     }
 
     if (id) {
-        // MODO EDICIÓN
+        console.log(` 💾 [FORMULARIO]: Guardando cambios de edición para ID -> ${id}`);
         let rutaActual = obtenerRutaZonificada() || [];
         rutaActual = rutaActual.map((p) => {
             if (p.id === id) {
@@ -322,7 +418,7 @@ window.guardarParadaManualUI = function () {
         window.limpiarFormularioParadaUI();
         alert(">>> [ÉXITO]: Parada actualizada correctamente en la base local.");
     } else {
-        // MODO CREACIÓN
+        console.log(" 💾 [FORMULARIO]: Creando nueva parada manual...");
         window.agregarParadaLocal({
             destinatario,
             direccion,
@@ -334,33 +430,3 @@ window.guardarParadaManualUI = function () {
         alert(">>> [ÉXITO]: Parada guardada correctamente.");
     }
 };
-/**
- * Alterna la visibilidad de las pestañas en la SPA y conmuta la barra inferior.
- * @param {string} targetId - ID del contenedor de la pestaña (ej: 'mapa-fullscreen-container' o 'pestana-ruta-activa')
- */
-export function alternarVistaPestaña(targetId) {
-    const contenedores = document.querySelectorAll(".contenedor-pestana");
-    contenedores.forEach((c) => c.classList.remove("activa"));
-
-    const objetivo = document.getElementById(targetId);
-    if (objetivo) {
-        objetivo.classList.add("activa");
-    }
-
-    // CONMUTACIÓN DE BARRA INFERIOR SEGÚN LA VISTA
-    if (targetId === "mapa-fullscreen-container" || targetId === "pestana-ruta-activa") {
-        if (typeof window.cargarBarraInferior === "function") {
-            window.cargarBarraInferior("componentes/barra-inferior/mapa-barra-infe.html");
-        }
-        if (typeof window.inicializarMapaMensajero === "function") {
-            setTimeout(window.inicializarMapaMensajero, 100);
-        }
-    } else {
-        if (typeof window.cargarBarraInferior === "function") {
-            window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
-        }
-    }
-}
-
-// Registro global para navegación por botones o eventos UI
-window.alternarVistaPestaña = alternarVistaPestaña;

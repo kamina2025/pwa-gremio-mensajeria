@@ -191,3 +191,43 @@ export async function procesarArchivoTextoCSV(archivo) {
         throw error;
     }
 }
+/**
+ * PROTOCOLO MACONDO - BASE DE DATOS LOCAL (INDEXEDDB)
+ * Ubicación: pwa-mensajero/modulos/procesamiento-datos/base-de-datos.js
+ */
+
+const NOMBRE_DB = "PWA_Gremio_Mensajeria_DB";
+const VERSION_DB = 1;
+
+/**
+ * Abre o inicializa la base de datos IndexedDB local.
+ * @returns {Promise<IDBDatabase>} Instancia de la base de datos abierta.
+ */
+export function obtenerDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(NOMBRE_DB, VERSION_DB);
+
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+
+            // Creación del objectStore para 'planillas'
+            if (!db.objectStoreNames.contains("planillas")) {
+                db.createObjectStore("planillas", { keyPath: "id", autoIncrement: true });
+            }
+
+            // Creación del objectStore para 'rutas'
+            if (!db.objectStoreNames.contains("rutas")) {
+                db.createObjectStore("rutas", { keyPath: "id" });
+            }
+        };
+
+        request.onsuccess = (event) => {
+            resolve(event.target.result);
+        };
+
+        request.onerror = (event) => {
+            console.error("❌ [IndexedDB]: Error abriendo la base de datos:", event.target.error);
+            reject(event.target.error);
+        };
+    });
+}

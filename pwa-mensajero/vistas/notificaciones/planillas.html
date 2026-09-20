@@ -1,40 +1,49 @@
-<!-- pwa-mensajero/vistas/ruta/ruta-activa.html -->
-<div class="vista-header">
-    <h2>// PLANILLAS</h2>
-    <span class="badge-status online">RUTA_ACTUAL</span>
+<!-- Navegación por pestañas internas -->
+<div class="tabs-header-cyber">
+    <button class="tab-btn active" data-tab="tab-generar-planilla" onclick="cambiarPestanaPlanillas('tab-generar-planilla')">
+        _GENERAR_PLANILLA
+    </button>
+    <button class="tab-btn" data-tab="tab-planillas-reportadas" onclick="cambiarPestanaPlanillas('tab-planillas-reportadas')">
+        _PLANILLAS_REPORTADAS
+    </button>
 </div>
 
-<!-- Contenedor Principal de la Ruta y Mapa -->
-<div class="modulo-ruta-container">
-    <!-- Tarjeta de Estado de Entrega -->
-    <div class="card-info-ruta">
-        <div class="card-header">
-            <i class="fa-solid fa-map-location-dot"></i>
-            <h3>Notificaciones y Reportes de los coordinadores y clientes</h3>
-        </div>
-        <p>AQUÍ VA EL BLOQUE DE TODAS TUS REPORTES</p>
+<!-- Pestaña 1: Generación de Planilla -->
+<div id="tab-generar-planilla" class="tab-content active">
+    <header class="cyber-header">
+        <h3>_GENERACIÓN DE PLANILLAS</h3>
+    </header>
+    <div class="panel-contenido">
+        <p class="cyber-text">Seleccione los envíos para conformar la planilla actual.</p>
     </div>
-    <section id="mod-justicia" class="modulo-vista">
-        <div class="panel-maquina panel-auditoria">
-            <div class="header-status">
-                <span style="color: var(--amber-alert, #ffaa00)">[AUDIT_MODE: COMPROMISO_NODAL]</span>
-                <span id="auditoria-id-contrato">ID_CONTRATO: NO_SELECTED</span>
-            </div>
-            <div class="bloque-telemetria" id="contenedor-logs-telemetria"></div>
-            <div class="formulario-maquina">
-                <label class="label-consola">>>> INGRESE_DESCARGO_TEXTUAL (JUSTIFICACIÓN_OPERATIVA):</label>
-                <textarea
-                    class="input-terminal"
-                    id="txt-descargo"
-                    rows="3"
-                    placeholder="Ej: Retén de control vial en la salida de Miranda / Avería mecánica..."></textarea>
-                <div class="indicador-ayuda">
-                    * Los retrasos por fuerza mayor mitigan automáticamente la Hoja de Confianza.
-                </div>
-                <button class="btn-terminal btn-crypto" onclick="broadcastDescargo()">
-                    FIRM_AND_BROADCAST_DESCARGO
-                </button>
-            </div>
-        </div>
-    </section>
+</div>
+
+<!-- Pestaña 2: Planillas Reportadas -->
+<div id="tab-planillas-reportadas" class="tab-content">
+    <header class="cyber-header flex-between">
+        <h3>_PLANILLAS_REPORTADAS_HISTORIAL</h3>
+        <button id="btn-rescanalizar-planillas" class="cyber-btn btn-sm" onclick="cargarPlanillasReportadasUI()">
+            <i class="fa-solid fa-rotate-right"></i> _RESCANALIZAR
+        </button>
+    </header>
+
+    <div class="tabla-contenedor-cyber">
+        <table class="tabla-cyber">
+            <thead>
+                <tr>
+                    <th>SCC / SEGUIMIENTO</th>
+                    <th>FECHA</th>
+                    <th>MENSAJERO</th>
+                    <th>PLACA</th>
+                    <th>ESTADO SCC</th>
+                    <th>ACCIONES</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-planillas-reportadas-body">
+                <tr>
+                    <td colspan="6" class="text-center">Cargando datos del nodo local...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
 </div>

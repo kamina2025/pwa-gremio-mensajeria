@@ -34,8 +34,10 @@ import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
 import { procesarPayloadOStorage, buscarIndiceActivo } from "./modulos/mensajero-rutas.js";
 
-// ⚡ Controller de mapa
+// ⚡ Controller de mapa y planillas UI
 import "./modulos/mapa/mapa-controlador.js";
+import { cambiarPestanaPlanillas, cargarPlanillasReportadasUI } from "./modulos/planillas-ui.js";
+import { exportarYRespaldarPlanillaPDF } from "./modulos/planillas-pdf-sync.js";
 
 console.log(" 🟢 [script2.js] Orquestador PWA modularizado cargado.");
 
@@ -162,13 +164,35 @@ document.addEventListener("click", (e) => {
             }
         }
     }
+
+    // 5. MÓDULO PLANILLAS: Cambio de Pestaña Interna (_GENERAR_PLANILLA / _PLANILLAS_REPORTADAS)
+    const btnTabPlanilla = e.target.closest(".tab-btn[data-tab]");
+    if (btnTabPlanilla) {
+        const tabTarget = btnTabPlanilla.getAttribute("data-tab");
+        console.log(` 📄 [PLANILLAS]: Clic en pestaña interna -> ${tabTarget}`);
+        cambiarPestanaPlanillas(tabTarget);
+        return;
+    }
+
+    // 6. MÓDULO PLANILLAS: Botón de Rescanalizar / Recargar
+    const btnRescanalizar = e.target.closest("#btn-rescanalizar-planillas");
+    if (btnRescanalizar) {
+        console.log(" 🔄 [PLANILLAS]: Recargando planillas reportadas desde almacenamiento local...");
+        cargarPlanillasReportadasUI();
+        return;
+    }
+
+    // 7. MÓDULO PLANILLAS: Exportar PDF
+    const btnExportarPdf = e.target.closest(".btn-exportar-planilla");
+    if (btnExportarPdf) {
+        const planillaId = btnExportarPdf.getAttribute("data-id");
+        console.log(` 📄 [PLANILLAS]: Solicitud exportar PDF para planilla ID -> ${planillaId}`);
+        exportarYRespaldarPlanillaPDF(planillaId);
+        return;
+    }
 });
 
 // --- NAVEGACIÓN SPA Y CONMUTACIÓN DE BARRA INFERIOR ---
-/**
- * Conmuta la pestaña activa y actualiza la barra inferior correspondiente.
- * @param {string} targetId - ID del contenedor (ej. 'mapa-fullscreen-container' o 'pestana-ruta-activa')
- */
 export function alternarVistaPestaña(targetId) {
     console.log(` 🔄 [ALTERNAR_VISTA]: Iniciando transición a -> #${targetId}`);
     
@@ -180,6 +204,11 @@ export function alternarVistaPestaña(targetId) {
     if (objetivo) {
         objetivo.classList.add("activa");
         console.log(` ✅ [ALTERNAR_VISTA]: Pestaña #${targetId} marcada como activa.`);
+        
+        // Cargar vista de planillas al navegar a su contenedor
+        if (targetId === "pestana-notificaciones-planillas") {
+            cargarPlanillasReportadasUI();
+        }
     } else {
         console.warn(` ⚠️ [ALTERNAR_VISTA]: No se encontró el contenedor con ID '${targetId}' en el DOM.`);
     }
@@ -198,7 +227,6 @@ export function alternarVistaPestaña(targetId) {
             console.error(" ❌ [BARRA_INFERIOR]: 'window.cargarBarraInferior' no está definida en el entorno global.");
         }
 
-        // Re-ajustar lienzo de Google Maps
         setTimeout(() => {
             if (window.mapaMensajero && typeof google !== "undefined") {
                 console.log(" 📐 [MAPA]: Re-calculando dimensiones del mapa (resize)...");
@@ -231,8 +259,10 @@ window.navegarA = function(rutaVista) {
         alternarVistaPestaña("pestana-monedero-historial");
     } else if (rutaVista.includes("saldo")) {
         alternarVistaPestaña("pestana-monedero-saldo");
+    } else if (rutaVista.includes("planillas")) {
+        alternarVistaPestaña("pestana-notificaciones-planillas");
     } else if (rutaVista.includes("reportes")) {
-        alternarVistaPestaña("pestana-reportes");
+        alternarVistaPestaña("pestana-notificaciones-reportes");
     } else {
         console.warn(` ⚠️ [NAVEGAR_A]: Ruta no reconocida -> ${rutaVista}`);
     }

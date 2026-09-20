@@ -460,3 +460,69 @@ window.guardarParadaManualUI = function () {
         alert(">>> [ÉXITO]: Parada guardada correctamente.");
     }
 };
+import { guardarPlanillaReportada } from "./modulos/procesamiento-datos/planillas-db.js";
+
+/**
+ * 1. Inicia el recorrido desde la primera parada hasta la última en el mapa.
+ */
+window.iniciarRutaCompleta = function() {
+    console.log("🚀 [OPERACION]: Iniciando recorrido completo de la ruta...");
+    listaPedidosGlobal = obtenerRutaZonificada() || [];
+
+    if (!listaPedidosGlobal || listaPedidosGlobal.length === 0) {
+        alert("⚠️ [ALERTA]: No hay paradas en la ruta para iniciar.");
+        return;
+    }
+
+    // Establecer la primera parada como activa (índice 0)
+    indicePedidoActivo = 0;
+    refrescarUI();
+
+    // Redirigir a la vista del mapa
+    if (typeof window.alternarVistaPestaña === "function") {
+        window.alternarVistaPestaña("mapa-fullscreen-container");
+    }
+    
+    alert("🧭 [RUTA INICIADA]: Navegando a la primera parada en el mapa.");
+};
+
+/**
+ * 2. Extrae los SCC, fecha, mensajero y estados actuales, y los guarda en Planillas.
+ */
+window.generarPlanillaDesdeRuta = async function() {
+    console.log("📝 [OPERACION]: Generando planilla desde la ruta activa...");
+    const paradasActuales = obtenerRutaZonificada() || [];
+
+    if (!paradasActuales || paradasActuales.length === 0) {
+        alert("⚠️ [ALERTA]: No hay datos de paradas para planillar.");
+        return;
+    }
+
+    // Mapear Códigos SCC
+    const listaScc = paradasActuales.map(p => p.ssc || p.id).join(", ");
+    
+    // Determinar estado consolidado del paquete/scc (Entregado si está FINALIZADO, de lo contrario Devuelto/En Proceso)
+    const estadosScc = paradasActuales.every(p => p.estado === "FINALIZADO") ? "Entregado" : "Devuelto";
+
+    const nuevaPlanilla = {
+        scc: listaScc,
+        fecha: new Date().toLocaleDateString("es-CO"),
+        nombreMensajero: localStorage.getItem("nombreMensajero") || "Mensajero Acreditado",
+        placaMensajero: localStorage.getItem("placaMensajero") || "MXX-000",
+        estadoScc: estadosScc,
+        creadoEn: new Date().toISOString()
+    };
+
+    try {
+        await guardarPlanillaReportada(nuevaPlanilla);
+        alert(`✅ [PLANILLA CREADA]: Planilla guardada exitosamente.\nSCCs: ${listaScc}\nEstado: ${estadosScc}`);
+        
+        // Opcional: Redirigir a la pestaña de planillas reportadas
+        if (typeof window.navegarA === "function") {
+            window.navegarA("vistas/notificaciones/planillas.html");
+        }
+    } catch (err) {
+        console.error("❌ [PLANILLA]: Error generando planilla:", err);
+        alert("❌ Error al guardar la planilla.");
+    }
+};

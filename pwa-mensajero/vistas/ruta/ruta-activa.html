@@ -6,7 +6,6 @@
 
 <!-- CONTENEDOR PRINCIPAL DE LA RUTA -->
 <div class="modulo-ruta-container">
-
     <!-- ACORDEÓN PARA CARGA MANUAL DE MANIFIESTO O LINK -->
     <section class="panel-maquina" style="border-color: var(--neon-purple, #b359ff); margin-bottom: 12px">
         <details style="cursor: pointer">
@@ -34,21 +33,37 @@
     </section>
 
     <!-- FORMULARIO ACORDEÓN PARA CREAR / EDITAR PARADA MANUALMENTE -->
-    <section class="panel-maquina" style="border-color: var(--neon-green); margin-bottom: 12px;">
-        <details id="details-formulario-parada" style="cursor: pointer;">
-            <summary style="color: var(--neon-green); font-weight: bold; font-size: 0.85rem;">
+    <section class="panel-maquina" style="border-color: var(--neon-green); margin-bottom: 12px">
+        <details id="details-formulario-parada" style="cursor: pointer">
+            <summary style="color: var(--neon-green); font-weight: bold; font-size: 0.85rem">
                 [➕ / ✏️] GESTIÓN MANUAL DE PARADA (NUEVA O EDICIÓN)
             </summary>
-            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">
                 <input type="hidden" id="edit-parada-id" value="" />
-                
-                <input type="text" id="edit-parada-destinatario" class="input-terminal" placeholder="Nombre Destinatario" />
-                <input type="text" id="edit-parada-direccion" class="input-terminal" placeholder="Dirección de Entrega" />
+
+                <input
+                    type="text"
+                    id="edit-parada-destinatario"
+                    class="input-terminal"
+                    placeholder="Nombre Destinatario" />
+                <input
+                    type="text"
+                    id="edit-parada-direccion"
+                    class="input-terminal"
+                    placeholder="Dirección de Entrega" />
                 <input type="text" id="edit-parada-telefono" class="input-terminal" placeholder="Teléfono Contacto" />
-                <input type="text" id="edit-parada-ssc" class="input-terminal" placeholder="SSC / No. Guía (Opcional)" />
-                <input type="text" id="edit-parada-cuota" class="input-terminal" placeholder="Cuota Moderadora / Copago" />
-                
-                <div style="display: flex; gap: 8px; margin-top: 4px;">
+                <input
+                    type="text"
+                    id="edit-parada-ssc"
+                    class="input-terminal"
+                    placeholder="SSC / No. Guía (Opcional)" />
+                <input
+                    type="text"
+                    id="edit-parada-cuota"
+                    class="input-terminal"
+                    placeholder="Cuota Moderadora / Copago" />
+
+                <div style="display: flex; gap: 8px; margin-top: 4px">
                     <button type="button" class="btn-terminal btn-crypto" onclick="guardarParadaManualUI()">
                         [💾] GUARDAR EN BASE LOCAL
                     </button>
@@ -59,7 +74,12 @@
             </div>
         </details>
     </section>
-
+    <button class="cyber-btn btn-iniciar-ruta" onclick="iniciarRutaCompleta()">
+        <i class="fa-solid fa-play"></i> _INICIAR_RUTA
+    </button>
+    <button class="cyber-btn btn-planillar" onclick="generarPlanillaDesdeRuta()">
+        <i class="fa-solid fa-file-signature"></i> _PLANILLAR
+    </button>
     <!-- CONSOLA DEL PASO EN CURSO / TARJETA ACTIVA -->
     <section
         id="panel-pedido-activo"
@@ -77,10 +97,10 @@
 
     <!-- LISTA DE PARADAS ZONIFICADAS CON CONTROLES DE EDICIÓN Y BORRADO -->
     <section class="panel-maquina">
-        <div class="header-status" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="header-status" style="display: flex; justify-content: space-between; align-items: center">
             <span style="color: var(--neon-blue, #00e5ff)">[📋] HOJA_DE_RUTA_ZONIFICADA</span>
             <div>
-                <span id="txt-total-paradas" style="margin-right: 8px;">0 PARADAS</span>
+                <span id="txt-total-paradas" style="margin-right: 8px">0 PARADAS</span>
                 <button type="button" onclick="purgarTodaLaRutaUI()" class="btn-terminal btn-crypto">
                     [🗑️ BORRAR RUTA]
                 </button>
@@ -88,5 +108,4 @@
         </div>
         <div id="lista-paradas-zonificadas" style="max-height: 400px; overflow-y: auto; margin-top: 8px"></div>
     </section>
-
 </div>

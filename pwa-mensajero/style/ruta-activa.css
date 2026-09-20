@@ -26,3 +26,40 @@
     background: var(--neon-magenta);
     border-radius: 3px;
 }
+/* --- BOTONES DE ACCIÓN PRINCIPALES DE RUTA --- */
+.header-acciones-ruta {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 15px;
+    padding: 5px 0;
+}
+
+.btn-iniciar-ruta {
+    background: rgba(0, 243, 255, 0.1);
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    font-weight: bold;
+    flex: 1;
+    justify-content: center;
+}
+
+.btn-iniciar-ruta:hover {
+    background: var(--neon-cyan);
+    color: var(--bg-color);
+    box-shadow: 0 0 12px var(--neon-cyan);
+}
+
+.btn-planillar {
+    background: rgba(249, 240, 2, 0.1);
+    border-color: var(--neon-yellow);
+    color: var(--neon-yellow);
+    font-weight: bold;
+    flex: 1;
+    justify-content: center;
+}
+
+.btn-planillar:hover {
+    background: var(--neon-yellow);
+    color: var(--bg-color);
+    box-shadow: 0 0 12px var(--neon-yellow);
+}

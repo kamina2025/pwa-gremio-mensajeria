@@ -4,7 +4,7 @@
  * Función: Parsea TXT, CSV, Excel (XLSX/XLS) y Fotografías (vía OCR WASM Tesseract) sin consumir IA Cloud.
  */
 
-import { procesarTextoHeuristico } from "./heuristico.js";
+import { procesarTextoHeuristico } from "./procesamiento-datos/heuristico.js";
 
 /**
  * Aplica binarización y filtro de contraste sobre Canvas antes de enviar la imagen a Tesseract.
@@ -192,12 +192,12 @@ export async function procesarArchivoTextoCSV(archivo) {
     }
 }
 /**
- * PROTOCOLO MACONDO - BASE DE DATOS LOCAL (INDEXEDDB)
- * Ubicación: pwa-mensajero/modulos/procesamiento-datos/base-de-datos.js
+ * PROTOCOLO MACONDO - BASE DE DATOS LOCAL CENTRAL (INDEXEDDB)
+ * Ubicación: pwa-mensajero/modulos/base-de-datos.js
  */
 
 const NOMBRE_DB = "PWA_Gremio_Mensajeria_DB";
-const VERSION_DB = 1;
+const VERSION_DB = 2; // Incrementada para soportar los nuevos objectStores
 
 /**
  * Abre o inicializa la base de datos IndexedDB local.
@@ -218,6 +218,11 @@ export function obtenerDB() {
             // Creación del objectStore para 'rutas'
             if (!db.objectStoreNames.contains("rutas")) {
                 db.createObjectStore("rutas", { keyPath: "id" });
+            }
+
+            // Creación del objectStore para 'perfil_conductor'
+            if (!db.objectStoreNames.contains("perfil_conductor")) {
+                db.createObjectStore("perfil_conductor", { keyPath: "id" });
             }
         };
 

@@ -196,3 +196,103 @@
     border: 1px solid var(--neon-magenta);
     color: var(--neon-magenta);
 }
+/* ==========================================================================
+   ESTILOS DE IMPRESIÓN Y EXPORTACIÓN INDIVIDUAL A PDF
+   ========================================================================== */
+
+/* Ocultar el área de impresión temporal en la pantalla normal */
+.area-impresion-solo-pdf {
+    display: none;
+}
+
+/* --- REGLAS EXCLUSIVAS PARA EXPORTAR A PDF / IMPRIMIR --- */
+@media print {
+    /* Ocultar toda la interfaz de la PWA (Sidebar, Header, Botones, etc.) */
+    body * {
+        visibility: hidden !important;
+    }
+
+    /* Mostrar únicamente el contenedor de la planilla seleccionada */
+    #area-impresion-planilla-tmp,
+    #area-impresion-planilla-tmp * {
+        visibility: visible !important;
+    }
+
+    #area-impresion-planilla-tmp {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 20px;
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-family: Arial, sans-serif;
+    }
+
+    .hoja-pdf-planilla {
+        width: 100%;
+        margin: 0 auto;
+    }
+
+    .encabezado-pdf {
+        text-align: center;
+        border-bottom: 2px solid #333;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+
+    .encabezado-pdf h2 {
+        margin: 0;
+        font-size: 1.4rem;
+        color: #111;
+    }
+
+    .encabezado-pdf p {
+        margin: 5px 0 0 0;
+        font-size: 0.9rem;
+        color: #555;
+    }
+
+    .tabla-pdf-export {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+    }
+
+    .tabla-pdf-export th,
+    .tabla-pdf-export td {
+        border: 1px solid #777;
+        padding: 10px;
+        text-align: left;
+        font-size: 0.9rem;
+    }
+
+    .tabla-pdf-export th {
+        background-color: #f2f2f2 !important;
+        color: #000 !important;
+        font-weight: bold;
+    }
+
+    .badge-pdf {
+        font-weight: bold;
+        padding: 3px 6px;
+    }
+
+    .badge-pdf.entregado {
+        color: #0d730d;
+    }
+
+    .badge-pdf.devuelto {
+        color: #b30000;
+    }
+
+    .pie-pdf {
+        margin-top: 30px;
+        border-top: 1px solid #ccc;
+        padding-top: 10px;
+        text-align: center;
+        font-size: 0.75rem;
+        color: #666;
+    }
+}

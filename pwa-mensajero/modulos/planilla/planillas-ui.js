@@ -3,7 +3,7 @@
  * Ubicación: pwa-mensajero/modulos/planillas-ui.js
  */
 
-import { obtenerPlanillasReportadas } from './procesamiento-datos/planillas-db.js';
+import { obtenerPlanillasReportadas } from './planillas-db.js';
 import { exportarYRespaldarPlanillaPDF } from './planillas-pdf-sync.js';
 
 /**

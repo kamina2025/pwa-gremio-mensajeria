@@ -3,8 +3,7 @@
  * Ubicación: pwa-mensajero/modulos/procesamiento-datos/planillas-db.js
  */
 
-import { obtenerDB } from './base-de-datos.js';
-
+import { obtenerDB } from '../base-de-datos.js';
 /**
  * Consulta y retorna todas las planillas reportadas registradas en IndexedDB/Local.
  * @returns {Promise<Array>} Lista de planillas guardadas

@@ -5,7 +5,7 @@
  */
 
 import { guardarRutaZonificada } from "./mensajero-persistencia.js";
-import { procesarArchivoTextoCSV } from "./procesamiento-datos/base-de-datos.js";
+import { procesarArchivoTextoCSV } from "./base-de-datos.js";
 import { procesarImagenConGemini } from "./procesamiento-datos/ia-gemini.js";
 import { procesarTextoHeuristico } from "./procesamiento-datos/heuristico.js";
 

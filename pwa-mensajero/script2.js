@@ -34,12 +34,37 @@ import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
 import { procesarPayloadOStorage, buscarIndiceActivo } from "./modulos/mensajero-rutas.js";
 
-// ⚡ Controller de mapa y planillas UI
+// ⚡ Controller de mapa
 import "./modulos/mapa/mapa-controlador.js";
-import { cambiarPestanaPlanillas, cargarPlanillasReportadasUI } from "./modulos/planillas-ui.js";
-import { exportarYRespaldarPlanillaPDF } from "./modulos/planillas-pdf-sync.js";
+
+// 📄 Importaciones Módulo Planillas (Rutas ajustadas a la nueva estructura)
+import { cambiarPestanaPlanillas, cargarPlanillasReportadasUI } from "./modulos/planilla/planillas-ui.js";
+import { exportarYRespaldarPlanillaPDF } from "./modulos/planilla/planillas-pdf-sync.js";
+import { guardarPlanillaReportada } from "./modulos/planilla/planillas-db.js";
+
+// 👤 Importaciones Módulo Perfil del Conductor (Rutas ajustadas a la nueva estructura)
+import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil/perfil-ui.js";
 
 console.log(" 🟢 [script2.js] Orquestador PWA modularizado cargado.");
+
+// --- EXPOSICIÓN GLOBAL DE FUNCIONES DE MÓDULOS EN WINDOW ---
+window.manejarNavegacionSidebar = function(btnNav) {
+    manejarNavegacionSidebar(btnNav, (targetId) => {
+        console.log(` 📍 [SIDEBAR_NAV]: Cambiando vista objetivo -> ${targetId}`);
+        if (typeof window.alternarVistaPestaña === "function") {
+            window.alternarVistaPestaña(targetId);
+        }
+    });
+};
+
+window.manejarClicSubmenu = function(btnSubmenu, event) {
+    manejarClicSubmenu(btnSubmenu, event);
+};
+
+window.cargarPerfilUI = cargarPerfilUI;
+window.manejarGuardarPerfil = manejarGuardarPerfil;
+window.cambiarPestanaPlanillas = cambiarPestanaPlanillas;
+window.cargarPlanillasReportadasUI = cargarPlanillasReportadasUI;
 
 // --- ESTADOS GLOBALES ---
 let listaPedidosGlobal = [];
@@ -125,7 +150,7 @@ document.addEventListener("click", (e) => {
     if (btnSubmenu) {
         console.log(" 📂 [DELEGACIÓN]: Clic en submenú toggle.");
         e.stopPropagation();
-        manejarClicSubmenu(btnSubmenu);
+        manejarClicSubmenu(btnSubmenu, e);
         return;
     }
 
@@ -165,7 +190,7 @@ document.addEventListener("click", (e) => {
         }
     }
 
-    // 5. MÓDULO PLANILLAS: Cambio de Pestaña Interna (_GENERAR_PLANILLA / _PLANILLAS_REPORTADAS)
+    // 5. MÓDULO PLANILLAS: Cambio de Pestaña Interna
     const btnTabPlanilla = e.target.closest(".tab-btn[data-tab]");
     if (btnTabPlanilla) {
         const tabTarget = btnTabPlanilla.getAttribute("data-tab");
@@ -205,9 +230,14 @@ export function alternarVistaPestaña(targetId) {
         objetivo.classList.add("activa");
         console.log(` ✅ [ALTERNAR_VISTA]: Pestaña #${targetId} marcada como activa.`);
         
-        // Cargar vista de planillas al navegar a su contenedor
+        // Hooks de carga condicional
         if (targetId === "pestana-notificaciones-planillas") {
             cargarPlanillasReportadasUI();
+        } else if (targetId === "pestana-perfil-conductor") {
+            if (typeof cargarPerfilUI === "function") {
+                console.log(" 👤 [PERFIL]: Cargando datos del perfil desde almacenamiento local...");
+                cargarPerfilUI();
+            }
         }
     } else {
         console.warn(` ⚠️ [ALTERNAR_VISTA]: No se encontró el contenedor con ID '${targetId}' en el DOM.`);
@@ -245,7 +275,7 @@ export function alternarVistaPestaña(targetId) {
 
 /**
  * Función global para navegar utilizando alias de rutas.
- * @param {string} rutaVista - Ejemplo: 'vistas/ruta/mapa-activa.html'
+ * @param {string} rutaVista - Ejemplo: 'vistas/perfil/conductor.html'
  */
 window.navegarA = function(rutaVista) {
     console.log(` 🧭 [NAVEGAR_A]: Invocado con la ruta -> ${rutaVista}`);
@@ -263,6 +293,8 @@ window.navegarA = function(rutaVista) {
         alternarVistaPestaña("pestana-notificaciones-planillas");
     } else if (rutaVista.includes("reportes")) {
         alternarVistaPestaña("pestana-notificaciones-reportes");
+    } else if (rutaVista.includes("conductor")) {
+        alternarVistaPestaña("pestana-perfil-conductor");
     } else {
         console.warn(` ⚠️ [NAVEGAR_A]: Ruta no reconocida -> ${rutaVista}`);
     }
@@ -270,7 +302,7 @@ window.navegarA = function(rutaVista) {
 
 window.alternarVistaPestaña = alternarVistaPestaña;
 
-// --- BINDINGS EN WINDOW PARA OPERACIONES EN BD Y UI ---
+// --- BINDINGS EN WINDOW PARA OPERACIONES DE BD Y RUTAS ---
 window.refrescarUI = refrescarUI;
 
 window.ejecutarPasoAceptarPedido = function(idPedido) {
@@ -460,10 +492,9 @@ window.guardarParadaManualUI = function () {
         alert(">>> [ÉXITO]: Parada guardada correctamente.");
     }
 };
-import { guardarPlanillaReportada } from "./modulos/procesamiento-datos/planillas-db.js";
 
 /**
- * 1. Inicia el recorrido desde la primera parada hasta la última en el mapa.
+ * Inicia el recorrido desde la primera parada hasta la última en el mapa.
  */
 window.iniciarRutaCompleta = function() {
     console.log("🚀 [OPERACION]: Iniciando recorrido completo de la ruta...");
@@ -474,11 +505,9 @@ window.iniciarRutaCompleta = function() {
         return;
     }
 
-    // Establecer la primera parada como activa (índice 0)
     indicePedidoActivo = 0;
     refrescarUI();
 
-    // Redirigir a la vista del mapa
     if (typeof window.alternarVistaPestaña === "function") {
         window.alternarVistaPestaña("mapa-fullscreen-container");
     }
@@ -487,7 +516,7 @@ window.iniciarRutaCompleta = function() {
 };
 
 /**
- * 2. Extrae los SCC, fecha, mensajero y estados actuales, y los guarda en Planillas.
+ * Extrae los SCC, fecha, mensajero y estados actuales, y los guarda en Planillas.
  */
 window.generarPlanillaDesdeRuta = async function() {
     console.log("📝 [OPERACION]: Generando planilla desde la ruta activa...");
@@ -498,10 +527,7 @@ window.generarPlanillaDesdeRuta = async function() {
         return;
     }
 
-    // Mapear Códigos SCC
     const listaScc = paradasActuales.map(p => p.ssc || p.id).join(", ");
-    
-    // Determinar estado consolidado del paquete/scc (Entregado si está FINALIZADO, de lo contrario Devuelto/En Proceso)
     const estadosScc = paradasActuales.every(p => p.estado === "FINALIZADO") ? "Entregado" : "Devuelto";
 
     const nuevaPlanilla = {
@@ -517,7 +543,6 @@ window.generarPlanillaDesdeRuta = async function() {
         await guardarPlanillaReportada(nuevaPlanilla);
         alert(`✅ [PLANILLA CREADA]: Planilla guardada exitosamente.\nSCCs: ${listaScc}\nEstado: ${estadosScc}`);
         
-        // Opcional: Redirigir a la pestaña de planillas reportadas
         if (typeof window.navegarA === "function") {
             window.navegarA("vistas/notificaciones/planillas.html");
         }

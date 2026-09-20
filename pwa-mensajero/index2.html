@@ -6,12 +6,20 @@
             name="viewport"
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
         <title>Runner - Mensajero</title>
+
         <!-- Enlace al Web App Manifest -->
         <link rel="manifest" href="./manifest.json" />
+
         <!-- Iconos y Fuentes -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-        <!-- Estilos de la PWA -->
+
+        <!-- Estilos Modulares de la PWA Cyberpunk -->
         <link rel="stylesheet" href="./style/style2.css" />
+        <link rel="stylesheet" href="./style/layout.css" />
+        <link rel="stylesheet" href="./style/sidebar.css" />
+        <link rel="stylesheet" href="./style/formularios.css" />
+        <link rel="stylesheet" href="./style/botones-contenedor.css" />
+        <link rel="stylesheet" href="./style/barra-inferior.css" />
 
         <!-- Librería para lectura local de archivos Excel (.xlsx / .xls) sin servidor/IA -->
         <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -36,43 +44,53 @@
 
             <!-- Contenedor de Vistas y Pestañas (Main Area) -->
             <main class="main-content main-container">
-                <!-- Vista: Ruta Activa (Inyectada dinámicamente) -->
+                <!-- Vista: Ruta Activa -->
                 <div
                     id="pestana-ruta-activa"
-                    class="contenedor-pestana"
+                    class="contenedor-pestana activa"
                     data-include="vistas/ruta/ruta-activa.html"></div>
-                <div id="pestana-ruta-crear" class="contenedor-pestana" data-include="vistas/ruta/crear.html"></div>
+
+                <div 
+                    id="pestana-ruta-crear" 
+                    class="contenedor-pestana" 
+                    data-include="vistas/ruta/crear.html"></div>
+
                 <div
                     id="mapa-fullscreen-container"
                     class="contenedor-pestana"
                     data-include="vistas/ruta/mapa-activa.html"></div>
+
                 <!-- Submenú de Monedero -->
                 <div
                     id="pestana-monedero-historial"
                     class="contenedor-pestana"
                     data-include="vistas/monedero/historial.html"></div>
+
                 <div
                     id="pestana-monedero-saldo"
                     class="contenedor-pestana"
                     data-include="vistas/monedero/saldo.html"></div>
-                <!-- Menú de Reportes -->
+
+                <!-- Menú de Reportes y Planillas -->
                 <div
                     id="pestana-notificaciones-planillas"
                     class="contenedor-pestana"
                     data-include="vistas/notificaciones/planillas.html"></div>
+
                 <div
                     id="pestana-notificaciones-reportes"
                     class="contenedor-pestana"
                     data-include="vistas/notificaciones/reportes.html"></div>
-            <div
+
+                <!-- Perfil del Conductor y Vehículo -->
+                <div
                     id="pestana-perfil-conductor"
                     class="contenedor-pestana"
                     data-include="vistas/perfil/conductor.html"></div>
-            
             </main>
         </div>
 
-        <!-- UNICO CONTENEDOR DE BARRA INFERIOR FLOTANTE A NIVEL RAÍZ (EVITA ELEMENTOS DUPLICADOS) -->
+        <!-- CONTENEDOR DE BARRA INFERIOR FLOTANTE A NIVEL RAÍZ -->
         <nav id="contenedor-menu" class="barra-inferior-global"></nav>
 
         <script>
@@ -83,7 +101,6 @@
                 const contenedor = document.getElementById("contenedor-menu");
                 if (!contenedor) return;
 
-                // Si ya está cargada la misma ruta, evitamos peticiones duplicadas
                 if (contenedor.dataset.componenteActual === rutaComponente) return;
 
                 fetch(rutaComponente)
@@ -108,11 +125,14 @@
 
         <!-- Módulos de Control JavaScript -->
         <script src="./app.js"></script>
+        
         <!-- SDK de Mapas en la raíz de la SPA -->
         <script
             src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCP6Wc3JRQIRXu6cXM8KkPasuy8asTIWUE&callback=inicializarMapaMensajero&libraries=places&loading=async"
             async
             defer></script>
+
+        <!-- Orquestador Principal ES6 Module -->
         <script type="module" src="./script2.js"></script>
     </body>
 </html>

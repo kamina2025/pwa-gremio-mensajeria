@@ -1,69 +1,73 @@
-<!-- pwa-mensajero/componentes/sidebar.html -->
+<!-- pwa-mensajero/componentes/siderbar.html -->
 <aside class="sidebar">
-    <!-- SECCIÓN 1: RUTA -->
-    <div class="menu-item-has-submenu">
-        <button class="nav-btn btn-submenu-toggle">
-            <span>_RUTA</span>
-            <i class="arrow-icon">▼</i>
-        </button>
-        <div class="submenu">
-            <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-crear">
-                <span>_CREAR</span>
-            </button>
-            <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-activa">
-                <span>_ACTIVAS</span>
-            </button>
-            <button class="nav-btn sub-nav-btn" data-target="mapa-fullscreen-container">
-                <span>_MAPA</span>
-            </button>
-        </div>
-    </div>
+    <nav class="sidebar-nav">
 
-    <!-- SECCIÓN 2: MONEDERO -->
-    <div class="menu-item-has-submenu">
-        <button class="nav-btn btn-submenu-toggle">
-            <span>_MONEDERO</span>
-            <i class="arrow-icon">▼</i>
-        </button>
-        <div class="submenu">
-            <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-saldo">
-                <span>_SALDO</span>
+        <!-- SECCIÓN 1: RUTA -->
+        <div class="menu-item-has-submenu">
+            <button class="nav-btn btn-submenu-toggle">
+                <span>_RUTA</span>
+                <i class="arrow-icon">▼</i>
             </button>
-            <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-historial">
-                <span>_HISTORIAL</span>
-            </button>
+            <div class="submenu">
+                <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-crear">
+                    <span>_CREAR</span>
+                </button>
+                <button class="nav-btn sub-nav-btn" data-target="pestana-ruta-activa">
+                    <span>_ACTIVAS</span>
+                </button>
+                <button class="nav-btn sub-nav-btn" data-target="mapa-fullscreen-container">
+                    <span>_MAPA</span>
+                </button>
+            </div>
         </div>
-    </div>
 
-    <!-- SECCIÓN 3: REPORTES -->
-    <div class="menu-item-has-submenu">
-        <button class="nav-btn btn-submenu-toggle">
-            <span>_REPORTES</span>
-            <i class="arrow-icon">▼</i>
-        </button>
-        <div class="submenu">
-            <!-- CORREGIDO: pestana-notificaciones-planillas -->
-            <button class="nav-btn sub-nav-btn" data-target="pestana-notificaciones-planillas">
-                <span>_PLANILLAS</span>
+        <!-- SECCIÓN 2: MONEDERO -->
+        <div class="menu-item-has-submenu">
+            <button class="nav-btn btn-submenu-toggle">
+                <span>_MONEDERO</span>
+                <i class="arrow-icon">▼</i>
             </button>
-            <button class="nav-btn sub-nav-btn" data-target="pestana-notificaciones-reportes">
+            <div class="submenu">
+                <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-saldo">
+                    <span>_SALDO</span>
+                </button>
+                <button class="nav-btn sub-nav-btn" data-target="pestana-monedero-historial">
+                    <span>_HISTORIAL</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 3: REPORTES -->
+        <div class="menu-item-has-submenu">
+            <button class="nav-btn btn-submenu-toggle">
                 <span>_REPORTES</span>
+                <i class="arrow-icon">▼</i>
+            </button>
+            <div class="submenu">
+                <button class="nav-btn sub-nav-btn" data-target="pestana-notificaciones-planillas">
+                    <span>_PLANILLAS</span>
+                </button>
+                <button class="nav-btn sub-nav-btn" data-target="pestana-notificaciones-reportes">
+                    <span>_REPORTES</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 4: MI PERFIL (CORREGIDO - SIN ONCLICK INLINE) -->
+        <div class="menu-item">
+            <button class="nav-btn" data-target="pestana-perfil-conductor">
+                <i class="fa-solid fa-user-gear"></i>
+                <span>_MI_PERFIL</span>
             </button>
         </div>
-    </div>
-    <!-- SECCIÓN 4: MI PERFIL (NUEVO) -->
-    <div class="menu-item">
-        <button class="nav-btn" 
-                data-target="pestana-perfil-conductor" 
-                onclick="manejarNavegacionSidebar(this)">
-            <i class="fa-solid fa-user-gear"></i>
-            <span>_MI_PERFIL</span>
-        </button>
-    </div>
-    <!-- SECCIÓN INDEPENDIENTE: CERRAR / SALIR -->
-    <div class="menu-item">
-        <button class="nav-btn" data-target="pestana-reportes">
-            <span>_CERRAR</span>
-        </button>
-    </div>
+
+        <!-- SECCIÓN 5: CERRAR / SALIR -->
+        <div class="menu-item">
+            <button class="nav-btn btn-cerrar-sesion" data-target="pestana-notificaciones-reportes">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span>_CERRAR</span>
+            </button>
+        </div>
+
+    </nav>
 </aside>

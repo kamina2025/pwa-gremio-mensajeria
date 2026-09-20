@@ -1,77 +1,74 @@
 <!-- pwa-mensajero/vistas/perfil/conductor.html -->
-<div id="pestana-perfil-conductor" class="contenedor-pestana">
+<header class="cyber-header">
+    <h3>_PERFIL_CONDUCTOR_Y_VEHICULO</h3>
+</header>
+
+<form id="form-perfil-conductor" class="form-cyber" onsubmit="manejarGuardarPerfil(event)">
     
-    <header class="cyber-header">
-        <h3>_PERFIL_CONDUCTOR_Y_VEHICULO</h3>
-    </header>
-
-    <form id="form-perfil-conductor" class="form-cyber" onsubmit="manejarGuardarPerfil(event)">
-        
-        <!-- DATOS PERSONALES -->
-        <fieldset class="cyber-fieldset">
-            <legend class="label">_DATOS_PERSONALES</legend>
-            <div class="grid-form">
-                <div class="input-group">
-                    <label>NOMBRE COMPLETO</label>
-                    <input type="text" id="perfil-nombre" class="input-cyber" placeholder="Ej. Juan Pérez" required />
-                </div>
-                <div class="input-group">
-                    <label>CÉDULA / IDENTIFICACIÓN</label>
-                    <input type="text" id="perfil-cedula" class="input-cyber" placeholder="Ej. 1012345678" required />
-                </div>
-                <div class="input-group">
-                    <label>TELÉFONO DE CONTACTO</label>
-                    <input type="tel" id="perfil-telefono" class="input-cyber" placeholder="Ej. 3001234567" required />
-                </div>
+    <!-- DATOS PERSONALES -->
+    <fieldset class="cyber-fieldset">
+        <legend class="label">_DATOS_PERSONALES</legend>
+        <div class="grid-form">
+            <div class="input-group">
+                <label>NOMBRE COMPLETO</label>
+                <input type="text" id="perfil-nombre" class="input-cyber" placeholder="Ej. Juan Pérez" required />
             </div>
-        </fieldset>
-
-        <!-- DATOS DEL VEHÍCULO -->
-        <fieldset class="cyber-fieldset">
-            <legend class="label">_DATOS_VEHICULO</legend>
-            <div class="grid-form">
-                <div class="input-group">
-                    <label>PLACA DE LA MOTO</label>
-                    <input type="text" id="perfil-placa" class="input-cyber uppercase" placeholder="Ej. ABC123D" maxlength="8" required />
-                </div>
+            <div class="input-group">
+                <label>CÉDULA / IDENTIFICACIÓN</label>
+                <input type="text" id="perfil-cedula" class="input-cyber" placeholder="Ej. 1012345678" required />
             </div>
-        </fieldset>
-
-        <!-- DOCUMENTACIÓN Y EVIDENCIAS -->
-        <fieldset class="cyber-fieldset">
-            <legend class="label">_DOCUMENTACION_TECNICA_Y_LEGAL</legend>
-
-            <!-- Tarjeta de Propiedad -->
-            <div class="input-group-doc">
-                <label>TARJETA DE PROPIEDAD (IMAGEN / PDF)</label>
-                <input type="file" id="doc-tarjeta-propiedad" class="input-file-cyber" accept="image/*,application/pdf" />
-                <div id="prev-tarjeta-propiedad" class="preview-box"></div>
+            <div class="input-group">
+                <label>TELÉFONO DE CONTACTO</label>
+                <input type="tel" id="perfil-telefono" class="input-cyber" placeholder="Ej. 3001234567" required />
             </div>
+        </div>
+    </fieldset>
 
-            <!-- SOAT -->
-            <div class="input-group-doc">
-                <label>SOAT (FOTO / PDF)</label>
-                <input type="file" id="doc-soat" class="input-file-cyber" accept="image/*,application/pdf" />
-                <label>FECHA VENCIMIENTO SOAT</label>
-                <input type="date" id="perfil-soat-vencimiento" class="input-cyber" />
-                <div id="prev-soat" class="preview-box"></div>
+    <!-- DATOS DEL VEHÍCULO -->
+    <fieldset class="cyber-fieldset">
+        <legend class="label">_DATOS_VEHICULO</legend>
+        <div class="grid-form">
+            <div class="input-group">
+                <label>PLACA DE LA MOTO</label>
+                <input type="text" id="perfil-placa" class="input-cyber uppercase" placeholder="Ej. ABC123D" maxlength="8" required />
             </div>
+        </div>
+    </fieldset>
 
-            <!-- Tecnomecánica -->
-            <div class="input-group-doc">
-                <label>REVISIÓN TECNOMECÁNICA (FOTO / PDF)</label>
-                <input type="file" id="doc-tecno" class="input-file-cyber" accept="image/*,application/pdf" />
-                <label>FECHA VENCIMIENTO TECNOMECÁNICA</label>
-                <input type="date" id="perfil-tecno-vencimiento" class="input-cyber" />
-                <div id="prev-tecno" class="preview-box"></div>
-            </div>
-        </fieldset>
+    <!-- DOCUMENTACIÓN Y EVIDENCIAS -->
+    <fieldset class="cyber-fieldset">
+        <legend class="label">_DOCUMENTACION_TECNICA_Y_LEGAL</legend>
 
-        <div class="acciones-form">
-            <button type="submit" class="cyber-btn btn-guardar-perfil">
-                <i class="fa-solid fa-floppy-disk"></i> _GUARDAR_PERFIL
-            </button>
+        <!-- Tarjeta de Propiedad -->
+        <div class="input-group-doc">
+            <label>TARJETA DE PROPIEDAD (IMAGEN / PDF)</label>
+            <input type="file" id="doc-tarjeta-propiedad" class="input-file-cyber" accept="image/*,application/pdf" />
+            <div id="prev-tarjeta-propiedad" class="preview-box"></div>
         </div>
 
-    </form>
-</div>
+        <!-- SOAT -->
+        <div class="input-group-doc">
+            <label>SOAT (FOTO / PDF)</label>
+            <input type="file" id="doc-soat" class="input-file-cyber" accept="image/*,application/pdf" />
+            <label>FECHA VENCIMIENTO SOAT</label>
+            <input type="date" id="perfil-soat-vencimiento" class="input-cyber" />
+            <div id="prev-soat" class="preview-box"></div>
+        </div>
+
+        <!-- Tecnomecánica -->
+        <div class="input-group-doc">
+            <label>REVISIÓN TECNOMECÁNICA (FOTO / PDF)</label>
+            <input type="file" id="doc-tecno" class="input-file-cyber" accept="image/*,application/pdf" />
+            <label>FECHA VENCIMIENTO TECNOMECÁNICA</label>
+            <input type="date" id="perfil-tecno-vencimiento" class="input-cyber" />
+            <div id="prev-tecno" class="preview-box"></div>
+        </div>
+    </fieldset>
+
+    <div class="acciones-form">
+        <button type="submit" class="cyber-btn btn-guardar-perfil">
+            <i class="fa-solid fa-floppy-disk"></i> _GUARDAR_PERFIL
+        </button>
+    </div>
+
+</form>

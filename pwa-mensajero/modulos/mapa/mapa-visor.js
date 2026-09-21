@@ -19,7 +19,7 @@ window.marcadoresRutaMensajero = [];
 window.infoWindowMensajero = null;
 window.pendientesParaRenderizar = null;
 
-// Re-exportar funciones telemáticas y de eventos para compatibilidad de módulos
+// Re-exportar funciones telemáticas y de eventos
 export { 
     ejecutarBusquedaDireccion, 
     toggleBuscadorMapaUI, 
@@ -56,6 +56,13 @@ export function inicializarMapaMensajero() {
                 { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#291f33" }] },
                 { featureType: "water", elementType: "geometry", stylers: [{ color: "#040205" }] }
             ]
+        });
+
+        // Ocultar menú radial activo al hacer clic sobre el mapa
+        window.mapaMensajero.addListener("click", () => {
+            if (window.overlayMenuActivo) {
+                window.overlayMenuActivo.cerrar();
+            }
         });
 
         // Evento para asegurar ajuste correcto del lienzo al cargar
@@ -110,7 +117,7 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     // Trazar línea de ruta en polilínea
     trazarPolilineaRuta(listaPedidos);
 
-    // Renderizar marcadores de paradas sobre el mapa
+    // Renderizar marcadores interactivos con overlay en cruz
     renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, () => {
         if (typeof window.refrescarUI === "function") {
             window.refrescarUI();
@@ -120,6 +127,6 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     });
 }
 
-// Vinculación explicita a window para compatibilidad global
+// Vinculación explícita a window para compatibilidad global
 window.inicializarMapaMensajero = inicializarMapaMensajero;
 window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;

@@ -26,40 +26,64 @@
     background: var(--neon-magenta);
     border-radius: 3px;
 }
-/* --- BOTONES DE ACCIÓN PRINCIPALES DE RUTA --- */
+/* ==========================================================================
+   AJUSTE DE TAMAÑO COMPACTO PARA BOTONES EN RUTA ACTIVA
+   ========================================================================== */
+
+/* Contenedor de la barra de acciones superior */
 .header-acciones-ruta {
     display: flex;
-    gap: 12px;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    max-height: 55px; /* Restringe la altura vertical máxima del contenedor */
     margin-bottom: 15px;
-    padding: 5px 0;
+    align-items: center;
 }
 
+/* Botones de acción ajustados y compactos */
+.header-acciones-ruta .cyber-btn,
+.header-acciones-ruta .btn-iniciar-ruta,
+.header-acciones-ruta .btn-planillar {
+    flex: 1;
+    height: 44px; /* Altura estándar fija y ergonómica */
+    min-height: 44px;
+    max-height: 44px;
+    padding: 0 12px;
+    font-size: 0.82rem;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-transform: uppercase;
+    clip-path: polygon(0 0, 92% 0, 100% 25%, 100% 100%, 8% 100%, 0 75%);
+    box-sizing: border-box;
+}
+
+/* Ajuste específico para el botón Iniciar Ruta */
 .btn-iniciar-ruta {
     background: rgba(0, 243, 255, 0.1);
-    border-color: var(--neon-cyan);
-    color: var(--neon-cyan);
-    font-weight: bold;
-    flex: 1;
-    justify-content: center;
+    border: 1px solid var(--neon-cyan, #00f3ff);
+    color: var(--neon-cyan, #00f3ff);
 }
 
 .btn-iniciar-ruta:hover {
-    background: var(--neon-cyan);
-    color: var(--bg-color);
-    box-shadow: 0 0 12px var(--neon-cyan);
+    background: var(--neon-cyan, #00f3ff);
+    color: var(--bg-color, #030308);
+    box-shadow: 0 0 10px var(--neon-cyan, #00f3ff);
 }
 
+/* Ajuste específico para el botón Planillar */
 .btn-planillar {
     background: rgba(249, 240, 2, 0.1);
-    border-color: var(--neon-yellow);
-    color: var(--neon-yellow);
-    font-weight: bold;
-    flex: 1;
-    justify-content: center;
+    border: 1px solid var(--neon-yellow, #f9f002);
+    color: var(--neon-yellow, #f9f002);
 }
 
 .btn-planillar:hover {
-    background: var(--neon-yellow);
-    color: var(--bg-color);
-    box-shadow: 0 0 12px var(--neon-yellow);
+    background: var(--neon-yellow, #f9f002);
+    color: var(--bg-color, #030308);
+    box-shadow: 0 0 10px var(--neon-yellow, #f9f002);
 }

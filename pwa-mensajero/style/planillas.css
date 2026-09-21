@@ -50,7 +50,7 @@
     color: var(--neon-cyan);
     font-family: var(--cyber-font);
     font-size: 0.85rem;
-    padding: 8px 16px;
+    padding: 3px 5px;
     cursor: pointer;
     text-transform: uppercase;
     display: inline-flex;
@@ -61,7 +61,7 @@
 }
 
 .cyber-btn-sm {
-    padding: 5px 10px;
+    padding: 5px 20px;
     font-size: 0.78rem;
     border-color: rgba(0, 243, 255, 0.6);
 }
@@ -197,22 +197,20 @@
     color: var(--neon-magenta);
 }
 /* ==========================================================================
-   ESTILOS DE IMPRESIÓN Y EXPORTACIÓN INDIVIDUAL A PDF
+   ESTILOS EXCLUSIVOS PARA LA HOJA DE IMPRESIÓN Y PDF DE PLANILLAS
    ========================================================================== */
 
-/* Ocultar el área de impresión temporal en la pantalla normal */
 .area-impresion-solo-pdf {
     display: none;
 }
 
-/* --- REGLAS EXCLUSIVAS PARA EXPORTAR A PDF / IMPRIMIR --- */
 @media print {
-    /* Ocultar toda la interfaz de la PWA (Sidebar, Header, Botones, etc.) */
+    /* Ocultar interfaz PWA completa */
     body * {
         visibility: hidden !important;
     }
 
-    /* Mostrar únicamente el contenedor de la planilla seleccionada */
+    /* Mostrar únicamente la hoja de impresión temporal */
     #area-impresion-planilla-tmp,
     #area-impresion-planilla-tmp * {
         visibility: visible !important;
@@ -224,10 +222,10 @@
         left: 0;
         top: 0;
         width: 100%;
-        padding: 20px;
+        padding: 15px;
         background: #ffffff !important;
         color: #000000 !important;
-        font-family: Arial, sans-serif;
+        font-family: Arial, Helvetica, sans-serif;
     }
 
     .hoja-pdf-planilla {
@@ -237,62 +235,142 @@
 
     .encabezado-pdf {
         text-align: center;
-        border-bottom: 2px solid #333;
-        padding-bottom: 10px;
-        margin-bottom: 20px;
+        border-bottom: 2px solid #000;
+        padding-bottom: 8px;
+        margin-bottom: 15px;
     }
 
     .encabezado-pdf h2 {
         margin: 0;
-        font-size: 1.4rem;
-        color: #111;
+        font-size: 1.3rem;
+        color: #000;
+        text-transform: uppercase;
     }
 
     .encabezado-pdf p {
-        margin: 5px 0 0 0;
-        font-size: 0.9rem;
-        color: #555;
+        margin: 3px 0 0 0;
+        font-size: 0.8rem;
+        color: #444;
     }
 
+    /* Bloque superior con datos de Placa y Mensajero */
+    .pdf-datos-mensajero {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        background-color: #f8f9fa;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+    }
+
+    .item-datos-m {
+        font-size: 0.85rem;
+    }
+
+    .label-m {
+        font-weight: bold;
+        color: #333;
+        margin-right: 5px;
+    }
+
+    .badge-placa-pdf {
+        background-color: #e2e8f0;
+        padding: 2px 6px;
+        border-radius: 3px;
+        border: 1px solid #cbd5e1;
+    }
+
+    /* Tabla de filas individuales de SCC */
     .tabla-pdf-export {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
     }
 
     .tabla-pdf-export th,
     .tabla-pdf-export td {
-        border: 1px solid #777;
-        padding: 10px;
+        border: 1px solid #666;
+        padding: 8px;
         text-align: left;
-        font-size: 0.9rem;
+        vertical-align: top;
     }
 
     .tabla-pdf-export th {
-        background-color: #f2f2f2 !important;
+        background-color: #e5e7eb !important;
         color: #000 !important;
+        font-size: 0.8rem;
         font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .col-scc {
+        font-size: 0.9rem;
+    }
+
+    .text-scc {
+        color: #000;
+        font-family: monospace;
+    }
+
+    .col-parada {
+        font-size: 0.82rem;
+    }
+
+    .destinatario-pdf {
+        font-size: 0.85rem;
+        color: #111;
+    }
+
+    .direccion-pdf {
+        color: #333;
+        margin-top: 2px;
+    }
+
+    .contacto-pdf {
+        color: #555;
+        font-size: 0.78rem;
+        margin-top: 2px;
+    }
+
+    .col-novedad {
+        font-size: 0.8rem;
     }
 
     .badge-pdf {
+        display: inline-block;
         font-weight: bold;
-        padding: 3px 6px;
+        font-size: 0.75rem;
+        padding: 2px 6px;
+        border-radius: 3px;
+        text-transform: uppercase;
+        margin-bottom: 4px;
     }
 
     .badge-pdf.entregado {
-        color: #0d730d;
+        background-color: #d1fae5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
     }
 
     .badge-pdf.devuelto {
-        color: #b30000;
+        background-color: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+    }
+
+    .fecha-hora-pdf {
+        font-size: 0.73rem;
+        color: #666;
     }
 
     .pie-pdf {
-        margin-top: 30px;
-        border-top: 1px solid #ccc;
-        padding-top: 10px;
+        margin-top: 20px;
+        border-top: 1px solid #aaa;
+        padding-top: 8px;
         text-align: center;
-        font-size: 0.75rem;
-        color: #666;
+        font-size: 0.7rem;
+        color: #555;
     }
 }

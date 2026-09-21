@@ -1,12 +1,15 @@
 /**
  * PROTOCOLO MACONDO - GENERADOR PDF Y EXPORTACIÓN INDIVIDUAL DE PLANILLA
- * Ubicación: pwa-mensajero/modulos/planillas-pdf-sync.js
+ * Ubicación: pwa-mensajero/modulos/planilla/planillas-pdf-sync.js
  */
 
 import { obtenerPlanillasReportadas } from './planillas-db.js';
+import { obtenerRutaZonificada } from '../mensajero-persistencia.js';
 
 /**
- * Recopila los datos de la celda/registro específico y genera un documento PDF organizado.
+ * Recopila los datos de la planilla y vincula la información exacta de las paradas
+ * para garantizar la impresión de destinatario, dirección y teléfono reales.
+ * 
  * @param {string|number} idPlanilla ID de la planilla a exportar
  */
 export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
@@ -14,7 +17,6 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
 
     try {
         const planillas = await obtenerPlanillasReportadas();
-        // Buscar únicamente el registro de la celda/fila seleccionada
         const planilla = planillas.find(p => String(p.id) === String(idPlanilla));
 
         if (!planilla) {
@@ -22,7 +24,7 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
             return;
         }
 
-        // Crear contenedor temporal exclusivo para la impresión
+        // Crear o reutilizar el contenedor temporal exclusivo para impresión
         let printArea = document.getElementById("area-impresion-planilla-tmp");
         if (!printArea) {
             printArea = document.createElement("div");
@@ -31,49 +33,107 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
             document.body.appendChild(printArea);
         }
 
-        // Inyectar la estructura organizada de la tabla únicamente con los datos de esta planilla
+        // Lista de SCCs registrada en la planilla
+        const listaSccs = planilla.scc ? planilla.scc.split(',').map(s => s.trim()) : [];
+        
+        // Cargar paradas adjuntas a la planilla o consultar el respaldo de la ruta actual
+        let paradasDetalle = planilla.paradas || [];
+        if (paradasDetalle.length === 0 && typeof obtenerRutaZonificada === 'function') {
+            paradasDetalle = obtenerRutaZonificada() || [];
+        }
+
+        // Generación de filas individuales para el PDF
+        const filasTablaHtml = listaSccs.map((codigoScc, index) => {
+            // Coincidencia exacta por código SCC o ID de parada
+            const detalle = paradasDetalle.find(p => 
+                String(p.ssc || p.id).trim() === String(codigoScc).trim()
+            ) || paradasDetalle[index] || {};
+
+            const destinatario = detalle.destinatario || 'Cliente General';
+            const direccion = detalle.direccion || 'Dirección no especificada';
+            const telefono = detalle.telefono || 'N/A';
+            const cuota = (detalle.cuotaModeradora && detalle.cuotaModeradora !== '$0') 
+                ? ` | Cuota: $${detalle.cuotaModeradora}` 
+                : '';
+
+            const estadoScc = detalle.estado || planilla.estadoScc || 'Devuelto';
+            const fechaHoraNovedad = detalle.registroOperaciones?.fechaHora 
+                || (planilla.creadoEn ? new Date(planilla.creadoEn).toLocaleString('es-CO') : new Date().toLocaleString('es-CO'));
+
+            const esEntregado = String(estadoScc).toUpperCase() === 'ENTREGADO' 
+                || String(estadoScc).toUpperCase() === 'FINALIZADO';
+
+            return `
+                <tr>
+                    <td class="col-scc">
+                        <strong class="text-scc">${codigoScc}</strong>
+                    </td>
+                    <td class="col-parada">
+                        <div class="destinatario-pdf"><strong>${destinatario}</strong></div>
+                        <div class="direccion-pdf">${direccion}</div>
+                        <div class="contacto-pdf">Tel: ${telefono}${cuota}</div>
+                    </td>
+                    <td class="col-novedad">
+                        <span class="badge-pdf ${esEntregado ? 'entregado' : 'devuelto'}">
+                            ${esEntregado ? 'ENTREGADO' : 'DEVUELTO'}
+                        </span>
+                        <div class="fecha-hora-pdf">${fechaHoraNovedad}</div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        // Inyección HTML en el contenedor de impresión
         printArea.innerHTML = `
             <div class="hoja-pdf-planilla">
-                <header class="encabezado-pdf">
-                    <h2>PLANILLA DE MENSAJERÍA Y ENTREGA</h2>
-                    <p><strong>REPORTE INDIVIDUAL - SISTEMA RUNNER</strong></p>
-                </header>
                 
+                <header class="encabezado-pdf">
+                    <h2>PLANILLA DE MENSAJERÍA Y ENTREGA DE PAQUETES</h2>
+                    <p>REPORTE DE OPERACIONES Y DISTRIBUCIÓN NODAL</p>
+                </header>
+
+                <section class="pdf-datos-mensajero">
+                    <div class="item-datos-m">
+                        <span class="label-m">MENSAJERO:</span>
+                        <strong class="valor-m">${planilla.nombreMensajero || localStorage.getItem("nombreMensajero") || 'kevin'}</strong>
+                    </div>
+                    <div class="item-datos-m">
+                        <span class="label-m">PLACA VEHÍCULO:</span>
+                        <strong class="valor-m badge-placa-pdf">${planilla.placaMensajero || localStorage.getItem("placaMensajero") || 'IPX30F'}</strong>
+                    </div>
+                    <div class="item-datos-m">
+                        <span class="label-m">FECHA PLANILLA:</span>
+                        <span class="valor-m">${planilla.fecha || new Date().toLocaleDateString('es-CO')}</span>
+                    </div>
+                    <div class="item-datos-m">
+                        <span class="label-m">ID PLANILLA:</span>
+                        <span class="valor-m">#PLN-${planilla.id || Date.now()}</span>
+                    </div>
+                </section>
+
                 <table class="tabla-pdf-export">
                     <thead>
                         <tr>
-                            <th>SCC / SEGUIMIENTO</th>
-                            <th>FECHA</th>
-                            <th>MENSAJERO</th>
-                            <th>PLACA</th>
-                            <th>ESTADO SCC</th>
+                            <th style="width: 25%;">SCC / SEGUIMIENTO</th>
+                            <th style="width: 45%;">DATOS DE LA PARADA</th>
+                            <th style="width: 30%;">NOVEDADES / ESTADO</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td><strong>${planilla.scc || 'N/A'}</strong></td>
-                            <td>${planilla.fecha || new Date().toLocaleDateString()}</td>
-                            <td>${planilla.nombreMensajero || 'Mensajero Acreditado'}</td>
-                            <td>${planilla.placaMensajero || 'N/A'}</td>
-                            <td>
-                                <span class="badge-pdf ${planilla.estadoScc === 'Entregado' ? 'entregado' : 'devuelto'}">
-                                    ${planilla.estadoScc || 'Devuelto'}
-                                </span>
-                            </td>
-                        </tr>
+                        ${filasTablaHtml}
                     </tbody>
                 </table>
 
                 <footer class="pie-pdf">
-                    <p>Documento generado el ${new Date().toLocaleString()} - Generado por Runner PWA</p>
+                    <p>Documento oficial de entrega - Generado automáticamente el ${new Date().toLocaleString('es-CO')} via Runner PWA</p>
                 </footer>
+
             </div>
         `;
 
-        // Ejecutar diálogo de impresión/PDF del navegador
+        // Ejecutar impresión a PDF nativa del navegador
         window.print();
 
-        // Limpiar el área temporal después de imprimir
         setTimeout(() => {
             if (printArea) printArea.innerHTML = "";
         }, 1000);

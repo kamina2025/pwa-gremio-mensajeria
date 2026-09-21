@@ -516,7 +516,8 @@ window.iniciarRutaCompleta = function() {
 };
 
 /**
- * Extrae los SCC, fecha, mensajero y estados actuales, y los guarda en Planillas.
+ * Extrae los SCC, fecha, mensajero, estados actuales y el detalle completo de cada parada,
+ * y los guarda en el almacén de Planillas de IndexedDB.
  */
 window.generarPlanillaDesdeRuta = async function() {
     console.log("📝 [OPERACION]: Generando planilla desde la ruta activa...");
@@ -527,8 +528,23 @@ window.generarPlanillaDesdeRuta = async function() {
         return;
     }
 
+    // Mapear Códigos SCC en string concatenado para vista rápida
     const listaScc = paradasActuales.map(p => p.ssc || p.id).join(", ");
+    
+    // Determinar estado consolidado del paquete
     const estadosScc = paradasActuales.every(p => p.estado === "FINALIZADO") ? "Entregado" : "Devuelto";
+
+    // Mapeo detallado de paradas preservando todos los campos para el PDF
+    const paradasDetalle = paradasActuales.map(p => ({
+        id: p.id,
+        ssc: p.ssc || p.id,
+        destinatario: p.destinatario || 'Cliente General',
+        direccion: p.direccion || 'Dirección no especificada',
+        telefono: p.telefono || 'N/A',
+        cuotaModeradora: p.cuotaModeradora || '$0',
+        estado: p.estado === 'FINALIZADO' ? 'ENTREGADO' : (p.estado || 'DEVUELTO'),
+        registroOperaciones: p.registroOperaciones || {}
+    }));
 
     const nuevaPlanilla = {
         scc: listaScc,
@@ -536,6 +552,7 @@ window.generarPlanillaDesdeRuta = async function() {
         nombreMensajero: localStorage.getItem("nombreMensajero") || "Mensajero Acreditado",
         placaMensajero: localStorage.getItem("placaMensajero") || "MXX-000",
         estadoScc: estadosScc,
+        paradas: paradasDetalle, // <--- DETALLE COMPLETO ADJUNTO A LA PLANILLA
         creadoEn: new Date().toISOString()
     };
 

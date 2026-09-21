@@ -45,17 +45,17 @@ export function cambiarPestanaPlanillas(tabId) {
  * Carga e inyecta la lista de planillas almacenadas localmente
  */
 export async function cargarPlanillasReportadasUI() {
-    console.log(" 🔍 [PLANILLAS]: Escaneando planillas reportadas...");
+    console.log("🔍 [PLANILLAS]: Escaneando planillas reportadas...");
     const tbody = document.getElementById('tabla-planillas-reportadas-body');
     if (!tbody) return;
 
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center">🔍 Escaneando registros locales...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">🔍 Escaneando registros locales...</td></tr>';
 
     try {
         const planillas = await obtenerPlanillasReportadas();
 
         if (!planillas || planillas.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center">No hay planillas reportadas guardadas.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center">No hay planillas reportadas guardadas.</td></tr>';
             return;
         }
 
@@ -63,8 +63,6 @@ export async function cargarPlanillasReportadasUI() {
             <tr id="planilla-card-${p.id}">
                 <td><strong class="text-neon">${p.scc || 'N/A'}</strong></td>
                 <td>${p.fecha || new Date().toLocaleDateString()}</td>
-                <td>${p.nombreMensajero || 'Mensajero Acreditado'}</td>
-                <td><span class="badge-placa">${p.placaMensajero || 'N/A'}</span></td>
                 <td>
                     <span class="badge ${p.estadoScc === 'Entregado' ? 'badge-success' : 'badge-danger'}">
                         ${p.estadoScc || 'Devuelto'}
@@ -79,8 +77,8 @@ export async function cargarPlanillasReportadasUI() {
         `).join('');
 
     } catch (err) {
-        console.error(" ❌ [PLANILLAS]: Error cargando planillas locales:", err);
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error al cargar datos locales.</td></tr>';
+        console.error("❌ [PLANILLAS]: Error cargando planillas locales:", err);
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error al cargar datos locales.</td></tr>';
     }
 }
 

@@ -81,7 +81,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
         `;
     }
 
-    // 2. CONSTRUCCIÓN DE ACORDEONES AGRUPADOS POR ZONA CON BARRA DE ACCIONES Y DRAG & DROP
+    // 2. CONSTRUCCIÓN DE ACORDEONES AGRUPADOS POR ZONA CON ACCIONES Y DRAG & DROP
     if (contenedorAcordeones) {
         console.log("📋 [MENSAJERO_UI]: Construyendo acordeones de paradas por zona...");
         contenedorAcordeones.innerHTML = "";
@@ -155,6 +155,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                 card.style.cssText = `background:#0c080f; border:1px solid ${p.origIndex === indiceActivo ? 'var(--neon-blue, #00e5ff)' : '#291f33'}; padding:6px 8px; font-size:0.75rem; border-radius:3px; cursor:grab;`;
 
                 card.innerHTML = `
+                    <!-- MODO LECTURA DE PARADA -->
                     <div id="vista-lectura-${p.origIndex}" style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
                             <div><strong style="color:${infoZona.color}">[#${p.secuencia}]</strong> ${p.destinatario || "Cliente"} - ${p.direccion || ''}</div>
@@ -170,6 +171,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                         </div>
                     </div>
 
+                    <!-- MODO EDICIÓN FORMULARIO INDIVIDUAL -->
                     <div id="vista-edicion-${p.origIndex}" style="display:none; flex-direction:column; gap:4px; margin-top:4px; background:#140e1a; padding:6px; border:1px dashed var(--neon-blue, #00e5ff);">
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
                             <input type="text" id="input-edit-destinatario-${p.origIndex}" value="${p.destinatario || ''}" placeholder="Destinatario" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
@@ -198,7 +200,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
         });
     }
 
-    console.log("✅ [MENSAJERO_UI]: Consola de operaciones y acordeones renderizados exitosamente.");
+    console.log("✅ [MENSAJERO_UI]: Consola de operaciones y acordeones renderizados exitosamente con botonera zonificada.");
     console.groupEnd();
 }
 
@@ -319,14 +321,13 @@ function obtenerBotonesFlujoHTML(pedido, llamadasRealizadas) {
     return `<div style="color:var(--crypto-secure, #00ff66); text-align:center; font-weight:bold; padding:8px;">✅ ENTREGADO / PROCESADO</div>`;
 }
 
-// ==========================================================================
-// CONEXIÓN DE ACCIONES OPERATIVAS Y NAVEGACIÓN SPA CON SCRIPT2.JS / PLANILLA
-// ==========================================================================
+// ==========================================
+// ACCIONES DE BOTONERA INTERNA POR ZONA Y GLOBAL
+// ==========================================
 
 window.iniciarRutaZona = function (zonaLabel) {
-    console.log(`► [MENSAJERO_UI]: Iniciando ruta activa para la zona: ${zonaLabel}`);
+    console.log(`► [MENSAJERO_UI]: Iniciando ruta para la zona: ${zonaLabel}`);
     localStorage.setItem("zona_activa_operacion", zonaLabel);
-    
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/mapa-activa.html", { zona: zonaLabel });
     } else {
@@ -337,7 +338,6 @@ window.iniciarRutaZona = function (zonaLabel) {
 window.planillarRutaZona = function (zonaLabel) {
     console.log(`📝 [MENSAJERO_UI]: Generando planilla para la zona: ${zonaLabel}`);
     localStorage.setItem("zona_planillar_activa", zonaLabel);
-
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/notificaciones/planillas.html", { zona: zonaLabel });
     } else if (typeof window.renderizarModuloPlanillas === "function") {
@@ -348,9 +348,8 @@ window.planillarRutaZona = function (zonaLabel) {
 };
 
 window.verMapaZona = function (zonaLabel) {
-    console.log(`🗺️ [MENSAJERO_UI]: Navegando al mapa táctico de la zona: ${zonaLabel}`);
+    console.log(`🗺️ [MENSAJERO_UI]: Navegando a la vista de mapa activa para zona: ${zonaLabel}`);
     localStorage.setItem("zona_activa_operacion", zonaLabel);
-
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/mapa-activa.html", { zona: zonaLabel });
     } else {
@@ -361,7 +360,7 @@ window.verMapaZona = function (zonaLabel) {
 window.renderizarConsolaOperaciones = renderizarConsolaOperaciones;
 
 // ==========================================
-// ZONIFICACIÓN Y REORDENAMIENTO LOCAL-FIRST
+// MANTENIMIENTO, ZONIFICACIÓN Y REORDENAMIENTO LOCAL-FIRST
 // ==========================================
 
 window.ejecutarZonificacionAutomatica = async function() {

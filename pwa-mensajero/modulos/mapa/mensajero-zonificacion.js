@@ -1,12 +1,10 @@
 /**
  * PROTOCOLO MACONDO - MAPA INTEGRADO DE ZONAS SANITIZADAS (PWA MENSAJERO)
- * Configuración en memoria para delimitación de rutas y cuadrantes en Cali
  * Ubicación: pwa-mensajero/modulos/mapa/mensajero-zonificacion.js
  */
 
-// Paleta Unificada Mapeada Exactamente a los Polígonos GeoJSON del Mapa (mapa-mensajero-zonas.js)
 export const PALETA_ZONAS = {
-  "CENTRO":   { color: "#ff007f", badge: "badge-centro",  label: "ZONA CENTRO" },
+  "CENTRO":   { color: "#ff007f", badge: "badge-centro",   label: "ZONA CENTRO" },
   "NORTE-1":  { color: "#00f0ff", badge: "badge-norte-1", label: "ZONA NORTE 1" },
   "NORTE-2":  { color: "#39ff14", badge: "badge-norte-2", label: "ZONA NORTE 2" },
   "OESTE":    { color: "#ff9900", badge: "badge-oeste",   label: "ZONA OESTE" },
@@ -164,6 +162,11 @@ export const MAPA_ZONAS_CALI = {
   ]
 };
 
+/**
+ * Busca y retorna la característica GeoJSON de una zona dada su nombre o clave
+ * @param {string} nombreZona 
+ * @returns {Object|null}
+ */
 export function obtenerZonaPorNombre(nombreZona) {
   if (!nombreZona) return null;
   return MAPA_ZONAS_CALI.features.find(
@@ -172,12 +175,6 @@ export function obtenerZonaPorNombre(nombreZona) {
   ) || null;
 }
 
-/**
- * Algoritmo de Ray-Casting (Punto en Polígono)
- * @param {Array<number>} punto - [lng, lat]
- * @param {Array<Array<number>>} vs - Coordenadas del polígono [[lng, lat], ...]
- * @returns {boolean}
- */
 function puntoEnPoligono(punto, vs) {
   const x = punto[0], y = punto[1];
   let inside = false;
@@ -190,45 +187,25 @@ function puntoEnPoligono(punto, vs) {
   return inside;
 }
 
-/**
- * Determina la zona geográfica exacta de un punto (lat, lng) evaluando los polígonos GeoJSON de Cali.
- * @param {number|string} lat 
- * @param {number|string} lng 
- * @returns {Object} Feature de la zona encontrada o fallback
- */
 export function obtenerZonaPorCoordenadas(lat, lng) {
   const pointLat = parseFloat(lat);
   const pointLng = parseFloat(lng);
 
-  if (isNaN(pointLat) || isNaN(pointLng)) {
-    console.warn("⚠️ [ZONIFICACION]: Coordenadas inválidas recibidas:", { lat, lng });
-    return null;
-  }
+  if (isNaN(pointLat) || isNaN(pointLng)) return null;
 
-  const punto = [pointLng, pointLat]; // Formato GeoJSON: [lng, lat]
+  const punto = [pointLng, pointLat];
 
   for (const feature of MAPA_ZONAS_CALI.features) {
     const coords = feature.geometry.coordinates[0];
     if (puntoEnPoligono(punto, coords)) {
-      console.log(`🎯 [ZONIFICACION]: Coordenadas [${pointLat}, ${pointLng}] encontradas en ${feature.properties.key}`);
       return feature;
     }
   }
-
-  console.log(`⚠️ [ZONIFICACION]: Coordenadas [${pointLat}, ${pointLng}] fuera de polígonos GeoJSON.`);
   return null;
 }
 
-/**
- * Clasifica dinámicamente un conjunto de paradas evaluando los polígonos GeoJSON de Cali.
- * @param {Array<Object>} listaParadas 
- * @returns {Array<Object>} Lista de paradas clasificadas con metadatos de zona
- */
 export function clasificarParadasPorZona(listaParadas) {
-  if (!Array.isArray(listaParadas) || listaParadas.length === 0) {
-    console.warn("⚠️ [ZONIFICACION]: Lista de paradas vacía o no válida.");
-    return [];
-  }
+  if (!Array.isArray(listaParadas) || listaParadas.length === 0) return [];
 
   console.group("🎨 [ZONIFICAR]: Evaluando paradas por polígonos GeoJSON de Cali...");
 
@@ -246,7 +223,6 @@ export function clasificarParadasPorZona(listaParadas) {
       zonaKey = zonaDetectada.properties.key;
       nombreZona = zonaDetectada.properties.nombre;
     } else {
-      // Fallback geográfico refinado si está fuera de los límites de los polígonos GeoJSON definidos
       const pLat = parseFloat(parada.lat);
       const pLng = parseFloat(parada.lng);
 
@@ -268,8 +244,10 @@ export function clasificarParadasPorZona(listaParadas) {
 
     return {
       ...parada,
-      zonaKey,
-      nombreZona,
+      zonaKey: zonaKey,
+      zona: zonaKey,
+      zonaNombre: infoPalette.label,
+      nombreZona: nombreZona,
       colorZona: infoPalette.color
     };
   });

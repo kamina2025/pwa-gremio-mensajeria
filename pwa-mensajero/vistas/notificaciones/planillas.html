@@ -10,15 +10,25 @@
 
 <!-- Pestaña 1: Generación de Planilla -->
 <div id="tab-generar-planilla" class="tab-content active">
-    <header class="cyber-header">
-        <h3>_GENERACIÓN DE PLANILLAS</h3>
+    <header class="cyber-header flex-between">
+        <h3>_GENERACIÓN DE PLANILLAS ZONIFICADAS</h3>
+        <button class="cyber-btn btn-sm" onclick="renderizarModuloPlanillas()">
+            <i class="fa-solid fa-rotate-right"></i> _ACTUALIZAR_ZONAS
+        </button>
     </header>
     <div class="panel-contenido">
-        <p class="cyber-text">Seleccione los envíos para conformar la planilla actual.</p>
+        <p class="cyber-text">Seleccione los envíos o confirme la zona para conformar y emitir la planilla oficial en PDF.</p>
+        
+        <!-- CONTENEDOR DINÁMICO DONDE SE RENDERIZAN LAS ZONAS Y SUS PARADAS -->
+        <div id="contenedor-planillado-zonas" class="zonas-accordion-container" style="margin-top: 15px;">
+            <div class="text-center text-muted" style="padding: 20px;">
+                🔍 Cargando zonas pendientes para planillar...
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- Pestaña 2: Planillas Reportadas -->
+<!-- Pestaña 2: Planillas Reportadas Historial -->
 <div id="tab-planillas-reportadas" class="tab-content">
     <header class="cyber-header flex-between">
         <h3>_PLANILLAS_REPORTADAS_HISTORIAL</h3>
@@ -33,8 +43,6 @@
                 <tr>
                     <th>SCC / SEGUIMIENTO</th>
                     <th>FECHA</th>
-                    <!--<th>MENSAJERO</th>
-                    <th>PLACA</th>-->
                     <th>ESTADO SCC</th>
                     <th>ACCIONES</th>
                 </tr>

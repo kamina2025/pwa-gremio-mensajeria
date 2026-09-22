@@ -1,0 +1,19 @@
+{
+  "short_name": "Mensajero",
+  "name": "PWA Gremio Mensajería",
+  "description": "Sistema de gestión y seguimiento de rutas de mensajería Local-First",
+  "icons": [
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./index2.html",
+  "background_color": "#0d0f12",
+  "theme_color": "#00ff66",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "./"
+}

@@ -6,8 +6,11 @@
 # Archivos de datos locales dinámicos generados por la API PHP
 *.json
 
-# Excepción: Conservar la plantilla JSON original/base en el repositorio
+# Excepciones: Conservar archivos JSON esenciales de configuración y la plantilla base
+!manifest.json
 !pool_pedidos-origenal.json
+!package.json
+!package-lock.json
 
 # --- ARCHIVOS DE ENTORNO Y CONFIGURACIÓN ---
 .env

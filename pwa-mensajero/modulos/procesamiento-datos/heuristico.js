@@ -3,6 +3,12 @@
  * Ubicación: pwa-mensajero/modulos/procesamiento-datos/heuristico.js
  */
 
+/**
+ * Normaliza y procesa el texto extraído de la tirilla médica.
+ * 
+ * @param {string} texto - Texto crudo extraído del OCR o documento.
+ * @returns {Array<Object>} Arreglo de paradas procesadas.
+ */
 export function procesarTextoHeuristico(texto) {
     console.log(">>> [HEURISTICO_LOCAL_START]: Iniciando extracción defensiva local de patrones...");
     if (!texto || typeof texto !== "string") return [];
@@ -30,13 +36,13 @@ export function procesarTextoHeuristico(texto) {
 
         // 1. Captura SSC
         if (!currentSsc) {
-            const matchSsc = l.match(/(?:SSC(?:\s*No\.?)?|Gula|No\.?\s*Formula|Remision)[^\d]*(\d{5,8})/i);
+            const matchSsc = l.match(/(?:SSC(?:\s*No\.?)?|Guia|Gula|No\.?\s*Formula|Remision)[^\d]*(\d{5,8})/i);
             if (matchSsc && matchSsc[1]) {
                 currentSsc = matchSsc[1].trim();
             }
         }
 
-        // 2. Captura Afiliado / Cliente (con descarte de ruido visual/firmas)
+        // 2. Captura Afiliado / Cliente
         if (!currentNombre) {
             const matchNombre = l.match(/(?:Afiliado|Nombre\s*Cliente|Usuario|Cliente):?\s*([A-Za-zÁÉÍÓÚáéíóúÑñ\s\.-]{4,60})/i);
             if (matchNombre && matchNombre[1]) {
@@ -95,7 +101,7 @@ export function procesarTextoHeuristico(texto) {
     });
 
     const paradas = [];
-    if (currentDireccion || currentNombre || currentTelefono) {
+    if (currentDireccion || currentNombre || currentTelefono || currentSsc) {
         paradas.push({
             ssc: currentSsc || "103458",
             destinatario: currentNombre || "Cliente General",
@@ -108,4 +114,46 @@ export function procesarTextoHeuristico(texto) {
 
     console.log(`>>> [HEURISTICO_LOCAL_END]: Total de paradas procesadas: ${paradas.length}`);
     return paradas;
+}
+
+/**
+ * Wrapper de compatibilidad para llamadas directas desde ia-gemini.js u otros módulos.
+ * Acepta tanto texto en formato String como cadenas Base64 o payloads de fallback.
+ * 
+ * @param {string|Object} entrada - Texto o payload a procesar
+ * @returns {Array<Object>} Paradas generadas
+ */
+export function procesarRutaHeuristica(entrada) {
+    console.log("⚙️ [HEURISTICO_FALLBACK_HANDLER]: Recibida solicitud de procesamiento local.");
+
+    if (!entrada) {
+        return procesarTextoHeuristico("");
+    }
+
+    if (typeof entrada === "string") {
+        // Verificar si la cadena es un Base64 e intentar decodificarla
+        if (/^[A-Za-z0-9+/=]+$/.test(entrada.trim()) && entrada.length > 100) {
+            try {
+                const textoDecodificado = atob(entrada.trim());
+                return procesarTextoHeuristico(textoDecodificado);
+            } catch (e) {
+                console.warn("⚠️ [HEURISTICO_WARN]: La entrada no es un Base64 válido de texto. Procesando como texto plano.");
+            }
+        }
+        return procesarTextoHeuristico(entrada);
+    }
+
+    if (typeof entrada === "object") {
+        if (entrada.texto) return procesarTextoHeuristico(entrada.texto);
+        if (entrada.data && typeof entrada.data === "string") return procesarTextoHeuristico(entrada.data);
+    }
+
+    return [{
+        ssc: "103458",
+        destinatario: "Cliente General",
+        direccion: "Dirección no detectada",
+        telefono: "3000000000",
+        puntoOrigen: "Punto Disp. Cafam Cali Tequendama",
+        cuotaModeradora: "$0"
+    }];
 }

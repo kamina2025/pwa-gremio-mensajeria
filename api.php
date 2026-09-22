@@ -25,7 +25,6 @@ function responderJSON($data, $httpCode = 200) {
     if ($bufferLength !== false && $bufferLength > 0) {
         ob_clean();
     }
-    // Corrección sintáctica: uso explícito del operador pipe "|" de PHP
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;
 }
@@ -54,10 +53,10 @@ cargarVariablesEntornoEnv(__DIR__ . '/.env');
 function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
     $keyLimpia = trim($apiKey);
     
-    // Modelos REST activos (incluyendo gemini-3.6-flash probado en test-gemini.php)
+    // Lista priorizada de modelos
     $candidatos = [
         "gemini-3.6-flash",
-        "gemini-2.0-flash",
+        "gemini-2.5-flash",
         "gemini-1.5-flash",
         "gemini-1.5-pro"
     ];
@@ -72,7 +71,6 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
 
     foreach ($candidatos as $modelo) {
         $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$modelo}:generateContent?key=" . $keyLimpia;
-
         $headers = ['Content-Type: application/json'];
 
         $ch = curl_init();
@@ -99,18 +97,36 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
         if ($response !== false) {
             $resData = json_decode($response, true);
             
-            if ($httpCode === 200 && is_array($resData) && isset($resData['candidates'][0]['content']['parts'][0]['text'])) {
-                return [
-                    'exito' => true,
-                    'modelo' => $modelo,
-                    'text' => $resData['candidates'][0]['content']['parts'][0]['text']
-                ];
+            // Extracción robusta navegando sobre todas las partes del contenido generado
+            if ($httpCode === 200 && is_array($resData) && isset($resData['candidates'][0]['content']['parts'])) {
+                $textoResultado = '';
+                foreach ($resData['candidates'][0]['content']['parts'] as $part) {
+                    if (isset($part['text'])) {
+                        $textoResultado .= $part['text'];
+                    }
+                }
+
+                if (!empty($textoResultado)) {
+                    return [
+                        'exito' => true,
+                        'modelo' => $modelo,
+                        'text' => $textoResultado,
+                        'usage' => $resData['usageMetadata'] ?? null
+                    ];
+                }
             }
+
+            // Registrar detalle específico de cuotas o límites
             $ultimoErrorData = [
                 'modelo_probado' => $modelo,
                 'http_code' => $httpCode,
                 'response' => $resData ?? $response
             ];
+
+            // Si es un error de cuota/crédito (402), abortamos el bucle para informar a la PWA inmediatamente
+            if ($httpCode === 402) {
+                break;
+            }
         }
     }
 
@@ -137,7 +153,7 @@ switch ($method) {
             $apiKeyGemini = getenv('GEMINI_API_KEY') ?: ($_ENV['GEMINI_API_KEY'] ?? '');
 
             if (empty($apiKeyGemini)) {
-                responderJSON(['status' => 'error', 'message' => 'GEMINI_API_KEY no configurada en el archivo .env del servidor.'], 400);
+                responderJSON(['status' => 'error', 'message' => 'GEMINI_API_KEY no configurada en el servidor.'], 400);
             }
 
             $promptText = "Actúa como un extractor de datos logísticos para tirillas médicas en Cali, Colombia. " .
@@ -164,16 +180,17 @@ switch ($method) {
             $resultado = ejecutarGeneracionGeminiMultimodelo($bodyData, $apiKeyGemini);
 
             if (!$resultado['exito']) {
+                $httpStatus = ($resultado['detalles']['http_code'] ?? 500);
                 responderJSON([
                     'status' => 'error', 
                     'message' => 'Fallo al procesar el documento en la nube. Verifique la API Key de Gemini o los límites de cuota.', 
                     'detalles' => $resultado['detalles']
-                ], 500);
+                ], $httpStatus);
             }
 
             $rawText = $resultado['text'];
             
-            // Extracción robusta de JSON
+            // Extracción limpia de la estructura JSON
             if (preg_match('/\[.*\]/s', $rawText, $matches)) {
                 $cleanJsonText = $matches[0];
             } else {
@@ -183,6 +200,7 @@ switch ($method) {
             $parsedPuntos = json_decode($cleanJsonText, true);
 
             if (json_last_error() === JSON_ERROR_NONE && is_array($parsedPuntos)) {
+                // Si el modelo devolvió un solo objeto en lugar de una lista, se envuelve en un arreglo
                 if (isset($parsedPuntos['destinatario']) || isset($parsedPuntos['ssc'])) {
                     $parsedPuntos = [$parsedPuntos];
                 }

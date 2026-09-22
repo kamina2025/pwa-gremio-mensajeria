@@ -1,13 +1,24 @@
 /**
  * PROTOCOLO MACONDO - GESTOR DE RUTAS, ACCIONES DE ZONA Y DATOS DE PEDIDOS
  * Ubicación: pwa-mensajero/modulos/mensajero-rutas.js
+ * Arquitectura: Async Local-First con Integración IndexedDB y UI Zonificada
  */
 
-import { guardarRutaZonificada, obtenerRutaZonificada } from "./mensajero-persistencia.js";
+import { 
+    guardarRutaZonificada, 
+    obtenerRutaZonificada, 
+    obtenerParadasGuardadas 
+} from "./mensajero-persistencia.js";
 
 let itemArrastrado = null;
 
-export function procesarPayloadOStorage() {
+/**
+ * Procesa la carga inicial de paradas desde la URL (payload=) o lee la persistencia local IndexedDB.
+ * 
+ * @returns {Promise<Array<Object>>} Lista de pedidos normalizados.
+ */
+export async function procesarPayloadOStorage() {
+    console.log(">>> [RUTAS]: Evaluando origen de datos (URL Payload vs IndexedDB Local)...");
     let listaPedidos = [];
     const urlParams = new URLSearchParams(window.location.search);
     const payloadRaw = urlParams.get("payload");
@@ -19,28 +30,50 @@ export function procesarPayloadOStorage() {
                 estado: pedido.estado || "ASIGNADO",
                 registroOperaciones: pedido.registroOperaciones || {}
             }));
-            guardarRutaZonificada(listaPedidos);
-            console.log(">>> [RUTAS] Payload procesado y guardado:", listaPedidos.length, "paradas.");
+            await guardarRutaZonificada(listaPedidos);
+            console.log(`>>> [RUTAS] Payload de URL procesado y guardado: ${listaPedidos.length} paradas.`);
         } catch (e) {
-            console.error(">>> [PAYLOAD_ERROR]: Error procesando payload URL:", e);
-            listaPedidos = obtenerRutaZonificada();
+            console.error(">>> [PAYLOAD_ERROR]: Error procesando payload URL, recayendo a IndexedDB:", e);
+            listaPedidos = (await obtenerParadasGuardadas()) || [];
         }
     } else {
-        listaPedidos = obtenerRutaZonificada();
+        listaPedidos = (await obtenerParadasGuardadas()) || [];
     }
-    return listaPedidos;
+
+    return Array.isArray(listaPedidos) ? listaPedidos : [];
 }
 
-export function buscarIndiceActivo(listaPedidos) {
-    const index = listaPedidos.findIndex((p) => p.estado !== "FINALIZADO" && p.estado !== "NOVEDAD");
-    return index !== -1 ? index : listaPedidos.length > 0 ? listaPedidos.length - 1 : 0;
+/**
+ * Busca el índice del primer pedido activo o pendiente.
+ * 
+ * @param {Array<Object>|Promise<Array<Object>>} listaPedidosRaw 
+ * @returns {Promise<number>} Índice del ítem activo.
+ */
+export async function buscarIndiceActivo(listaPedidosRaw) {
+    let listaPedidos = await Promise.resolve(listaPedidosRaw);
+
+    if (!listaPedidos || typeof listaPedidos.then === "function") {
+        listaPedidos = await obtenerParadasGuardadas();
+    }
+
+    if (!Array.isArray(listaPedidos) || listaPedidos.length === 0) {
+        return 0;
+    }
+
+    const index = listaPedidos.findIndex(
+        (p) => p && p.estado !== "FINALIZADO" && p.estado !== "NOVEDAD" && p.estado !== "ENTREGADO"
+    );
+
+    return index !== -1 ? index : listaPedidos.length - 1;
 }
 
 /**
  * FUNCIÓN CLAVE DE RENDERIZADO DE ACORDEONES ZONIFICADOS
- * Inyecta la barra de botones [.zona-acciones-bar] y registra Handlers
+ * Inyecta la barra de botones [.zona-acciones-bar] y registra Handlers.
+ * 
+ * @param {Array<Object>|Promise<Array<Object>>} listaPedidosParam 
  */
-export function renderizarParadasZonificadasUI(listaPedidos = []) {
+export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
     console.log(">>> [RUTAS_UI] Ejecutando renderizarParadasZonificadasUI...");
 
     const contenedor = document.getElementById("lista-paradas-zonificadas") || document.getElementById("contenedor-acordeones-zonas");
@@ -49,17 +82,20 @@ export function renderizarParadasZonificadasUI(listaPedidos = []) {
         return;
     }
 
-    if (!listaPedidos || listaPedidos.length === 0) {
-        listaPedidos = obtenerRutaZonificada();
+    let listaPedidos = await Promise.resolve(listaPedidosParam);
+
+    if (!Array.isArray(listaPedidos) || listaPedidos.length === 0) {
+        listaPedidos = (await obtenerParadasGuardadas()) || [];
     }
 
     contenedor.innerHTML = "";
 
-    if (!listaPedidos || listaPedidos.length === 0) {
+    if (!Array.isArray(listaPedidos) || listaPedidos.length === 0) {
         contenedor.innerHTML = `<p style="text-align:center; color:#aaa; font-family:monospace; padding:10px;">[SISTEMA]: No hay paradas en la ruta activa.</p>`;
         return;
     }
 
+    // Agrupar por zona geográfica
     const zonasMap = {};
     listaPedidos.forEach((ped) => {
         const zonaKey = ped.zona || ped.zonaNombre || "ZONA SIN ASIGNAR";
@@ -116,7 +152,7 @@ export function renderizarParadasZonificadasUI(listaPedidos = []) {
                     <div style="flex:1; padding-right:8px;">
                         <strong style="color: var(--neon-green, #00ff66);">[#${idx + 1}] ${parada.destinatario || parada.cliente || 'Cliente'}</strong> - ${parada.direccion || ''}
                         <div style="font-size: 0.72rem; color: #aaa; margin-top: 2px;">
-                            SSC: ${parada.ssc || 'N/A'} | Tel: ${parada.telefono || 'N/A'} | Cuota: $${parada.cuota || '0'}
+                            SSC: ${parada.ssc || 'N/A'} | Tel: ${parada.telefono || 'N/A'} | Cuota: ${parada.cuotaModeradora || '$0'}
                         </div>
                     </div>
                     <div class="btn-group-reorder">
@@ -215,9 +251,11 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
 window.renderizarParadasZonificadasUI = renderizarParadasZonificadasUI;
 window.renderizarAcordeonesZonasUI = renderizarParadasZonificadasUI;
 window.renderizarTablaZonificadaUI = renderizarParadasZonificadasUI;
+window.buscarIndiceActivo = buscarIndiceActivo;
+window.procesarPayloadOStorage = procesarPayloadOStorage;
 
 /**
- * Inicia la operación táctica de la zona seleccionada y redirige al mapa activo
+ * Inicia la operación táctica de la zona seleccionada y redirige al mapa activo.
  */
 window.iniciarRutaZona = function (zona) {
     console.log(`► [MENSAJERO_RUTAS]: Iniciar Ruta ejecutado para Zona: ${zona}`);
@@ -231,7 +269,7 @@ window.iniciarRutaZona = function (zona) {
 };
 
 /**
- * Redirige al subsistema de planillas (vistas/notificaciones/planillas.html) e invoca la UI de planillador
+ * Redirige al subsistema de planillas e invoca la UI de planillador.
  */
 window.planillarRutaZona = function (zona) {
     console.log(`📝 [MENSAJERO_RUTAS]: Generando planilla para Zona: ${zona}`);
@@ -247,7 +285,7 @@ window.planillarRutaZona = function (zona) {
 };
 
 /**
- * Transición al visor de mapa activo
+ * Transición al visor de mapa activo.
  */
 window.verMapaZona = function (zona) {
     console.log(`🗺️ [MENSAJERO_RUTAS]: Abrir Mapa Zona: ${zona}`);

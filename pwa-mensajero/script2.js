@@ -1,21 +1,23 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL Y ORQUESTADOR PWA TÁCTICO
  * Ubicación: pwa-mensajero/script2.js
+ * Arquitectura: Async Local-First (IndexedDB / LocalStorage) con Invocación Cloud Multimodal
  */
 
-// --- CONFIGURACIÓN DE ENDPOINT API ---
+// --- CONFIGURACIÓN DE ENDPOINT API (FALLBACK LOCAL) ---
 if (typeof window !== "undefined") {
     const origin = window.location.origin;
     const pathname = window.location.pathname;
     window.ENDPOINT_API_PHP = pathname.includes("/pwa-gremio-mensajeria/")
         ? `${origin}/pwa-gremio-mensajeria/api.php`
         : `${origin}/api.php`;
-    console.log(`>>> [CONFIG_ENDPOINT]: API apuntada a -> ${window.ENDPOINT_API_PHP}`);
+    console.log(`>>> [CONFIG_ENDPOINT]: API local apuntada a -> ${window.ENDPOINT_API_PHP}`);
 }
 
 import { 
     guardarRutaZonificada, 
     obtenerRutaZonificada, 
+    obtenerParadasGuardadas,
     actualizarEstadoPedido, 
     capturarCoordenadasGPS,
     sincronizarYRenderizarPool,
@@ -29,20 +31,20 @@ import { cargarRutaDesdeTextoOEnlace, ImportadorMasivoMensajero } from "./modulo
 import { renderizarConsolaOperaciones } from "./modulos/mensajero-ui.js";
 import { registrarIntentoLlamada as registrarLlamadaFlujo, configurarEventosFormularioNovedad } from "./modulos/mensajero-flujo.js";
 
-// Importación de módulos refactorizados
+// Importación de módulos auxiliares
 import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar } from "./modulos/mensajero-sidebar.js";
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
 import { procesarPayloadOStorage, buscarIndiceActivo } from "./modulos/mensajero-rutas.js";
 
-// ⚡ Controller de mapa
+// Controller de mapa
 import "./modulos/mapa/mapa-controlador.js";
 
-// 📄 Importaciones Módulo Planillas (Rutas ajustadas a la nueva estructura)
+// Importaciones Módulo Planillas
 import { cambiarPestanaPlanillas, cargarPlanillasReportadasUI } from "./modulos/planilla/planillas-ui.js";
 import { exportarYRespaldarPlanillaPDF } from "./modulos/planilla/planillas-pdf-sync.js";
 import { guardarPlanillaReportada } from "./modulos/planilla/planillas-db.js";
 
-// 👤 Importaciones Módulo Perfil del Conductor (Rutas ajustadas a la nueva estructura)
+// Importaciones Módulo Perfil del Conductor
 import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil/perfil-ui.js";
 
 console.log(" 🟢 [script2.js] Orquestador PWA modularizado cargado.");
@@ -75,7 +77,7 @@ let llamadasRealizadas = 0;
 inicializarEventosPWA();
 
 // Inicializador de Consola y Componentes
-function inicializarConsolaYMenu() {
+async function inicializarConsolaYMenu() {
     console.log(" 🔄 [PWA_INIT]: Inicializando menú, visor y componentes...");
     
     // Activar controladores del menú y el sidebar
@@ -93,7 +95,7 @@ function inicializarConsolaYMenu() {
         console.warn(" ⚠️ [MAPA]: Error inicializando el mapa visor:", err);
     }
 
-    inicializarRutaPayload();
+    await inicializarRutaPayload();
 
     configurarEventosFormularioNovedad(
         () => listaPedidosGlobal[indicePedidoActivo],
@@ -118,16 +120,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-// --- GESTIÓN DE RUTAS ---
-function inicializarRutaPayload() {
+// --- GESTIÓN DE RUTAS ASÍNCRONAS ---
+async function inicializarRutaPayload() {
     console.log(" 📦 [RUTAS]: Procesando payload o lectura de almacenamiento local...");
-    listaPedidosGlobal = procesarPayloadOStorage();
-    determinarSiguientePedidoActivo();
+    const resultado = await procesarPayloadOStorage();
+    listaPedidosGlobal = Array.isArray(resultado) ? resultado : [];
+    await determinarSiguientePedidoActivo();
     refrescarUI();
 }
 
-function determinarSiguientePedidoActivo() {
-    indicePedidoActivo = buscarIndiceActivo(listaPedidosGlobal);
+async function determinarSiguientePedidoActivo() {
+    indicePedidoActivo = await buscarIndiceActivo(listaPedidosGlobal);
     console.log(` 🎯 [RUTAS]: Indice activo determinado -> ${indicePedidoActivo}`);
 }
 
@@ -136,10 +139,11 @@ function refrescarUI() {
     renderizarConsolaOperaciones(listaPedidosGlobal, indicePedidoActivo, llamadasRealizadas);
 }
 
-function avanzarAlSiguientePedido() {
+async function avanzarAlSiguientePedido() {
     console.log(" ⏭️ [RUTAS]: Avanzando al siguiente pedido...");
-    listaPedidosGlobal = obtenerRutaZonificada();
-    determinarSiguientePedidoActivo();
+    const resultado = await obtenerParadasGuardadas();
+    listaPedidosGlobal = Array.isArray(resultado) ? resultado : [];
+    await determinarSiguientePedidoActivo();
     refrescarUI();
 }
 
@@ -305,24 +309,24 @@ window.alternarVistaPestaña = alternarVistaPestaña;
 // --- BINDINGS EN WINDOW PARA OPERACIONES DE BD Y RUTAS ---
 window.refrescarUI = refrescarUI;
 
-window.ejecutarPasoAceptarPedido = function(idPedido) {
+window.ejecutarPasoAceptarPedido = async function(idPedido) {
     console.log(` 📥 [OPERACION]: Aceptando pedido -> ${idPedido}`);
-    listaPedidosGlobal = actualizarEstadoPedido(idPedido, "EN_CAMINO");
+    listaPedidosGlobal = await actualizarEstadoPedido(idPedido, "EN_CAMINO");
     refrescarUI();
 };
 
-window.ejecutarPasoNotificarLlegada = function(idPedido) {
+window.ejecutarPasoNotificarLlegada = async function(idPedido) {
     console.log(` 🔔 [OPERACION]: Notificando llegada para pedido -> ${idPedido}`);
     llamadasRealizadas = 0;
-    listaPedidosGlobal = actualizarEstadoPedido(idPedido, "LLEGADO");
+    listaPedidosGlobal = await actualizarEstadoPedido(idPedido, "LLEGADO");
     refrescarUI();
 };
 
 window.ejecutarPasoFinalizarPedido = async function(idPedido) {
     console.log(` ✅ [OPERACION]: Finalizando pedido -> ${idPedido}`);
     const coords = await capturarCoordenadasGPS();
-    listaPedidosGlobal = actualizarEstadoPedido(idPedido, "FINALIZADO", { coordenadasGPS: coords });
-    avanzarAlSiguientePedido();
+    listaPedidosGlobal = await actualizarEstadoPedido(idPedido, "FINALIZADO", { coordenadasGPS: coords });
+    await avanzarAlSiguientePedido();
 };
 
 window.registrarIntentoLlamada = function() {
@@ -334,9 +338,9 @@ window.procesarCargaManualEnlace = function() {
     const inputTxt = document.getElementById("txt-payload-manual");
     if (inputTxt) {
         console.log(" 📝 [OPERACION]: Cargando enlace/payload manual...");
-        cargarRutaDesdeTextoOEnlace(inputTxt.value, (nuevasParadas) => {
+        cargarRutaDesdeTextoOEnlace(inputTxt.value, async (nuevasParadas) => {
             listaPedidosGlobal = nuevasParadas;
-            indicePedidoActivo = 0;
+            await determinarSiguientePedidoActivo();
             refrescarUI();
         });
     }
@@ -345,9 +349,9 @@ window.procesarCargaManualEnlace = function() {
 window.ejecutarProcesamientoIaCloud = function() {
     console.log(" 🤖 [OPERACION]: Ejecutando procesamiento IA Cloud...");
     if (window.ImportadorMasivoMensajero && typeof window.ImportadorMasivoMensajero.ejecutarImportacionArchivo === "function") {
-        window.ImportadorMasivoMensajero.ejecutarImportacionArchivo((nuevasParadas) => {
+        window.ImportadorMasivoMensajero.ejecutarImportacionArchivo(async (nuevasParadas) => {
             listaPedidosGlobal = nuevasParadas;
-            indicePedidoActivo = 0;
+            await determinarSiguientePedidoActivo();
             refrescarUI();
         });
     } else {
@@ -355,26 +359,27 @@ window.ejecutarProcesamientoIaCloud = function() {
     }
 };
 
-window.refrescarConsolaOperacionesUI = function() {
+window.refrescarConsolaOperacionesUI = async function(paradasOpcionales) {
     console.log(" 🔄 [OPERACION]: Refrescando consola desde base local...");
-    listaPedidosGlobal = obtenerRutaZonificada() || [];
-    determinarSiguientePedidoActivo();
+    const paradas = paradasOpcionales || await obtenerParadasGuardadas();
+    listaPedidosGlobal = Array.isArray(paradas) ? paradas : [];
+    await determinarSiguientePedidoActivo();
     refrescarUI();
 };
 
-window.borrarParadaLocalUI = function(idParada) {
+window.borrarParadaLocalUI = async function(idParada) {
     console.log(` 🗑️ [OPERACION]: Solicitud para borrar parada ID -> ${idParada}`);
     if (confirm(`>>> ¿Desea borrar la parada ID: ${idParada}?`)) {
-        listaPedidosGlobal = eliminarParadaLocal(idParada);
-        determinarSiguientePedidoActivo();
+        listaPedidosGlobal = await eliminarParadaLocal(idParada);
+        await determinarSiguientePedidoActivo();
         refrescarUI();
     }
 };
 
-window.purgarTodaLaRutaUI = function() {
+window.purgarTodaLaRutaUI = async function() {
     console.log(" 🧹 [OPERACION]: Purgando toda la ruta local...");
     if (confirm(">>> ¿Desea borrar TODAS las paradas?")) {
-        listaPedidosGlobal = borrarRutaCompletaLocal();
+        listaPedidosGlobal = await borrarRutaCompletaLocal();
         indicePedidoActivo = 0;
         refrescarUI();
     }
@@ -412,11 +417,11 @@ window.limpiarFormularioParadaUI = function() {
     if (detailsForm) detailsForm.open = false;
 };
 
-window.agregarParadaLocal = function (nuevaParadaDatos) {
+window.agregarParadaLocal = async function (nuevaParadaDatos) {
     if (!nuevaParadaDatos || !nuevaParadaDatos.direccion) return;
 
     console.log(" ➕ [OPERACION]: Guardando nueva parada recibida:", nuevaParadaDatos);
-    let rutaActual = obtenerRutaZonificada() || [];
+    let rutaActual = (await obtenerParadasGuardadas()) || [];
 
     const nuevaParada = {
         id: `#PNT-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -434,16 +439,16 @@ window.agregarParadaLocal = function (nuevaParadaDatos) {
     };
 
     rutaActual.push(nuevaParada);
-    guardarRutaZonificada(rutaActual);
+    await guardarRutaZonificada(rutaActual);
     
     listaPedidosGlobal = rutaActual;
-    determinarSiguientePedidoActivo();
+    await determinarSiguientePedidoActivo();
     refrescarUI();
 
     console.log(` >>> [PARADA_AGREGADA_OK]: Parada en ${nuevaParada.direccion} guardada exitosamente.`);
 };
 
-window.guardarParadaManualUI = function () {
+window.guardarParadaManualUI = async function () {
     const id = document.getElementById("edit-parada-id")?.value;
     const destinatario = document.getElementById("edit-parada-destinatario")?.value.trim();
     const direccion = document.getElementById("edit-parada-direccion")?.value.trim();
@@ -458,7 +463,7 @@ window.guardarParadaManualUI = function () {
 
     if (id) {
         console.log(` 💾 [FORMULARIO]: Guardando cambios de edición para ID -> ${id}`);
-        let rutaActual = obtenerRutaZonificada() || [];
+        let rutaActual = (await obtenerParadasGuardadas()) || [];
         rutaActual = rutaActual.map((p) => {
             if (p.id === id) {
                 return {
@@ -473,15 +478,15 @@ window.guardarParadaManualUI = function () {
             return p;
         });
 
-        guardarRutaZonificada(rutaActual);
+        await guardarRutaZonificada(rutaActual);
         listaPedidosGlobal = rutaActual;
-        determinarSiguientePedidoActivo();
+        await determinarSiguientePedidoActivo();
         refrescarUI();
         window.limpiarFormularioParadaUI();
         alert(">>> [ÉXITO]: Parada actualizada correctamente en la base local.");
     } else {
         console.log(" 💾 [FORMULARIO]: Creando nueva parada manual...");
-        window.agregarParadaLocal({
+        await window.agregarParadaLocal({
             destinatario,
             direccion,
             telefono,
@@ -496,9 +501,9 @@ window.guardarParadaManualUI = function () {
 /**
  * Inicia el recorrido desde la primera parada hasta la última en el mapa.
  */
-window.iniciarRutaCompleta = function() {
+window.iniciarRutaCompleta = async function() {
     console.log("🚀 [OPERACION]: Iniciando recorrido completo de la ruta...");
-    listaPedidosGlobal = obtenerRutaZonificada() || [];
+    listaPedidosGlobal = (await obtenerParadasGuardadas()) || [];
 
     if (!listaPedidosGlobal || listaPedidosGlobal.length === 0) {
         alert("⚠️ [ALERTA]: No hay paradas en la ruta para iniciar.");
@@ -521,7 +526,7 @@ window.iniciarRutaCompleta = function() {
  */
 window.generarPlanillaDesdeRuta = async function() {
     console.log("📝 [OPERACION]: Generando planilla desde la ruta activa...");
-    const paradasActuales = obtenerRutaZonificada() || [];
+    const paradasActuales = (await obtenerParadasGuardadas()) || [];
 
     if (!paradasActuales || paradasActuales.length === 0) {
         alert("⚠️ [ALERTA]: No hay datos de paradas para planillar.");
@@ -552,7 +557,7 @@ window.generarPlanillaDesdeRuta = async function() {
         nombreMensajero: localStorage.getItem("nombreMensajero") || "Mensajero Acreditado",
         placaMensajero: localStorage.getItem("placaMensajero") || "MXX-000",
         estadoScc: estadosScc,
-        paradas: paradasDetalle, // <--- DETALLE COMPLETO ADJUNTO A LA PLANILLA
+        paradas: paradasDetalle,
         creadoEn: new Date().toISOString()
     };
 

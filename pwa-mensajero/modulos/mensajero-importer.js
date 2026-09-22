@@ -1,14 +1,18 @@
 /**
- * PROTOCOLO MACONDO - SUBSISTEMA MENSAJERO: IMPORTADOR Y PARSER MULTI-FORMATO (TIRILLAS)
+ * PROTOCOLO MACONDO - SUBSISTEMA MENSAJERO: IMPORTADOR Y PARSER MULTI-FORMATO (TIRILLAS ACUMULATIVO)
  * Ubicación: pwa-mensajero/modulos/mensajero-importer.js
- * Arquitectura: Local-First con Parsing Sanitizado, Telemetría Avanzada y Fallback IA Cloud
+ * Arquitectura: Local-First Acumulativo con Deduplicación por SSC y Fallback IA Cloud
  */
 
-import { guardarRutaZonificada } from "./mensajero-persistencia.js";
+import { 
+    guardarRutaZonificada, 
+    obtenerParadasGuardadas 
+} from "./mensajero-persistencia.js";
 import { procesarArchivoTextoCSV } from "./base-de-datos.js";
 import { procesarImagenConGemini } from "./procesamiento-datos/ia-gemini.js";
 import { procesarTextoHeuristico } from "./procesamiento-datos/heuristico.js";
 import { visorAnimaciones } from "./visor-animaciones.js";
+
 /**
  * Normaliza y valida la estructura de cada parada asegurando los campos clave de la tirilla médica.
  *
@@ -33,9 +37,47 @@ function normalizarParadaTirilla(p, idx) {
     };
 
     console.log(
-        `>>> [NORMALIZADOR_TIRILLA]: Parada #${idx + 1} adaptada -> SSC: ${paradaNormalizada.ssc} | Cliente: ${paradaNormalizada.destinatario} | Cuota: ${paradaNormalizada.cuotaModeradora}`
+        `>>> [NORMALIZADOR_TIRILLA]: Parada adaptada -> SSC: ${paradaNormalizada.ssc} | Cliente: ${paradaNormalizada.destinatario}`
     );
     return paradaNormalizada;
+}
+
+/**
+ * Fusiona las nuevas paradas procesadas con las paradas ya existentes en la base local.
+ * Deduplica por el campo SSC (si no es 'N/A' ni 'S/N') para evitar sobreescritura accidental.
+ *
+ * @param {Array<Object>} nuevasParadasRaw - Paradas recién extraídas de la foto o texto.
+ * @returns {Promise<Array<Object>>} Lista total acumulada y unificada.
+ */
+async function fusionarYGuardarParadas(nuevasParadasRaw) {
+    console.log(">>> [IMPORTER_MERGE]: Leyendo paradas existentes en almacenamiento local...");
+    const paradasExistentes = (await obtenerParadasGuardadas()) || [];
+    
+    const nuevasNormalizadas = nuevasParadasRaw.map((p, idx) => 
+        normalizarParadaTirilla(p, paradasExistentes.length + idx)
+    );
+
+    const listaFusionada = [...paradasExistentes];
+
+    nuevasNormalizadas.forEach(nueva => {
+        const existeIndice = listaFusionada.findIndex(p => 
+            p.ssc !== "N/A" && 
+            p.ssc !== "S/N" && 
+            p.ssc.toString().trim() === nueva.ssc.toString().trim()
+        );
+
+        if (existeIndice !== -1) {
+            console.log(`🔄 [IMPORTER_MERGE_UPDATE]: Actualizando parada existente SSC: ${nueva.ssc}`);
+            listaFusionada[existeIndice] = { ...listaFusionada[existeIndice], ...nueva };
+        } else {
+            console.log(`➕ [IMPORTER_MERGE_ADD]: Agregando nueva parada acumulada SSC: ${nueva.ssc}`);
+            listaFusionada.push(nueva);
+        }
+    });
+
+    console.log(`>>> [IMPORTER_PERSIST]: Guardando un total de ${listaFusionada.length} parada(s) acumuladas en IndexedDB/LocalState.`);
+    await guardarRutaZonificada(listaFusionada);
+    return listaFusionada;
 }
 
 /**
@@ -49,15 +91,12 @@ export function parsearTextoPlanoWhatsApp(texto) {
     }
 
     if (texto.includes("%PDF-") || texto.includes("/Root") || texto.includes("endobj")) {
-        console.warn(
-            ">>> [PARSER_LOCAL_ABORT]: Se detectó código binario PDF en la lectura de texto plano. Abortando."
-        );
+        console.warn(">>> [PARSER_LOCAL_ABORT]: Se detectó código binario PDF en la lectura de texto plano. Abortando.");
         return [];
     }
 
     const textoLimpio = texto.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, "");
     const lineas = textoLimpio.split(/\r?\n/);
-    console.log(`>>> [PARSER_METRICS]: Total de líneas detectadas para análisis heurístico -> ${lineas.length}`);
 
     let currentSsc = "";
     let currentNombre = "";
@@ -68,7 +107,7 @@ export function parsearTextoPlanoWhatsApp(texto) {
 
     const regexTelBase = /(?:(?:\+|00)57)?\s*3\d{2}[\s-]?\d{3}[\s-]?\d{4}\b/;
 
-    lineas.forEach((linea, index) => {
+    lineas.forEach((linea) => {
         let l = linea.trim();
         if (!l || l.startsWith("🚚") || l.startsWith("%") || l.startsWith("#")) return;
 
@@ -132,9 +171,9 @@ export function parsearPayloadODocumento(entrada) {
 }
 
 /**
- * Carga e importa paradas a la persistencia local de la PWA desde una URL o cadena de texto.
+ * Carga e importa paradas a la persistencia local de la PWA desde una URL o cadena de texto de forma acumulativa.
  */
-export function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco) {
+export async function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco) {
     if (!textoEntrada || !textoEntrada.trim()) {
         alert(">>> ALERTA MENSAJERO: Ingrese un enlace válido o texto de payload.");
         return false;
@@ -146,14 +185,17 @@ export function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco) {
             throw new Error("No se detectaron paradas o direcciones procesables.");
         }
 
-        const paradasProcesadas = listaParadas.map((p, idx) => normalizarParadaTirilla(p, idx));
-        guardarRutaZonificada(paradasProcesadas);
+        const paradasAcumuladas = await fusionarYGuardarParadas(listaParadas);
 
         alert(
-            `>>> RUTA CARGADA EXITOSAMENTE:\n\nSe importó la entrega para: ${paradasProcesadas[0].destinatario}\nSSC: ${paradasProcesadas[0].ssc}`
+            `>>> RUTA ACTUALIZADA EXITOSAMENTE:\n\nTotal de paradas en Hoja de Ruta: ${paradasAcumuladas.length}`
         );
 
-        if (typeof callbackRefresco === "function") callbackRefresco(paradasProcesadas);
+        if (typeof callbackRefresco === "function") {
+            callbackRefresco(paradasAcumuladas);
+        } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
+            window.refrescarConsolaOperacionesUI();
+        }
         return true;
     } catch (error) {
         alert(`>>> ERROR DE IMPORTACIÓN:\n\n${error.message}`);
@@ -163,23 +205,18 @@ export function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco) {
 
 /**
  * CLASE ORQUESTADORA DE IMPORTACIÓN MASIVA
- * Administra la ingestión de MODO 1 (IA Cloud) y MODO 3 (Archivos Locales sin IA).
+ * Administra la ingestión de MODO 1 (IA Cloud) y MODO 3 (Archivos Locales sin IA) en formato acumulativo.
  */
 export class ImportadorMasivoMensajero {
     constructor() {
-        console.log(">>> [IMPORTADOR_MENSAJERO_INIT]: Instanciando subsistema de ingestión masiva Local-First...");
+        console.log(">>> [IMPORTADOR_MENSAJERO_INIT]: Instanciando subsistema de ingestión masiva Acumulativa...");
         this.regexTelefonoBase = /(?:\+?57)?\s*3\d{9}\b/;
     }
 
-    /**
-     * Vincula los escuchadores de eventos para los botones de carga.
-     */
     vincularEscuchas() {
         const btnProcesarIA = document.getElementById("btn-procesar-archivo-masivo");
         if (btnProcesarIA) {
-            console.log(
-                ">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo (IA Cloud) enlazado correctamente."
-            );
+            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo (IA Cloud) enlazado correctamente.");
             btnProcesarIA.removeEventListener("click", this._onProcesarIAClick);
             this._onProcesarIAClick = () => this.ejecutarImportacionArchivo(null, true);
             btnProcesarIA.addEventListener("click", this._onProcesarIAClick);
@@ -187,9 +224,7 @@ export class ImportadorMasivoMensajero {
 
         const btnProcesarLocal = document.getElementById("btn-procesar-archivo-masivo-local");
         if (btnProcesarLocal) {
-            console.log(
-                ">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo-local (Sin IA) enlazado correctamente."
-            );
+            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo-local (Sin IA) enlazado correctamente.");
             btnProcesarLocal.removeEventListener("click", this._onProcesarLocalClick);
             this._onProcesarLocalClick = () => this.ejecutarImportacionArchivoLocal();
             btnProcesarLocal.addEventListener("click", this._onProcesarLocalClick);
@@ -197,10 +232,10 @@ export class ImportadorMasivoMensajero {
     }
 
     /**
-     * MODO 3: Procesa múltiples archivos TXT, CSV, PDF o Excel de forma local sin IA.
+     * MODO 3: Procesa múltiples archivos TXT, CSV, PDF o Excel de forma local sin IA (Acumulativo).
      */
     async ejecutarImportacionArchivoLocal(callbackRefresco) {
-        console.log(">>> [IMPORTADOR_EXEC_LOCAL]: Disparando extracción local MODO 3 (Sin IA)...");
+        console.log(">>> [IMPORTADOR_EXEC_LOCAL]: Disparando extracción local MODO 3 Acumulativa...");
         const inputArchivo =
             document.getElementById("archivo-base-datos-local") || document.getElementById("archivo-base-datos");
         const lblEstado = document.getElementById("txt-estado-ingestion");
@@ -211,97 +246,80 @@ export class ImportadorMasivoMensajero {
         }
 
         const listaArchivos = Array.from(inputArchivo.files);
-        console.log(`>>> [IMPORTADOR_MASIVO_LOCAL]: Procesando lote de ${listaArchivos.length} archivo(s)...`);
+        const todasLasParadasNuevas = [];
 
         if (lblEstado) {
             lblEstado.innerText = `>>> EXTRAYENDO DATOS LOCALMENTE (0/${listaArchivos.length})...`;
             lblEstado.style.color = "var(--neon-green, #3eb84a)";
         }
 
-        const todasLasParadas = [];
-
         for (let i = 0; i < listaArchivos.length; i++) {
             const archivo = listaArchivos[i];
-            console.log(
-                `>>> [IMPORTADOR_FILE_INFO ${i + 1}/${listaArchivos.length}]: Nombre: "${archivo.name}", Tipo: "${archivo.type}", Tamaño: ${archivo.size || 0} bytes`
-            );
-
             try {
                 const puntosExtraidos = await procesarArchivoTextoCSV(archivo);
                 if (puntosExtraidos && puntosExtraidos.length > 0) {
-                    puntosExtraidos.forEach((p) => todasLasParadas.push(p));
-                    console.log(`✅ [FILE_OK]: ${puntosExtraidos.length} registros extraídos de "${archivo.name}"`);
+                    puntosExtraidos.forEach((p) => todasLasParadasNuevas.push(p));
                 }
             } catch (errArchivo) {
-                console.warn(
-                    `⚠️ [FILE_FAIL_LOCAL]: No se pudo extraer datos de "${archivo.name}":`,
-                    errArchivo.message || errArchivo
-                );
-            }
-
-            if (lblEstado) {
-                lblEstado.innerText = `>>> PROCESANDO ARCHIVOS LOCALES (${i + 1}/${listaArchivos.length})...`;
+                console.warn(`⚠️ [FILE_FAIL_LOCAL]: Error en "${archivo.name}":`, errArchivo.message || errArchivo);
             }
         }
 
-        if (todasLasParadas.length === 0) {
+        if (todasLasParadasNuevas.length === 0) {
             if (lblEstado) {
                 lblEstado.innerText = `>>> ERROR LOCAL: No se extrajeron datos válidos.`;
                 lblEstado.style.color = "#ff3366";
             }
-            alert(
-                ">>> ERROR PROCESANDO ARCHIVOS LOCALES:\n\nNo se lograron extraer datos válidos mediante heurística local."
-            );
+            alert(">>> ERROR PROCESANDO ARCHIVOS LOCALES:\n\nNo se lograron extraer datos válidos mediante heurística local.");
             return;
         }
 
-        const paradasProcesadas = todasLasParadas.map((p, idx) => normalizarParadaTirilla(p, idx));
-
-        console.log(
-            `>>> [IMPORTADOR_PERSIST]: Guardando ${paradasProcesadas.length} tirilla(s) en la base zonificada...`
-        );
-        guardarRutaZonificada(paradasProcesadas);
+        // Fusionar paradas nuevas con las existentes en IndexedDB
+        const listaTotal = await fusionarYGuardarParadas(todasLasParadasNuevas);
 
         if (lblEstado) {
-            lblEstado.innerText = `>>> ÉXITO LOCAL: ${paradasProcesadas.length} REGISTRO(S) EXTRAÍDO(S) DE ${listaArchivos.length} ARCHIVO(S)`;
+            lblEstado.innerText = `>>> ÉXITO LOCAL: ${listaTotal.length} PARADAS EN HOJA DE RUTA`;
             lblEstado.style.color = "var(--neon-green, #00ff66)";
         }
 
-        alert(
-            `>>> EXTRACCIÓN LOCAL EXITOSA:\n\nSe importaron ${paradasProcesadas.length} paradas a partir de ${listaArchivos.length} archivo(s).`
-        );
+        inputArchivo.value = ""; // Limpiar input para permitir capturas subsecuentes
 
         if (typeof callbackRefresco === "function") {
-            callbackRefresco(paradasProcesadas);
+            callbackRefresco(listaTotal);
         } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
             window.refrescarConsolaOperacionesUI();
         }
     }
 
     /**
-     * MODO 1: Procesa múltiples fotografías o documentos mediante la API de Gemini Cloud en bucle aislado.
+     * MODO 1: Procesa fotografías o documentos mediante la API de Gemini Cloud sin borrar las paradas previas.
      */
     async ejecutarImportacionArchivo(callbackRefresco, forzarIA = false) {
+        console.log(">>> [IMPORTADOR_EXEC_IA]: Disparando proceso acumulativo MODO 1 (IA Cloud)...");
         const inputArchivo =
             document.getElementById("archivo-base-datos") || document.getElementById("archivo-base-datos-local");
+        const lblEstado = document.getElementById("txt-estado-ingestion");
 
         if (!inputArchivo || !inputArchivo.files || inputArchivo.files.length === 0) {
-            alert(">>> ALERTA MENSAJERO: Seleccione una o varias tirillas / fotografías.");
+            alert(">>> ALERTA MENSAJERO: Seleccione o tome la fotografía de la tirilla.");
             return;
         }
 
         const listaArchivos = Array.from(inputArchivo.files);
-        const paradasAcumuladas = [];
+        const paradasNuevasLote = [];
 
-        // 1. Mostrar Modal de Progreso
-        visorAnimaciones.mostrarModal("EXTRAYENDO CON IA CLOUD", `Procesando 1 de ${listaArchivos.length}...`);
+        if (window.visorAnimaciones && typeof window.visorAnimaciones.mostrarModal === "function") {
+            window.visorAnimaciones.mostrarModal("EXTRAYENDO CON IA CLOUD", `Analizando ${listaArchivos.length} foto(s)...`);
+        }
 
         try {
             for (let i = 0; i < listaArchivos.length; i++) {
                 const archivo = listaArchivos[i];
+                console.log(`📄 [IMPORTADOR_FILE ${i + 1}/${listaArchivos.length}]: ${archivo.name}`);
 
-                // 2. Actualizar barra e información en tiempo real
-                visorAnimaciones.actualizarProgreso(i, listaArchivos.length, `Analizando: ${archivo.name}`);
+                if (window.visorAnimaciones && typeof window.visorAnimaciones.actualizarProgreso === "function") {
+                    window.visorAnimaciones.actualizarProgreso(i, listaArchivos.length, `Analizando: ${archivo.name}`);
+                }
 
                 try {
                     let puntosExtraidos = [];
@@ -317,33 +335,44 @@ export class ImportadorMasivoMensajero {
                     }
 
                     if (Array.isArray(puntosExtraidos) && puntosExtraidos.length > 0) {
-                        puntosExtraidos.forEach((p) => paradasAcumuladas.push(p));
+                        puntosExtraidos.forEach((p) => paradasNuevasLote.push(p));
                     }
                 } catch (errArchivo) {
                     console.error(`❌ Error en archivo "${archivo.name}":`, errArchivo);
                 }
-
-                // Actualizar progreso tras completar cada archivo
-                visorAnimaciones.actualizarProgreso(i + 1, listaArchivos.length, `Completado: ${archivo.name}`);
             }
 
-            if (paradasAcumuladas.length === 0) {
-                throw new Error("No se lograron extraer datos válidos de los archivos seleccionados.");
+            if (paradasNuevasLote.length === 0) {
+                throw new Error("No se lograron extraer datos válidos de las fotografías seleccionadas.");
             }
 
-            const paradasProcesadas = paradasAcumuladas.map((p, idx) => normalizarParadaTirilla(p, idx));
-            guardarRutaZonificada(paradasProcesadas);
+            // Fusión acumulativa con las paradas existentes de la foto 1
+            const listaTotalActualizada = await fusionarYGuardarParadas(paradasNuevasLote);
+
+            if (lblEstado) {
+                lblEstado.innerText = `>>> ÉXITO: ${listaTotalActualizada.length} PARADA(S) EN HOJA DE RUTA`;
+                lblEstado.style.color = "var(--neon-green, #00ff66)";
+            }
+
+            inputArchivo.value = ""; // Limpiar input para permitir tomar otra foto consecutiva
 
             if (typeof callbackRefresco === "function") {
-                callbackRefresco(paradasProcesadas);
+                callbackRefresco(listaTotalActualizada);
             } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
                 window.refrescarConsolaOperacionesUI();
             }
+
         } catch (error) {
-            alert(`>>> ERROR PROCESANDO ARCHIVOS:\n\n${error.message}`);
+            console.error(">>> [IMPORTADOR_FAIL]: Error en importación acumulativa:", error);
+            if (lblEstado) {
+                lblEstado.innerText = `>>> ERROR: ${error.message}`;
+                lblEstado.style.color = "#ff3366";
+            }
+            alert(`>>> ERROR AGREGANDO PARADA:\n\n${error.message}`);
         } finally {
-            // 3. Ocultar Modal al finalizar
-            visorAnimaciones.ocultarModal();
+            if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
+                window.visorAnimaciones.ocultarModal();
+            }
         }
     }
 }
@@ -352,7 +381,7 @@ export class ImportadorMasivoMensajero {
 const importadorMensajero = new ImportadorMasivoMensajero();
 
 if (typeof window !== "undefined") {
-    console.log(">>> [IMPORTER_BINDINGS]: Exponiendo funciones del importador al objeto window global.");
+    console.log(">>> [IMPORTER_BINDINGS]: Exponiendo funciones del importador acumulativo al objeto window global.");
     window.cargarRutaDesdeTextoOEnlace = cargarRutaDesdeTextoOEnlace;
     window.parsearTextoPlanoWhatsApp = parsearTextoPlanoWhatsApp;
     window.parsearPayloadODocumento = parsearPayloadODocumento;

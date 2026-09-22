@@ -36,140 +36,157 @@ window.iniciarLlamadaAndroid = function(numeroTelefono) {
 };
 
 /**
- * Overlay personalizado para menú radial en cruz (Estética Cyberpunk)
+ * Fabrica dinámicamente la clase MenuRadialOverlay garantizando
+ * que google.maps.OverlayView esté definido al momento de la herencia.
  */
-export class MenuRadialOverlay extends google.maps.OverlayView {
-    constructor(posicion, handlers = {}) {
-        super();
-        this.posicion = posicion;
-        this.handlers = handlers; // { onEdit, onMove, onDelete, onReport }
-        this.container = null;
-        this.injectStyles();
+function obtenerClaseMenuRadialOverlay() {
+    if (window.MenuRadialOverlayClass) {
+        return window.MenuRadialOverlayClass;
     }
 
-    injectStyles() {
-        if (document.getElementById('cyberpunk-menu-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'cyberpunk-menu-styles';
-        style.textContent = `
-            .cyberpunk-cross-menu {
-                position: absolute;
-                width: 140px;
-                height: 140px;
-                transform: translate(-50%, -50%);
-                pointer-events: auto;
-                z-index: 1000;
-            }
-            .cyber-btn {
-                position: absolute;
-                width: 38px;
-                height: 38px;
-                background: #0d1117;
-                border: 2px solid #00e5ff;
-                color: #00e5ff;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-family: 'Fira Code', monospace;
-                font-size: 11px;
-                font-weight: bold;
-                cursor: pointer;
-                box-shadow: 0 0 8px #00e5ff, inset 0 0 4px #00e5ff;
-                transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
-            }
-            .cyber-btn:hover {
-                background: #00e5ff;
-                color: #0d1117;
-                box-shadow: 0 0 15px #00e5ff;
-                transform: scale(1.15);
-            }
-            .cyber-btn.danger {
-                border-color: #ff3366;
-                color: #ff3366;
-                box-shadow: 0 0 8px #ff3366, inset 0 0 4px #ff3366;
-            }
-            .cyber-btn.danger:hover {
-                background: #ff3366;
-                color: #0d1117;
-                box-shadow: 0 0 15px #ff3366;
-            }
-            .cyber-btn-norte { top: 0; left: 51px; }
-            .cyber-btn-este  { top: 51px; right: 0; }
-            .cyber-btn-sur   { bottom: 0; left: 51px; }
-            .cyber-btn-oeste { top: 51px; left: 0; }
-        `;
-        document.head.appendChild(style);
+    if (typeof google === "undefined" || !google.maps || !google.maps.OverlayView) {
+        console.error("❌ [MAPA_MARCADORES]: google.maps.OverlayView no está disponible aún.");
+        return null;
     }
 
-    onAdd() {
-        this.container = document.createElement('div');
-        this.container.className = 'cyberpunk-cross-menu';
-        this.container.innerHTML = `
-            <button class="cyber-btn cyber-btn-norte" title="Editar Parada">N</button>
-            <button class="cyber-btn cyber-btn-este" title="Mover Punto">E</button>
-            <button class="cyber-btn cyber-btn-sur danger" title="Eliminar Parada">S</button>
-            <button class="cyber-btn cyber-btn-oeste" title="Reportar Novedad">O</button>
-        `;
-        this.attachEvents();
-        const panes = this.getPanes();
-        panes.floatPane.appendChild(this.container);
-    }
-
-    attachEvents() {
-        this.container.querySelector('.cyber-btn-norte').onclick = (e) => {
-            e.stopPropagation();
-            console.log("[MENU_RADIAL]: Acción NORTE - Editar");
-            if (this.handlers.onEdit) this.handlers.onEdit();
-            this.cerrar();
-        };
-        this.container.querySelector('.cyber-btn-este').onclick = (e) => {
-            e.stopPropagation();
-            console.log("[MENU_RADIAL]: Acción ESTE - Mover");
-            if (this.handlers.onMove) this.handlers.onMove();
-            this.cerrar();
-        };
-        this.container.querySelector('.cyber-btn-sur').onclick = (e) => {
-            e.stopPropagation();
-            console.log("[MENU_RADIAL]: Acción SUR - Eliminar");
-            if (this.handlers.onDelete) this.handlers.onDelete();
-            this.cerrar();
-        };
-        this.container.querySelector('.cyber-btn-oeste').onclick = (e) => {
-            e.stopPropagation();
-            console.log("[MENU_RADIAL]: Acción OESTE - Reportar");
-            if (this.handlers.onReport) this.handlers.onReport();
-            this.cerrar();
-        };
-    }
-
-    draw() {
-        const projection = this.getProjection();
-        if (!projection) return;
-        const point = projection.fromLatLngToDivPixel(this.posicion);
-        if (point && this.container) {
-            this.container.style.left = `${point.x}px`;
-            this.container.style.top = `${point.y}px`;
-        }
-    }
-
-    cerrar() {
-        this.setMap(null);
-        if (window.overlayMenuActivo === this) {
-            window.overlayMenuActivo = null;
-        }
-    }
-
-    onRemove() {
-        if (this.container && this.container.parentNode) {
-            this.container.parentNode.removeChild(this.container);
+    class MenuRadialOverlay extends google.maps.OverlayView {
+        constructor(posicion, handlers = {}) {
+            super();
+            this.posicion = posicion;
+            this.handlers = handlers; // { onEdit, onMove, onDelete, onReport }
             this.container = null;
+            this.injectStyles();
+        }
+
+        injectStyles() {
+            if (document.getElementById('cyberpunk-menu-styles')) return;
+            const style = document.createElement('style');
+            style.id = 'cyberpunk-menu-styles';
+            style.textContent = `
+                .cyberpunk-cross-menu {
+                    position: absolute;
+                    width: 140px;
+                    height: 140px;
+                    transform: translate(-50%, -50%);
+                    pointer-events: auto;
+                    z-index: 10000;
+                }
+                .cyber-btn {
+                    position: absolute;
+                    width: 38px;
+                    height: 38px;
+                    background: #0d1117;
+                    border: 2px solid #00e5ff;
+                    color: #00e5ff;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-family: 'Fira Code', monospace;
+                    font-size: 11px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    box-shadow: 0 0 8px #00e5ff, inset 0 0 4px #00e5ff;
+                    transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+                }
+                .cyber-btn:hover {
+                    background: #00e5ff;
+                    color: #0d1117;
+                    box-shadow: 0 0 15px #00e5ff;
+                    transform: scale(1.15);
+                }
+                .cyber-btn.danger {
+                    border-color: #ff3366;
+                    color: #ff3366;
+                    box-shadow: 0 0 8px #ff3366, inset 0 0 4px #ff3366;
+                }
+                .cyber-btn.danger:hover {
+                    background: #ff3366;
+                    color: #0d1117;
+                    box-shadow: 0 0 15px #ff3366;
+                }
+                .cyber-btn-norte { top: 0; left: 51px; }
+                .cyber-btn-este  { top: 51px; right: 0; }
+                .cyber-btn-sur   { bottom: 0; left: 51px; }
+                .cyber-btn-oeste { top: 51px; left: 0; }
+            `;
+            document.head.appendChild(style);
+        }
+
+        onAdd() {
+            this.container = document.createElement('div');
+            this.container.className = 'cyberpunk-cross-menu';
+            this.container.innerHTML = `
+                <button class="cyber-btn cyber-btn-norte" title="Editar Parada">N</button>
+                <button class="cyber-btn cyber-btn-este" title="Mover Punto">E</button>
+                <button class="cyber-btn cyber-btn-sur danger" title="Eliminar Parada">S</button>
+                <button class="cyber-btn cyber-btn-oeste" title="Reportar Novedad">O</button>
+            `;
+            this.attachEvents();
+            const panes = this.getPanes();
+            if (panes && panes.floatPane) {
+                panes.floatPane.appendChild(this.container);
+            }
+        }
+
+        attachEvents() {
+            this.container.querySelector('.cyber-btn-norte').onclick = (e) => {
+                e.stopPropagation();
+                console.log("📢 [MENU_RADIAL]: Acción NORTE - Editar");
+                if (this.handlers.onEdit) this.handlers.onEdit();
+                this.cerrar();
+            };
+            this.container.querySelector('.cyber-btn-este').onclick = (e) => {
+                e.stopPropagation();
+                console.log("📢 [MENU_RADIAL]: Acción ESTE - Mover");
+                if (this.handlers.onMove) this.handlers.onMove();
+                this.cerrar();
+            };
+            this.container.querySelector('.cyber-btn-sur').onclick = (e) => {
+                e.stopPropagation();
+                console.log("📢 [MENU_RADIAL]: Acción SUR - Eliminar");
+                if (this.handlers.onDelete) this.handlers.onDelete();
+                this.cerrar();
+            };
+            this.container.querySelector('.cyber-btn-oeste').onclick = (e) => {
+                e.stopPropagation();
+                console.log("📢 [MENU_RADIAL]: Acción OESTE - Reportar");
+                if (this.handlers.onReport) this.handlers.onReport();
+                this.cerrar();
+            };
+        }
+
+        draw() {
+            const projection = this.getProjection();
+            if (!projection) return;
+            const point = projection.fromLatLngToDivPixel(this.posicion);
+            if (point && this.container) {
+                this.container.style.left = `${point.x}px`;
+                this.container.style.top = `${point.y}px`;
+            }
+        }
+
+        cerrar() {
+            this.setMap(null);
+            if (window.overlayMenuActivo === this) {
+                window.overlayMenuActivo = null;
+            }
+        }
+
+        onRemove() {
+            if (this.container && this.container.parentNode) {
+                this.container.parentNode.removeChild(this.container);
+                this.container = null;
+            }
         }
     }
+
+    window.MenuRadialOverlayClass = MenuRadialOverlay;
+    return MenuRadialOverlay;
 }
 
 /**
- * Despliega el modal flotante de gestión/evidencias (Oeste)
+ * Despliega la ventana modal de gestión de parada y evidencias (Oeste)
  */
 export function abrirModalGestionParada(pedido, indice) {
     let modalExistente = document.getElementById("modal-gestion-parada-mapa");
@@ -251,30 +268,28 @@ export function abrirModalGestionParada(pedido, indice) {
         pedido.telefono = document.getElementById("modal-telefono").value;
         pedido.estado = nuevoEstado;
 
-        // Persistencia local en IndexedDB
         try {
             await dbStore.actualizarParada(pedido);
-            console.log("[MAPA_MARCADORES]: Parada actualizada en IndexedDB desde Modal", pedido);
+            console.log("💾 [MAPA_MARCADORES]: Parada actualizada en IndexedDB desde Modal", pedido);
 
             mutarMarcadorPorId(pedido.id || `#PNT-${indice}`, nuevoEstado);
             document.getElementById("modal-gestion-parada-mapa").remove();
 
-            // Intento de sync con API PHP REST
             if (navigator.onLine) {
                 fetch('/api/paradas.php', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(pedido)
-                }).catch(err => console.warn("[MAPA_MARCADORES]: Sync diferido a PHP:", err));
+                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Sync diferido a PHP:", err));
             }
         } catch (err) {
-            console.error("[MAPA_MARCADORES]: Error guardando parada en IndexedDB:", err);
+            console.error("❌ [MAPA_MARCADORES]: Error guardando parada en IndexedDB:", err);
         }
     });
 }
 
 /**
- * Asigna o actualiza la colección de marcadores interactivos en Google Maps
+ * Renderiza la colección de marcadores interactivos
  */
 export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, callbackActualizacion) {
     if (Array.isArray(window.marcadoresRutaMensajero)) {
@@ -339,13 +354,16 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 if (window.infoWindowMensajero) window.infoWindowMensajero.close();
             });
 
-            // DESPLIEGUE DEL MENÚ RADIAL FLOTANTE EN CRUZ
+            // DESPLIEGUE DEL MENÚ RADIAL EN CRUZ
             marker.addListener("click", () => {
                 if (window.overlayMenuActivo) {
                     window.overlayMenuActivo.cerrar();
                 }
 
-                window.overlayMenuActivo = new MenuRadialOverlay(marker.getPosition(), {
+                const MenuClass = obtenerClaseMenuRadialOverlay();
+                if (!MenuClass) return;
+
+                window.overlayMenuActivo = new MenuClass(marker.getPosition(), {
                     onEdit: () => window.cargarEdicionDesdePin(idUnicoParada),
                     onMove: () => activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion),
                     onDelete: () => eliminarParadaProceso(marker, idUnicoParada, callbackActualizacion),
@@ -374,11 +392,11 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 }
 
 /**
- * Habilita el movimiento del marcador (Este - Mover)
+ * Habilita el arrastre del pin (Acción Este - Mover)
  */
 function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion) {
     marker.setDraggable(true);
-    console.log("[MAPA_MARCADORES]: Arrastro activado para el pin:", marker.get('idParada'));
+    console.log("📍 [MAPA_MARCADORES]: Arrastre activado para:", marker.get('idParada'));
 
     const listener = marker.addListener('dragend', async (event) => {
         const nuevaLat = event.latLng.lat();
@@ -394,9 +412,9 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 
             try {
                 await dbStore.actualizarParada(pedido);
-                console.log("[MAPA_MARCADORES]: Parada reubicada y guardada en IndexedDB:", pedido);
+                console.log("💾 [MAPA_MARCADORES]: Parada reubicada y guardada en IndexedDB:", pedido);
             } catch (err) {
-                console.error("[MAPA_MARCADORES]: Error al guardar geocodificación en IndexedDB:", err);
+                console.error("❌ [MAPA_MARCADORES]: Error al guardar geocodificación en IndexedDB:", err);
             }
 
             if (navigator.onLine) {
@@ -404,7 +422,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(pedido)
-                }).catch(err => console.warn("[MAPA_MARCADORES]: Falló sync backend PHP:", err));
+                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Falló sync backend PHP:", err));
             }
 
             if (typeof callbackActualizacion === "function") {
@@ -418,33 +436,33 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 }
 
 /**
- * Elimina la parada local y notifica (Sur - Eliminar)
+ * Elimina la parada localmente (Acción Sur - Eliminar)
  */
 async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
     if (!confirm(`¿Eliminar la parada ${idParada} del mapa y registro local?`)) return;
 
     try {
         await dbStore.eliminarParada(idParada);
-        console.log("[MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
+        console.log("💾 [MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
 
         marker.setMap(null);
         window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter(m => m !== marker);
 
         if (navigator.onLine) {
             fetch(`/api/paradas.php?id=${encodeURIComponent(idParada)}`, { method: 'DELETE' })
-                .catch(err => console.warn("[MAPA_MARCADORES]: Error eliminando en backend PHP:", err));
+                .catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Error eliminando en backend PHP:", err));
         }
 
         if (typeof callbackActualizacion === "function") {
             callbackActualizacion();
         }
     } catch (err) {
-        console.error("[MAPA_MARCADORES]: Fallo al eliminar parada:", err);
+        console.error("❌ [MAPA_MARCADORES]: Fallo al eliminar parada:", err);
     }
 }
 
 /**
- * Mutar el marcador en tiempo real cuando el usuario cambia el estado
+ * Mutar marcador por estado en tiempo real
  */
 export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
     if (!window.marcadoresRutaMensajero) return;
@@ -461,9 +479,9 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
     }
 }
 
-// BINDING GLOBAL PARA REDIRECCIÓN NORTE (EDITAR)
+// BINDING GLOBAL PARA ACCIÓN NORTE (EDITAR)
 window.cargarEdicionDesdePin = function(idParada) {
-    console.log("[MAPA_MARCADORES]: Redirigiendo a edición para parada:", idParada);
+    console.log("🎯 [MAPA_MARCADORES]: Redirigiendo a edición para parada:", idParada);
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/ruta-activa.html");
     } else {

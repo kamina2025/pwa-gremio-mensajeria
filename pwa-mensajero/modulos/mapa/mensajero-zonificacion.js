@@ -1,8 +1,22 @@
 /**
  * PROTOCOLO MACONDO - MAPA INTEGRADO DE ZONAS SANITIZADAS (PWA MENSAJERO)
  * Configuración en memoria para delimitación de rutas y cuadrantes en Cali
- * Ubicación: pwa-mensajero/modulos/mensajero-zonificacion.js
+ * Ubicación: pwa-mensajero/modulos/mapa/mensajero-zonificacion.js
  */
+
+// Paleta Unificada Mapeada Exactamente a los Polígonos GeoJSON del Mapa (mapa-mensajero-zonas.js)
+export const PALETA_ZONAS = {
+  "CENTRO":   { color: "#ff007f", badge: "badge-centro",  label: "ZONA CENTRO" },
+  "NORTE-1":  { color: "#00f0ff", badge: "badge-norte-1", label: "ZONA NORTE 1" },
+  "NORTE-2":  { color: "#39ff14", badge: "badge-norte-2", label: "ZONA NORTE 2" },
+  "OESTE":    { color: "#ff9900", badge: "badge-oeste",   label: "ZONA OESTE" },
+  "ORIENTE":  { color: "#ffe600", badge: "badge-oriente", label: "ZONA ORIENTE" },
+  "SUR-1":    { color: "#b359ff", badge: "badge-sur-1",   label: "ZONA SUR 1" },
+  "SUR-2":    { color: "#0077ff", badge: "badge-sur-2",   label: "ZONA SUR 2" },
+  "SUR-3":    { color: "#ff0033", badge: "badge-sur-3",   label: "ZONA SUR 3" },
+  "SUR-4":    { color: "#00ffaa", badge: "badge-sur-4",   label: "ZONA SUR 4" },
+  "GENERAL":  { color: "#79578a", badge: "badge-general", label: "ZONA GENERAL" }
+};
 
 export const MAPA_ZONAS_CALI = {
   type: "FeatureCollection",
@@ -151,7 +165,115 @@ export const MAPA_ZONAS_CALI = {
 };
 
 export function obtenerZonaPorNombre(nombreZona) {
+  if (!nombreZona) return null;
   return MAPA_ZONAS_CALI.features.find(
-    (feat) => feat.properties.nombre.toLowerCase() === nombreZona.toLowerCase()
+    (feat) => feat.properties.nombre.toLowerCase() === nombreZona.toLowerCase() ||
+              feat.properties.key.toLowerCase() === nombreZona.toLowerCase()
   ) || null;
+}
+
+/**
+ * Algoritmo de Ray-Casting (Punto en Polígono)
+ * @param {Array<number>} punto - [lng, lat]
+ * @param {Array<Array<number>>} vs - Coordenadas del polígono [[lng, lat], ...]
+ * @returns {boolean}
+ */
+function puntoEnPoligono(punto, vs) {
+  const x = punto[0], y = punto[1];
+  let inside = false;
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    const xi = vs[i][0], yi = vs[i][1];
+    const xj = vs[j][0], yj = vs[j][1];
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Determina la zona geográfica exacta de un punto (lat, lng) evaluando los polígonos GeoJSON de Cali.
+ * @param {number|string} lat 
+ * @param {number|string} lng 
+ * @returns {Object} Feature de la zona encontrada o fallback
+ */
+export function obtenerZonaPorCoordenadas(lat, lng) {
+  const pointLat = parseFloat(lat);
+  const pointLng = parseFloat(lng);
+
+  if (isNaN(pointLat) || isNaN(pointLng)) {
+    console.warn("⚠️ [ZONIFICACION]: Coordenadas inválidas recibidas:", { lat, lng });
+    return null;
+  }
+
+  const punto = [pointLng, pointLat]; // Formato GeoJSON: [lng, lat]
+
+  for (const feature of MAPA_ZONAS_CALI.features) {
+    const coords = feature.geometry.coordinates[0];
+    if (puntoEnPoligono(punto, coords)) {
+      console.log(`🎯 [ZONIFICACION]: Coordenadas [${pointLat}, ${pointLng}] encontradas en ${feature.properties.key}`);
+      return feature;
+    }
+  }
+
+  console.log(`⚠️ [ZONIFICACION]: Coordenadas [${pointLat}, ${pointLng}] fuera de polígonos GeoJSON.`);
+  return null;
+}
+
+/**
+ * Clasifica dinámicamente un conjunto de paradas evaluando los polígonos GeoJSON de Cali.
+ * @param {Array<Object>} listaParadas 
+ * @returns {Array<Object>} Lista de paradas clasificadas con metadatos de zona
+ */
+export function clasificarParadasPorZona(listaParadas) {
+  if (!Array.isArray(listaParadas) || listaParadas.length === 0) {
+    console.warn("⚠️ [ZONIFICACION]: Lista de paradas vacía o no válida.");
+    return [];
+  }
+
+  console.group("🎨 [ZONIFICAR]: Evaluando paradas por polígonos GeoJSON de Cali...");
+
+  const paradasClasificadas = listaParadas.map((parada, idx) => {
+    let zonaDetectada = null;
+
+    if (parada.lat && parada.lng) {
+      zonaDetectada = obtenerZonaPorCoordenadas(parada.lat, parada.lng);
+    }
+
+    let zonaKey = "GENERAL";
+    let nombreZona = "zona_general";
+
+    if (zonaDetectada) {
+      zonaKey = zonaDetectada.properties.key;
+      nombreZona = zonaDetectada.properties.nombre;
+    } else {
+      // Fallback geográfico refinado si está fuera de los límites de los polígonos GeoJSON definidos
+      const pLat = parseFloat(parada.lat);
+      const pLng = parseFloat(parada.lng);
+
+      if (!isNaN(pLat) && !isNaN(pLng)) {
+        if (pLat >= 3.4500 && pLng >= -76.5320) zonaKey = "NORTE-1";
+        else if (pLat < 3.4200 && pLng >= -76.5320) zonaKey = "SUR-1";
+        else if (pLat >= 3.4200 && pLat < 3.4500 && pLng >= -76.5320) zonaKey = "CENTRO";
+        else if (pLng < -76.5320) zonaKey = "OESTE";
+        else zonaKey = "ORIENTE";
+      } else {
+        zonaKey = "NORTE-1";
+      }
+      nombreZona = `zona_${zonaKey.toLowerCase()}`;
+    }
+
+    const infoPalette = PALETA_ZONAS[zonaKey] || PALETA_ZONAS["GENERAL"];
+
+    console.log(`📍 Parada #${idx + 1} (${parada.destinatario || 'Cliente'}) -> ${zonaKey} [${infoPalette.color}]`);
+
+    return {
+      ...parada,
+      zonaKey,
+      nombreZona,
+      colorZona: infoPalette.color
+    };
+  });
+
+  console.groupEnd();
+  return paradasClasificadas;
 }

@@ -19,7 +19,7 @@ window.marcadoresRutaMensajero = [];
 window.infoWindowMensajero = null;
 window.pendientesParaRenderizar = null;
 
-// Re-exportar funciones telemáticas y de eventos
+// Re-exportar funciones telemáticas y de eventos para compatibilidad de módulos
 export { 
     ejecutarBusquedaDireccion, 
     toggleBuscadorMapaUI, 
@@ -32,7 +32,7 @@ export {
  */
 export function inicializarMapaMensajero() {
     if (typeof google === "undefined" || !google.maps || !google.maps.InfoWindow) {
-        console.warn("[MAPA_MENSAJERO]: Esperando a que cargue el SDK de Google Maps...");
+        console.warn("⚠️ [MAPA_MENSAJERO]: Esperando a que cargue el SDK de Google Maps...");
         return;
     }
 
@@ -43,6 +43,7 @@ export function inicializarMapaMensajero() {
     }
 
     try {
+        console.log("🗺️ [MAPA_MENSAJERO]: Inicializando mapa Cyberpunk...");
         window.infoWindowMensajero = new google.maps.InfoWindow();
         window.mapaMensajero = new google.maps.Map(contenedorMapa, {
             center: { lat: 3.4516, lng: -76.532 },
@@ -58,7 +59,7 @@ export function inicializarMapaMensajero() {
             ]
         });
 
-        // Ocultar menú radial activo al hacer clic sobre el mapa
+        // Ocultar menú radial activo al hacer clic sobre el mapa neutral
         window.mapaMensajero.addListener("click", () => {
             if (window.overlayMenuActivo) {
                 window.overlayMenuActivo.cerrar();
@@ -102,6 +103,9 @@ export function inicializarMapaMensajero() {
 
 /**
  * Actualiza los marcadores, trayectos y polígonos sobre el lienzo del mapa.
+ * 
+ * @param {Array} listaPedidos - Arreglo de paradas a proyectar.
+ * @param {number} indiceActivo - Íntem activo en foco.
  */
 export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     if (!window.mapaMensajero || typeof google === "undefined" || !google.maps) {
@@ -127,6 +131,47 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     });
 }
 
-// Vinculación explícita a window para compatibilidad global
+/**
+ * Encuadra dinámicamente el lienzo del mapa para enfocar las paradas de una zona desplegada (fitBounds).
+ * 
+ * @param {Array<Object>} paradasZona - Subconjunto de paradas pertenecientes al acordeón.
+ */
+export function enfocarZonaEnMapa(paradasZona) {
+    if (!window.mapaMensajero || typeof google === "undefined" || !google.maps) {
+        console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible para fitBounds.");
+        return;
+    }
+
+    if (!Array.isArray(paradasZona) || paradasZona.length === 0) return;
+
+    console.log(`🎯 [MAPA_VISOR]: Enfocando zona con ${paradasZona.length} paradas...`);
+    const bounds = new google.maps.LatLngBounds();
+    let puntosValidos = 0;
+
+    paradasZona.forEach(p => {
+        if (p.lat && p.lng) {
+            const lat = parseFloat(p.lat);
+            const lng = parseFloat(p.lng);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                bounds.extend(new google.maps.LatLng(lat, lng));
+                puntosValidos++;
+            }
+        }
+    });
+
+    if (puntosValidos > 0) {
+        if (puntosValidos === 1) {
+            const centro = bounds.getCenter();
+            window.mapaMensajero.setCenter(centro);
+            window.mapaMensajero.setZoom(15);
+        } else {
+            window.mapaMensajero.fitBounds(bounds);
+        }
+        console.log(`✅ [MAPA_VISOR]: FitBounds completado con éxito para ${puntosValidos} puntos.`);
+    }
+}
+
+// Vinculación explícita a window para soporte y compatibilidad global
 window.inicializarMapaMensajero = inicializarMapaMensajero;
 window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;
+window.enfocarZonaEnMapa = enfocarZonaEnMapa;

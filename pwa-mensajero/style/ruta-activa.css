@@ -1,10 +1,133 @@
+/* ==========================================================================
+   PROTOCOLO MACONDO - RUTA ACTIVA & ZONIFICACIÓN CYBERPUNK
+   Ubicación: pwa-mensajero/style/ruta-activa.css
+   ========================================================================== */
+
 .modulo-ruta-container {
     display: flex;
     flex-direction: column;
     height: 100%;
     padding: 8px;
     overflow: hidden;
+    background-color: var(--bg-color, #030308);
 }
+
+/* ==========================================================================
+   BOTONERA COMPACTA DE ACCIÓN RÁPIDA (INICIAR / PLANILLAR)
+   ========================================================================== */
+
+.header-acciones-ruta {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    max-height: 55px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.header-acciones-ruta .cyber-btn,
+.btn-iniciar-ruta,
+.btn-planillar {
+    flex: 1;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    padding: 0 12px;
+    font-size: 0.82rem;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-transform: uppercase;
+    clip-path: polygon(0 0, 92% 0, 100% 25%, 100% 100%, 8% 100%, 0 75%);
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Botón Iniciar Ruta */
+.btn-iniciar-ruta {
+    background: rgba(0, 243, 255, 0.1);
+    border: 1px solid var(--neon-cyan, #00f3ff);
+    color: var(--neon-cyan, #00f3ff);
+}
+
+.btn-iniciar-ruta:hover {
+    background: var(--neon-cyan, #00f3ff);
+    color: #030308;
+    box-shadow: 0 0 12px var(--neon-cyan, #00f3ff);
+}
+
+/* Botón Planillar */
+.btn-planillar {
+    background: rgba(249, 240, 2, 0.1);
+    border: 1px solid var(--neon-yellow, #f9f002);
+    color: var(--neon-yellow, #f9f002);
+}
+
+.btn-planillar:hover {
+    background: var(--neon-yellow, #f9f002);
+    color: #030308;
+    box-shadow: 0 0 12px var(--neon-yellow, #f9f002);
+}
+
+/* ==========================================================================
+   ACORDEONES Y ZONIFICACIÓN POR COLORES CYBERPUNK
+   ========================================================================== */
+
+.zonas-accordion-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.cyber-accordion {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cyber-accordion[open] {
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+}
+
+.cyber-summary {
+    padding: 10px 14px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #161b22;
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.cyber-summary:hover {
+    background: #21262d;
+}
+
+.badge-zone {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.72rem;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ==========================================================================
+   CONTENEDOR Y LISTA DE PARADAS REORDENABLES
+   ========================================================================== */
 
 #lista-paradas-zonificadas {
     flex: 1;
@@ -23,67 +146,48 @@
 }
 
 #lista-paradas-zonificadas::-webkit-scrollbar-thumb {
-    background: var(--neon-magenta);
+    background: var(--neon-magenta, #ff007f);
     border-radius: 3px;
 }
-/* ==========================================================================
-   AJUSTE DE TAMAÑO COMPACTO PARA BOTONES EN RUTA ACTIVA
-   ========================================================================== */
 
-/* Contenedor de la barra de acciones superior */
-.header-acciones-ruta {
+/* Ítem de Parada en Lista */
+.item-parada-lista {
+    background: #0c080f;
+    border: 1px solid #291f33;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.item-parada-lista.activa {
+    border-color: var(--neon-blue, #00e5ff) !important;
+    background: rgba(0, 229, 255, 0.05);
+    box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.15);
+}
+
+/* Botones de Reordenamiento (Subir / Bajar ▲ / ▼) */
+.btn-group-reorder {
     display: flex;
-    gap: 10px;
-    width: 100%;
-    height: auto;
-    max-height: 55px; /* Restringe la altura vertical máxima del contenedor */
-    margin-bottom: 15px;
+    gap: 4px;
     align-items: center;
 }
 
-/* Botones de acción ajustados y compactos */
-.header-acciones-ruta .cyber-btn,
-.header-acciones-ruta .btn-iniciar-ruta,
-.header-acciones-ruta .btn-planillar {
-    flex: 1;
-    height: 44px; /* Altura estándar fija y ergonómica */
-    min-height: 44px;
-    max-height: 44px;
-    padding: 0 12px;
-    font-size: 0.82rem;
+.btn-reorder {
+    background: #0d1117;
+    border: 1px solid #00e5ff;
+    color: #00e5ff;
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
     font-weight: bold;
-    letter-spacing: 0.5px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    text-transform: uppercase;
-    clip-path: polygon(0 0, 92% 0, 100% 25%, 100% 100%, 8% 100%, 0 75%);
-    box-sizing: border-box;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
-/* Ajuste específico para el botón Iniciar Ruta */
-.btn-iniciar-ruta {
-    background: rgba(0, 243, 255, 0.1);
-    border: 1px solid var(--neon-cyan, #00f3ff);
-    color: var(--neon-cyan, #00f3ff);
-}
-
-.btn-iniciar-ruta:hover {
-    background: var(--neon-cyan, #00f3ff);
-    color: var(--bg-color, #030308);
-    box-shadow: 0 0 10px var(--neon-cyan, #00f3ff);
-}
-
-/* Ajuste específico para el botón Planillar */
-.btn-planillar {
-    background: rgba(249, 240, 2, 0.1);
-    border: 1px solid var(--neon-yellow, #f9f002);
-    color: var(--neon-yellow, #f9f002);
-}
-
-.btn-planillar:hover {
-    background: var(--neon-yellow, #f9f002);
-    color: var(--bg-color, #030308);
-    box-shadow: 0 0 10px var(--neon-yellow, #f9f002);
+.btn-reorder:hover {
+    background: #00e5ff;
+    color: #0d1117;
+    box-shadow: 0 0 8px #00e5ff;
 }

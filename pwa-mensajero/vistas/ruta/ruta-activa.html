@@ -75,28 +75,6 @@
         </details>
     </section>
 
-    <!-- BOTONES DE ACCIÓN PRINCIPAL DE RUTA -->
-    <div style="display: flex; gap: 8px; margin-bottom: 12px">
-        <button class="cyber-btn btn-iniciar-ruta" onclick="iniciarRutaCompleta()" style="flex: 1">
-            <i class="fa-solid fa-play"></i> _INICIAR_RUTA
-        </button>
-        <button class="cyber-btn btn-planillar" onclick="generarPlanillaDesdeRuta()" style="flex: 1">
-            <i class="fa-solid fa-file-signature"></i> _PLANILLAR
-        </button>
-    </div>
-
-    <!-- CONSOLA DEL PASO EN CURSO / TARJETA ACTIVA -->
-    <section
-        id="panel-pedido-activo"
-        class="panel-maquina"
-        style="border-color: var(--neon-blue, #00e5ff); margin-bottom: 12px">
-        <div id="contenedor-tarjeta-activa">
-            <p style="text-align: center; color: var(--text-muted, #aaa); font-family: monospace">
-                [SISTEMA]: Cargando secuencia de la ruta o pool abierta...
-            </p>
-        </div>
-    </section>
-
     <!-- POOL DINÁMICA DE CONTRATOS DISPONIBLES -->
     <div id="pool-pedidos-dinamico" style="margin-bottom: 12px"></div>
 
@@ -116,6 +94,7 @@
         </div>
 
         <!-- CONTENEDOR DINÁMICO PARA TABLAS Y ACORDEONES POR ZONA -->
+        <!-- Cada acordeón inyectará internamente la barra de acciones: _INICIAR_RUTA, _PLANILLAR y [ 🗺️ VER MAPA ] -->
         <div id="contenedor-acordeones-zonas" class="zonas-accordion-container" style="margin-top: 10px">
             <div id="lista-paradas-zonificadas" style="max-height: 450px; overflow-y: auto"></div>
         </div>

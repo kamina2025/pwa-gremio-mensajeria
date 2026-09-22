@@ -13,28 +13,26 @@
 }
 
 /* ==========================================================================
-   BOTONERA COMPACTA DE ACCIÓN RÁPIDA (INICIAR / PLANILLAR)
+   BARRA DE ACCIONES INTERNAS POR ZONA (_INICIAR_RUTA, _PLANILLAR, VER MAPA)
    ========================================================================== */
 
-.header-acciones-ruta {
+.zona-acciones-bar {
     display: flex;
-    gap: 10px;
-    width: 100%;
-    height: auto;
-    max-height: 55px;
-    margin-bottom: 12px;
-    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+    background-color: #080b10;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.3);
+    margin-bottom: 10px;
 }
 
-.header-acciones-ruta .cyber-btn,
-.btn-iniciar-ruta,
-.btn-planillar {
+.btn-zona-action {
     flex: 1;
-    height: 44px;
-    min-height: 44px;
-    max-height: 44px;
-    padding: 0 12px;
-    font-size: 0.82rem;
+    min-width: 110px;
+    height: 38px;
+    background: #000000;
+    font-family: var(--font-machine, 'Courier New', monospace);
+    font-size: 0.78rem;
     font-weight: bold;
     letter-spacing: 0.5px;
     display: inline-flex;
@@ -42,36 +40,47 @@
     justify-content: center;
     gap: 6px;
     text-transform: uppercase;
-    clip-path: polygon(0 0, 92% 0, 100% 25%, 100% 100%, 8% 100%, 0 75%);
-    box-sizing: border-box;
     cursor: pointer;
     transition: all 0.2s ease-in-out;
+    clip-path: polygon(0 0, 92% 0, 100% 25%, 100% 100%, 8% 100%, 0 75%);
+    box-sizing: border-box;
 }
 
-/* Botón Iniciar Ruta */
-.btn-iniciar-ruta {
-    background: rgba(0, 243, 255, 0.1);
+/* Acciones Específicas */
+.btn-zona-iniciar {
     border: 1px solid var(--neon-cyan, #00f3ff);
     color: var(--neon-cyan, #00f3ff);
+    background: rgba(0, 243, 255, 0.08);
 }
 
-.btn-iniciar-ruta:hover {
+.btn-zona-iniciar:hover {
     background: var(--neon-cyan, #00f3ff);
-    color: #030308;
+    color: #0d1117;
     box-shadow: 0 0 12px var(--neon-cyan, #00f3ff);
 }
 
-/* Botón Planillar */
-.btn-planillar {
-    background: rgba(249, 240, 2, 0.1);
+.btn-zona-planillar {
     border: 1px solid var(--neon-yellow, #f9f002);
     color: var(--neon-yellow, #f9f002);
+    background: rgba(249, 240, 2, 0.08);
 }
 
-.btn-planillar:hover {
+.btn-zona-planillar:hover {
     background: var(--neon-yellow, #f9f002);
-    color: #030308;
+    color: #0d1117;
     box-shadow: 0 0 12px var(--neon-yellow, #f9f002);
+}
+
+.btn-zona-mapa {
+    border: 1px solid var(--neon-green, #00ff66);
+    color: var(--neon-green, #00ff66);
+    background: rgba(0, 255, 102, 0.08);
+}
+
+.btn-zona-mapa:hover {
+    background: var(--neon-green, #00ff66);
+    color: #0d1117;
+    box-shadow: 0 0 12px var(--neon-green, #00ff66);
 }
 
 /* ==========================================================================
@@ -95,11 +104,12 @@
 
 .cyber-accordion[open] {
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+    border-color: rgba(0, 229, 255, 0.4);
 }
 
 .cyber-summary {
     padding: 10px 14px;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-machine, monospace);
     font-size: 0.85rem;
     font-weight: bold;
     cursor: pointer;
@@ -116,7 +126,7 @@
 }
 
 .badge-zone {
-    font-family: 'Fira Code', monospace;
+    font-family: var(--font-machine, monospace);
     font-size: 0.72rem;
     font-weight: bold;
     padding: 2px 8px;
@@ -126,7 +136,7 @@
 }
 
 /* ==========================================================================
-   CONTENEDOR Y LISTA DE PARADAS REORDENABLES
+   CONTENEDOR Y TARJETAS DE PARADA CON DRAG & DROP
    ========================================================================== */
 
 #lista-paradas-zonificadas {
@@ -150,24 +160,52 @@
     border-radius: 3px;
 }
 
-/* Ítem de Parada en Lista */
+/* Tarjeta / Fila de Parada Arrastrable */
+.parada-card,
 .item-parada-lista {
     background: #0c080f;
     border: 1px solid #291f33;
-    padding: 8px 10px;
-    margin-bottom: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
     font-size: 0.78rem;
     border-radius: 4px;
-    transition: all 0.2s ease;
+    cursor: grab;
+    user-select: none;
+    touch-action: manipulation;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    position: relative;
 }
 
+.parada-card:active,
+.item-parada-lista:active {
+    cursor: grabbing;
+}
+
+.parada-card.activa,
 .item-parada-lista.activa {
     border-color: var(--neon-blue, #00e5ff) !important;
     background: rgba(0, 229, 255, 0.05);
     box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.15);
 }
 
-/* Botones de Reordenamiento (Subir / Bajar ▲ / ▼) */
+/* Estados de Arrastre Drag & Drop HTML5 */
+.parada-card.dragging,
+.item-parada-lista.dragging {
+    opacity: 0.35;
+    border: 2px dashed var(--neon-pink, #ff3366) !important;
+    background: #180914;
+    box-shadow: 0 0 15px rgba(255, 51, 102, 0.6);
+    transform: scale(0.97);
+}
+
+.parada-card.drag-over,
+.item-parada-lista.drag-over {
+    border-top: 3px solid var(--neon-green, #39ff14) !important;
+    background-color: #0b1a14;
+    box-shadow: 0 -4px 12px rgba(57, 255, 20, 0.4);
+}
+
+/* Botones de Reordenamiento Secundario (▲ / ▼) */
 .btn-group-reorder {
     display: flex;
     gap: 4px;

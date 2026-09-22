@@ -9,6 +9,7 @@ import { IndexedStore } from "./db/indexed-store.js";
 
 const dbStore = new IndexedStore();
 let paradasMemoriaLocal = [];
+let itemArrastradoUI = null;
 
 /**
  * Renderiza la consola de operaciones táctica desplegando los campos clave de la tirilla y acordeones zonificados.
@@ -80,7 +81,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
         `;
     }
 
-    // 2. CONSTRUCCIÓN DE ACORDEONES AGRUPADOS POR ZONA
+    // 2. CONSTRUCCIÓN DE ACORDEONES AGRUPADOS POR ZONA CON BARRA DE ACCIONES Y DRAG & DROP
     if (contenedorAcordeones) {
         console.log("📋 [MENSAJERO_UI]: Construyendo acordeones de paradas por zona...");
         contenedorAcordeones.innerHTML = "";
@@ -88,7 +89,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
         const grupos = {};
         paradasMemoriaLocal.forEach((item, index) => {
             if (!item.secuencia) item.secuencia = index + 1;
-            const zKey = item.zonaKey || "GENERAL";
+            const zKey = item.zonaKey || item.zona || "GENERAL";
             if (!grupos[zKey]) grupos[zKey] = [];
             grupos[zKey].push({ ...item, origIndex: index });
         });
@@ -100,6 +101,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
             const details = document.createElement("details");
             details.className = "cyber-accordion";
             details.style.cssText = `background:#0d1117; border:1px solid ${infoZona.color}; margin-bottom:8px; border-radius:4px; overflow:hidden;`;
+            details.open = true;
 
             details.addEventListener("toggle", () => {
                 if (details.open) {
@@ -111,67 +113,174 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                 }
             });
 
-            // Construcción modular limpia de las filas de cada parada
-            const htmlFilas = itemsGrupo.map(p => {
-                const idParadaLimpio = String(p.id || '').replace(/'/g, "\\'");
-                return `
-                    <div class="item-parada-lista ${p.origIndex === indiceActivo ? 'activa' : ''}" style="background:#0c080f; border:1px solid ${p.origIndex === indiceActivo ? 'var(--neon-blue, #00e5ff)' : '#291f33'}; padding:6px 8px; margin-bottom:6px; font-size:0.75rem; border-radius:3px;">
-                        
-                        <!-- MODO LECTURA DE PARADA -->
-                        <div id="vista-lectura-${p.origIndex}" style="display:flex; justify-content:space-between; align-items:center;">
-                            <div>
-                                <div><strong style="color:${infoZona.color}">[#${p.secuencia}]</strong> ${p.destinatario || "Cliente"} - ${p.direccion || ''}</div>
-                                <div style="color:#888; font-size:0.7rem;">
-                                    SSC: ${p.ssc || 'N/A'} | Tel: ${p.telefono || 'N/A'} | Cuota: <span style="color:var(--neon-amber, #ffaa00);">${p.cuotaModeradora || '$0'}</span>
-                                </div>
-                            </div>
-                            <div style="display:flex; align-items:center; gap:4px;">
-                                <button type="button" class="btn-terminal" style="border-color:#00e5ff; color:#00e5ff; padding:1px 4px; font-size:0.65rem;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', -1)">▲</button>
-                                <button type="button" class="btn-terminal" style="border-color:#00e5ff; color:#00e5ff; padding:1px 4px; font-size:0.65rem;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', 1)">▼</button>
-                                <button type="button" class="btn-terminal" style="border-color:#ffb703; color:#ffb703; padding:1px 4px; font-size:0.65rem;" onclick="activarEdicionParadaUI(event, ${p.origIndex})">✏️</button>
-                                <button type="button" class="btn-terminal" style="border-color:#ff3366; color:#ff3366; padding:1px 4px; font-size:0.65rem;" onclick="eliminarParadaUI(event, ${p.origIndex})">🗑️</button>
-                            </div>
-                        </div>
-
-                        <!-- MODO EDICIÓN FORMULARIO INDIVIDUAL -->
-                        <div id="vista-edicion-${p.origIndex}" style="display:none; flex-direction:column; gap:4px; margin-top:4px; background:#140e1a; padding:6px; border:1px dashed var(--neon-blue, #00e5ff);">
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                                <input type="text" id="input-edit-destinatario-${p.origIndex}" value="${p.destinatario || ''}" placeholder="Destinatario" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                                <input type="text" id="input-edit-telefono-${p.origIndex}" value="${p.telefono || ''}" placeholder="Teléfono" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                            </div>
-                            <input type="text" id="input-edit-direccion-${p.origIndex}" value="${p.direccion || ''}" placeholder="Dirección" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                                <input type="text" id="input-edit-ssc-${p.origIndex}" value="${p.ssc || ''}" placeholder="SSC" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                                <input type="text" id="input-edit-cuota-${p.origIndex}" value="${p.cuotaModeradora || ''}" placeholder="Cuota" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                            </div>
-                            <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
-                                <button type="button" class="btn-terminal" style="border-color:#888; color:#888; padding:2px 6px; font-size:0.65rem;" onclick="cancelarEdicionParadaUI(event, ${p.origIndex})">[CANCELAR]</button>
-                                <button type="button" class="btn-terminal" style="border-color:var(--neon-blue, #00e5ff); color:var(--neon-blue, #00e5ff); padding:2px 6px; font-size:0.65rem;" onclick="guardarEdicionParadaUI(event, ${p.origIndex})">[GUARDAR]</button>
-                            </div>
-                        </div>
-
-                    </div>
-                `;
-            }).join('');
-
-            details.innerHTML = `
-                <summary style="padding:8px 12px; background:#161b22; color:${infoZona.color}; font-weight:bold; font-size:0.85rem; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-                    <span>▼ ${infoZona.label} (${itemsGrupo.length})</span>
-                    <span style="background:${infoZona.color}22; border:1px solid ${infoZona.color}; font-size:0.7rem; padding:1px 6px; border-radius:3px;">
-                        ${infoZona.color}
-                    </span>
-                </summary>
-                <div style="padding:6px; background:#05070f;">
-                    ${htmlFilas}
-                </div>
+            // A. Summary Cabecera de Zona
+            const summary = document.createElement("summary");
+            summary.className = "cyber-summary";
+            summary.style.cssText = `padding:8px 12px; background:#161b22; color:${infoZona.color}; font-weight:bold; font-size:0.85rem; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none;`;
+            summary.innerHTML = `
+                <span>▼ ${infoZona.label} (${itemsGrupo.length})</span>
+                <span class="badge-zone" style="background:${infoZona.color}22; border:1px solid ${infoZona.color}; font-size:0.7rem; padding:1px 6px; border-radius:3px;">
+                    ${infoZona.color}
+                </span>
             `;
 
+            // B. BARRA DE BOTONES INTERNA POR ZONA (_INICIAR_RUTA, _PLANILLAR, VER MAPA)
+            const accionesBar = document.createElement("div");
+            accionesBar.className = "zona-acciones-bar";
+            accionesBar.style.cssText = "display: flex; gap: 8px; padding: 8px; background: #080b10; border-bottom: 1px solid #30363d;";
+            accionesBar.innerHTML = `
+                <button type="button" class="btn-zona-action btn-zona-iniciar" onclick="window.iniciarRutaZona('${infoZona.label}')">
+                    ► _INICIAR_RUTA
+                </button>
+                <button type="button" class="btn-zona-action btn-zona-planillar" onclick="window.planillarRutaZona('${infoZona.label}')">
+                    📝 _PLANILLAR
+                </button>
+                <button type="button" class="btn-zona-action btn-zona-mapa" onclick="window.verMapaZona('${infoZona.label}')">
+                    🗺️ VER MAPA
+                </button>
+            `;
+
+            // C. Contenedor de Paradas de la Zona con Soporte Drag & Drop
+            const listContainer = document.createElement("div");
+            listContainer.className = "paradas-drag-list";
+            listContainer.style.cssText = "padding:6px; background:#05070f; display:flex; flex-direction:column; gap:6px;";
+
+            itemsGrupo.forEach((p) => {
+                const idParadaLimpio = String(p.id || '').replace(/'/g, "\\'");
+                const card = document.createElement("div");
+                card.className = `item-parada-lista parada-card ${p.origIndex === indiceActivo ? 'activa' : ''}`;
+                card.setAttribute("draggable", "true");
+                card.setAttribute("data-id", p.id || p.ssc);
+                card.setAttribute("data-orig-index", p.origIndex);
+                card.style.cssText = `background:#0c080f; border:1px solid ${p.origIndex === indiceActivo ? 'var(--neon-blue, #00e5ff)' : '#291f33'}; padding:6px 8px; font-size:0.75rem; border-radius:3px; cursor:grab;`;
+
+                card.innerHTML = `
+                    <div id="vista-lectura-${p.origIndex}" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div><strong style="color:${infoZona.color}">[#${p.secuencia}]</strong> ${p.destinatario || "Cliente"} - ${p.direccion || ''}</div>
+                            <div style="color:#888; font-size:0.7rem;">
+                                SSC: ${p.ssc || 'N/A'} | Tel: ${p.telefono || 'N/A'} | Cuota: <span style="color:var(--neon-amber, #ffaa00);">${p.cuotaModeradora || '$0'}</span>
+                            </div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <button type="button" class="btn-terminal" style="border-color:#00e5ff; color:#00e5ff; padding:1px 4px; font-size:0.65rem;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', -1)">▲</button>
+                            <button type="button" class="btn-terminal" style="border-color:#00e5ff; color:#00e5ff; padding:1px 4px; font-size:0.65rem;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', 1)">▼</button>
+                            <button type="button" class="btn-terminal" style="border-color:#ffb703; color:#ffb703; padding:1px 4px; font-size:0.65rem;" onclick="activarEdicionParadaUI(event, ${p.origIndex})">✏️</button>
+                            <button type="button" class="btn-terminal" style="border-color:#ff3366; color:#ff3366; padding:1px 4px; font-size:0.65rem;" onclick="eliminarParadaUI(event, ${p.origIndex})">🗑️</button>
+                        </div>
+                    </div>
+
+                    <div id="vista-edicion-${p.origIndex}" style="display:none; flex-direction:column; gap:4px; margin-top:4px; background:#140e1a; padding:6px; border:1px dashed var(--neon-blue, #00e5ff);">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                            <input type="text" id="input-edit-destinatario-${p.origIndex}" value="${p.destinatario || ''}" placeholder="Destinatario" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
+                            <input type="text" id="input-edit-telefono-${p.origIndex}" value="${p.telefono || ''}" placeholder="Teléfono" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
+                        </div>
+                        <input type="text" id="input-edit-direccion-${p.origIndex}" value="${p.direccion || ''}" placeholder="Dirección" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                            <input type="text" id="input-edit-ssc-${p.origIndex}" value="${p.ssc || ''}" placeholder="SSC" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
+                            <input type="text" id="input-edit-cuota-${p.origIndex}" value="${p.cuotaModeradora || ''}" placeholder="Cuota" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
+                            <button type="button" class="btn-terminal" style="border-color:#888; color:#888; padding:2px 6px; font-size:0.65rem;" onclick="cancelarEdicionParadaUI(event, ${p.origIndex})">[CANCELAR]</button>
+                            <button type="button" class="btn-terminal" style="border-color:var(--neon-blue, #00e5ff); color:var(--neon-blue, #00e5ff); padding:2px 6px; font-size:0.65rem;" onclick="guardarEdicionParadaUI(event, ${p.origIndex})">[GUARDAR]</button>
+                        </div>
+                    </div>
+                `;
+
+                vincularDragDropUI(card, infoZona.label);
+                listContainer.appendChild(card);
+            });
+
+            details.appendChild(summary);
+            details.appendChild(accionesBar);
+            details.appendChild(listContainer);
             contenedorAcordeones.appendChild(details);
         });
     }
 
-    console.log("✅ [MENSAJERO_UI]: Consola de operaciones renderizada exitosamente.");
+    console.log("✅ [MENSAJERO_UI]: Consola de operaciones y acordeones renderizados exitosamente.");
     console.groupEnd();
+}
+
+/**
+ * Registra los eventos Drag & Drop Nativo HTML5 sobre la tarjeta
+ */
+function vincularDragDropUI(cardElement, zonaNombre) {
+    cardElement.addEventListener("dragstart", (e) => {
+        itemArrastradoUI = cardElement;
+        cardElement.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", cardElement.getAttribute("data-id"));
+    });
+
+    cardElement.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (cardElement !== itemArrastradoUI) {
+            cardElement.classList.add("drag-over");
+        }
+    });
+
+    cardElement.addEventListener("dragleave", () => {
+        cardElement.classList.remove("drag-over");
+    });
+
+    cardElement.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        cardElement.classList.remove("drag-over");
+
+        if (itemArrastradoUI && itemArrastradoUI !== cardElement) {
+            const contenedorPadre = cardElement.parentNode;
+            const tarjetas = Array.from(contenedorPadre.querySelectorAll(".item-parada-lista"));
+            const origenIndex = tarjetas.indexOf(itemArrastradoUI);
+            const destinoIndex = tarjetas.indexOf(cardElement);
+
+            if (origenIndex < destinoIndex) {
+                contenedorPadre.insertBefore(itemArrastradoUI, cardElement.nextSibling);
+            } else {
+                contenedorPadre.insertBefore(itemArrastradoUI, cardElement);
+            }
+
+            await recalcularYPersistirDragDrop(contenedorPadre, zonaNombre);
+        }
+    });
+
+    cardElement.addEventListener("dragend", () => {
+        cardElement.classList.remove("dragging");
+        itemArrastradoUI = null;
+        document.querySelectorAll(".item-parada-lista").forEach((c) => c.classList.remove("drag-over"));
+    });
+}
+
+/**
+ * Recalcula secuencias en memoria, las persiste en IndexedDB y notifica al visor de mapa
+ */
+async function recalcularYPersistirDragDrop(contenedorPadre, zonaNombre) {
+    const cards = contenedorPadre.querySelectorAll(".item-parada-lista");
+    const nuevaSecuencia = [];
+
+    cards.forEach((card, nuevoIndex) => {
+        const origIdx = parseInt(card.getAttribute("data-orig-index"), 10);
+        if (!isNaN(origIdx) && paradasMemoriaLocal[origIdx]) {
+            paradasMemoriaLocal[origIdx].secuencia = nuevoIndex + 1;
+        }
+        
+        const strongEl = card.querySelector("strong");
+        if (strongEl) {
+            strongEl.textContent = strongEl.textContent.replace(/\[#\d+\]/, `[#${nuevoIndex + 1}]`);
+        }
+        nuevaSecuencia.push({ id: card.getAttribute("data-id"), secuencia: nuevoIndex + 1 });
+    });
+
+    for (const p of paradasMemoriaLocal) {
+        await dbStore.actualizarParada(p);
+    }
+    localStorage.setItem("ruta_zonificada", JSON.stringify(paradasMemoriaLocal));
+    console.log(`💾 [MENSAJERO_UI]: Secuencia reordenada para ${zonaNombre} guardada en IndexedDB.`);
+
+    window.dispatchEvent(new CustomEvent("rutasReordenadas", {
+        detail: { zonaId: zonaNombre, nuevaSecuencia }
+    }));
 }
 
 function obtenerBotonesFlujoHTML(pedido, llamadasRealizadas) {
@@ -210,14 +319,51 @@ function obtenerBotonesFlujoHTML(pedido, llamadasRealizadas) {
     return `<div style="color:var(--crypto-secure, #00ff66); text-align:center; font-weight:bold; padding:8px;">✅ ENTREGADO / PROCESADO</div>`;
 }
 
+// ==========================================================================
+// CONEXIÓN DE ACCIONES OPERATIVAS Y NAVEGACIÓN SPA CON SCRIPT2.JS / PLANILLA
+// ==========================================================================
+
+window.iniciarRutaZona = function (zonaLabel) {
+    console.log(`► [MENSAJERO_UI]: Iniciando ruta activa para la zona: ${zonaLabel}`);
+    localStorage.setItem("zona_activa_operacion", zonaLabel);
+    
+    if (typeof window.navegarA === "function") {
+        window.navegarA("vistas/ruta/mapa-activa.html", { zona: zonaLabel });
+    } else {
+        window.location.href = `vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(zonaLabel)}`;
+    }
+};
+
+window.planillarRutaZona = function (zonaLabel) {
+    console.log(`📝 [MENSAJERO_UI]: Generando planilla para la zona: ${zonaLabel}`);
+    localStorage.setItem("zona_planillar_activa", zonaLabel);
+
+    if (typeof window.navegarA === "function") {
+        window.navegarA("vistas/notificaciones/planillas.html", { zona: zonaLabel });
+    } else if (typeof window.renderizarModuloPlanillas === "function") {
+        window.renderizarModuloPlanillas(zonaLabel);
+    } else {
+        window.location.href = `vistas/notificaciones/planillas.html?zona=${encodeURIComponent(zonaLabel)}`;
+    }
+};
+
+window.verMapaZona = function (zonaLabel) {
+    console.log(`🗺️ [MENSAJERO_UI]: Navegando al mapa táctico de la zona: ${zonaLabel}`);
+    localStorage.setItem("zona_activa_operacion", zonaLabel);
+
+    if (typeof window.navegarA === "function") {
+        window.navegarA("vistas/ruta/mapa-activa.html", { zona: zonaLabel });
+    } else {
+        window.location.href = `vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(zonaLabel)}`;
+    }
+};
+
+window.renderizarConsolaOperaciones = renderizarConsolaOperaciones;
+
 // ==========================================
-// MANTENIMIENTO, ZONIFICACIÓN Y REORDENAMIENTO LOCAL-FIRST
+// ZONIFICACIÓN Y REORDENAMIENTO LOCAL-FIRST
 // ==========================================
 
-/**
- * Ejecuta el proceso global de Zonificación Automática por Colores y Polígonos GeoJSON.
- * Resuelve coordenadas faltantes vía Google Geocoder antes de clasificar por zona.
- */
 window.ejecutarZonificacionAutomatica = async function() {
     console.group("🎨 [ZONIFICAR]: Iniciando clasificación espacial táctica...");
     
@@ -230,13 +376,11 @@ window.ejecutarZonificacionAutomatica = async function() {
         return;
     }
 
-    // Instancia de Geocoder de Google Maps para resolver coordenadas si faltan
     const geocoder = (typeof google !== "undefined" && google.maps) ? new google.maps.Geocoder() : null;
 
     for (let i = 0; i < paradasMemoriaLocal.length; i++) {
         const p = paradasMemoriaLocal[i];
         
-        // 1. Si no tiene coordenadas lat/lng, geocodificar la dirección antes de clasificar
         if ((!p.lat || !p.lng) && geocoder && p.direccion) {
             const dirCompleta = p.direccion.toLowerCase().includes("cali") 
                 ? p.direccion 
@@ -264,20 +408,18 @@ window.ejecutarZonificacionAutomatica = async function() {
         }
     }
 
-    // 2. Clasificar mediante polígonos GeoJSON exactos de Cali
     paradasMemoriaLocal = clasificarParadasPorZona(paradasMemoriaLocal);
 
-    // 3. Guardar cambios en IndexedDB y localStorage (Local-First)
     for (const p of paradasMemoriaLocal) {
         await dbStore.actualizarParada(p);
     }
     localStorage.setItem("ruta_zonificada", JSON.stringify(paradasMemoriaLocal));
     console.log("💾 [ZONIFICAR]: Paradas actualizadas en IndexedDB y localStorage.");
 
-    // 4. Refrescar UI de acordeones y notificar al mapa para re-renderizar marcadores con sus respectivos colores
     renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0);
     console.groupEnd();
 };
+
 window.moverParadaSecuencia = async function(idParada, delta) {
     console.group(`⚡ [REORDENAMIENTO]: Moviendo parada ${idParada} con delta ${delta}`);
     const index = paradasMemoriaLocal.findIndex(p => String(p.id) === String(idParada));
@@ -294,12 +436,10 @@ window.moverParadaSecuencia = async function(idParada, delta) {
         return;
     }
 
-    // Intercambiar posiciones
     const temp = paradasMemoriaLocal[index];
     paradasMemoriaLocal[index] = paradasMemoriaLocal[newIndex];
     paradasMemoriaLocal[newIndex] = temp;
 
-    // Actualizar secuencias y guardar en IndexedDB
     for (let i = 0; i < paradasMemoriaLocal.length; i++) {
         paradasMemoriaLocal[i].secuencia = i + 1;
         await dbStore.actualizarParada(paradasMemoriaLocal[i]);
@@ -365,7 +505,6 @@ window.eliminarParadaUI = async function (e, idx) {
         await dbStore.eliminarParada(paradaEliminada[0].id);
     }
 
-    // Recalcular secuencias restantes
     for (let i = 0; i < paradasMemoriaLocal.length; i++) {
         paradasMemoriaLocal[i].secuencia = i + 1;
         await dbStore.actualizarParada(paradasMemoriaLocal[i]);

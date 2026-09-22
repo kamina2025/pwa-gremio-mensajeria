@@ -12,8 +12,7 @@
             <h3>Ingreso y Extracción de Tirillas Médicas</h3>
         </div>
         <p style="font-size: 0.8rem; color: var(--text-muted, #aaa); margin-top: 5px">
-            Capture una o varias fotos con la cámara o cargue archivos para extraer automáticamente los 6 datos clave de
-            cada parada.
+            Capture fotos directamente con la cámara de su teléfono o cargue archivos para extraer automáticamente los 6 datos clave de cada parada.
         </p>
     </div>
 
@@ -23,94 +22,106 @@
             <div
                 class="grid-balance-monolitico"
                 style="display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0">
+                
                 <!-- MODO 1: FOTOGRAFÍAS DE TIRILLAS / CÁMARA ANDROID / IA CLOUD -->
                 <div
                     class="sub-panel-datos"
-                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33)">
+                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
                     <div
                         class="label-titulo"
-                        style="font-size: 0.75rem; color: var(--neon-cyan, #00f3ff); margin-bottom: 8px">
-                        [📸] MODO 1: FOTOGRAFÍAS / CÁMARA (MULTIPLE + IA CLOUD)
+                        style="font-size: 0.8rem; font-weight: bold; color: var(--neon-cyan, #00f3ff); margin-bottom: 8px">
+                        [📸] MODO 1: FOTOGRAFÍAS / CÁMARA (LOTE MULTIPLE + IA CLOUD)
                     </div>
                     <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
-                        Tome las fotos requeridas con la cámara de su teléfono o seleccione múltiples imágenes/PDFs.
+                        Tome las fotos con la cámara trasera de su dispositivo Android o seleccione múltiples imágenes/PDFs de tirillas.
                     </p>
+                    
+                    <label for="archivo-base-datos" style="display: block; font-size: 0.7rem; color: #00f3ff; margin-bottom: 4px;">
+                        Seleccionar o Tomar Fotos:
+                    </label>
                     <input
                         type="file"
                         id="archivo-base-datos"
-                        accept="image/*,application/pdf,.csv,.txt"
+                        accept="image/*,application/pdf"
                         capture="environment"
                         multiple
                         class="input-terminal"
-                        style="width: 100%; margin-bottom: 8px; font-size: 0.8rem" />
+                        style="width: 100%; margin-bottom: 10px; font-size: 0.8rem; padding: 6px;" />
+                    
                     <button
                         type="button"
                         id="btn-procesar-archivo-masivo"
                         class="btn-terminal btn-crypto"
-                        style="width: 100%">
+                        style="width: 100%; font-weight: bold;">
                         [⚙️] PROCESAR FOTOS / ARCHIVOS CON IA CLOUD
                     </button>
                 </div>
 
-                <!-- MODO 2: TEXTO PLANO / WHATSAPP -->
+                <!-- MODO 2: TEXTO PLANO / WHATSAPP / PAYLOAD -->
                 <div
                     class="sub-panel-datos"
-                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33)">
+                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
                     <div
                         class="label-titulo"
-                        style="font-size: 0.75rem; color: var(--neon-purple, #b359ff); margin-bottom: 8px">
+                        style="font-size: 0.8rem; font-weight: bold; color: var(--neon-purple, #b359ff); margin-bottom: 8px">
                         [💬] MODO 2: MANIFIESTO EN TEXTO PLANO / WHATSAPP / PAYLOAD
                     </div>
                     <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
-                        Pegue la lista de paradas en texto o la URL de payload recibida en sus mensajes:
+                        Pegue la lista de paradas enviada por chat o la URL con payload recibida:
                     </p>
+                    
+                    <label for="txt-payload-manual" style="display: block; font-size: 0.7rem; color: #b359ff; margin-bottom: 4px;">
+                        Ingresar Contenido de Texto:
+                    </label>
                     <textarea
                         id="txt-payload-manual"
                         rows="3"
                         class="input-terminal"
                         placeholder="Ej: SSC: 103458, Carmen Edith Landazuri, carrera 49 b n 12 - 106, 3147714013, Cuota: $20.100&#10;o enlace payload=..."
-                        style="width: 100%; font-size: 0.8rem; margin-bottom: 8px"></textarea>
+                        style="width: 100%; font-size: 0.8rem; margin-bottom: 10px; padding: 6px;"></textarea>
+                    
                     <button
                         type="button"
+                        id="btn-procesar-texto-manual"
                         class="btn-terminal btn-crypto"
-                        onclick="procesarCargaManualEnlace()"
-                        style="width: 100%; border-color: var(--neon-purple, #b359ff)">
+                        style="width: 100%; border-color: var(--neon-purple, #b359ff); color: #fff; font-weight: bold;">
                         [⚡] IMPORTAR TEXTO PLANO / PAYLOAD
                     </button>
                 </div>
 
-                <!-- MODO 3: EXTRAER DATOS DE CAMARA (MÚLTIPLES FOTOS) O DOCUMENTOS LOCALES SIN IA -->
+                <!-- MODO 3: EXTRAER DATOS LOCALES SIN IA (HEURÍSTICA/CSV/EXCEL) -->
                 <div
                     class="sub-panel-datos"
-                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33)">
+                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
                     <div
                         class="label-titulo"
-                        style="font-size: 0.75rem; color: var(--neon-green, #3eb84a); margin-bottom: 8px">
-                        [📸/📂] MODO 3: CÁMARA MULTI-FOTO Y BASE DE DATOS LOCAL (SIN IA)
+                        style="font-size: 0.8rem; font-weight: bold; color: var(--neon-green, #3eb84a); margin-bottom: 8px">
+                        [📂] MODO 3: ARCHIVOS LOCALES (TXT, CSV, EXCEL - SIN IA)
                     </div>
                     <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
-                        Tome 1, 2 o más fotos de tirillas con la cámara o adjunte archivos (TXT/PDF/Excel) para extraer
-                        paradas localmente mediante OCR/Heurística:
+                        Adjunte archivos de hoja de cálculo o texto para procesar localmente mediante el parser heurístico offline:
                     </p>
 
-                    <!-- Input optimizado para cámara trasera Android y múltiple selección -->
+                    <label for="archivo-base-datos-local" style="display: block; font-size: 0.7rem; color: #3eb84a; margin-bottom: 4px;">
+                        Seleccionar Archivo de Datos Local:
+                    </label>
                     <input
                         type="file"
                         id="archivo-base-datos-local"
-                        accept="image/*,application/pdf,.csv,.txt,.xlsx,.xls"
-                        capture="environment"
+                        accept=".csv,.txt,.xlsx,.xls,application/pdf"
                         multiple
                         class="input-terminal"
-                        style="width: 100%; margin-bottom: 8px; font-size: 0.8rem" />
+                        style="width: 100%; margin-bottom: 10px; font-size: 0.8rem; padding: 6px;" />
 
                     <button
                         type="button"
                         id="btn-procesar-archivo-masivo-local"
                         class="btn-terminal btn-crypto"
-                        style="width: 100%; border-color: var(--neon-green, #3eb84a)">
-                        [⚙️] PROCESAR FOTOS / ARCHIVOS LOCALES (OCR + HEURÍSTICA)
+                        style="width: 100%; border-color: var(--neon-green, #3eb84a); color: #fff; font-weight: bold;">
+                        [⚙️] PROCESAR ARCHIVOS LOCALES (OFFLINE)
                     </button>
                 </div>
+
             </div>
         </div>
     </section>

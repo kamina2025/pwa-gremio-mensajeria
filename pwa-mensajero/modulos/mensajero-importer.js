@@ -8,10 +8,10 @@ import { guardarRutaZonificada } from "./mensajero-persistencia.js";
 import { procesarArchivoTextoCSV } from "./base-de-datos.js";
 import { procesarImagenConGemini } from "./procesamiento-datos/ia-gemini.js";
 import { procesarTextoHeuristico } from "./procesamiento-datos/heuristico.js";
-
+import { visorAnimaciones } from "./visor-animaciones.js";
 /**
  * Normaliza y valida la estructura de cada parada asegurando los campos clave de la tirilla médica.
- * 
+ *
  * @param {Object} p - Objeto crudo de la parada.
  * @param {number} idx - Índice de la parada en la secuencia.
  * @returns {Object} Parada estructurada y normalizada.
@@ -32,7 +32,9 @@ function normalizarParadaTirilla(p, idx) {
         registroOperaciones: p.registroOperaciones || {}
     };
 
-    console.log(`>>> [NORMALIZADOR_TIRILLA]: Parada #${idx + 1} adaptada -> SSC: ${paradaNormalizada.ssc} | Cliente: ${paradaNormalizada.destinatario} | Cuota: ${paradaNormalizada.cuotaModeradora}`);
+    console.log(
+        `>>> [NORMALIZADOR_TIRILLA]: Parada #${idx + 1} adaptada -> SSC: ${paradaNormalizada.ssc} | Cliente: ${paradaNormalizada.destinatario} | Cuota: ${paradaNormalizada.cuotaModeradora}`
+    );
     return paradaNormalizada;
 }
 
@@ -47,7 +49,9 @@ export function parsearTextoPlanoWhatsApp(texto) {
     }
 
     if (texto.includes("%PDF-") || texto.includes("/Root") || texto.includes("endobj")) {
-        console.warn(">>> [PARSER_LOCAL_ABORT]: Se detectó código binario PDF en la lectura de texto plano. Abortando.");
+        console.warn(
+            ">>> [PARSER_LOCAL_ABORT]: Se detectó código binario PDF en la lectura de texto plano. Abortando."
+        );
         return [];
     }
 
@@ -145,11 +149,12 @@ export function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco) {
         const paradasProcesadas = listaParadas.map((p, idx) => normalizarParadaTirilla(p, idx));
         guardarRutaZonificada(paradasProcesadas);
 
-        alert(`>>> RUTA CARGADA EXITOSAMENTE:\n\nSe importó la entrega para: ${paradasProcesadas[0].destinatario}\nSSC: ${paradasProcesadas[0].ssc}`);
-        
+        alert(
+            `>>> RUTA CARGADA EXITOSAMENTE:\n\nSe importó la entrega para: ${paradasProcesadas[0].destinatario}\nSSC: ${paradasProcesadas[0].ssc}`
+        );
+
         if (typeof callbackRefresco === "function") callbackRefresco(paradasProcesadas);
         return true;
-
     } catch (error) {
         alert(`>>> ERROR DE IMPORTACIÓN:\n\n${error.message}`);
         return false;
@@ -172,7 +177,9 @@ export class ImportadorMasivoMensajero {
     vincularEscuchas() {
         const btnProcesarIA = document.getElementById("btn-procesar-archivo-masivo");
         if (btnProcesarIA) {
-            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo (IA Cloud) enlazado correctamente.");
+            console.log(
+                ">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo (IA Cloud) enlazado correctamente."
+            );
             btnProcesarIA.removeEventListener("click", this._onProcesarIAClick);
             this._onProcesarIAClick = () => this.ejecutarImportacionArchivo(null, true);
             btnProcesarIA.addEventListener("click", this._onProcesarIAClick);
@@ -180,7 +187,9 @@ export class ImportadorMasivoMensajero {
 
         const btnProcesarLocal = document.getElementById("btn-procesar-archivo-masivo-local");
         if (btnProcesarLocal) {
-            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo-local (Sin IA) enlazado correctamente.");
+            console.log(
+                ">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo-local (Sin IA) enlazado correctamente."
+            );
             btnProcesarLocal.removeEventListener("click", this._onProcesarLocalClick);
             this._onProcesarLocalClick = () => this.ejecutarImportacionArchivoLocal();
             btnProcesarLocal.addEventListener("click", this._onProcesarLocalClick);
@@ -192,7 +201,8 @@ export class ImportadorMasivoMensajero {
      */
     async ejecutarImportacionArchivoLocal(callbackRefresco) {
         console.log(">>> [IMPORTADOR_EXEC_LOCAL]: Disparando extracción local MODO 3 (Sin IA)...");
-        const inputArchivo = document.getElementById("archivo-base-datos-local") || document.getElementById("archivo-base-datos");
+        const inputArchivo =
+            document.getElementById("archivo-base-datos-local") || document.getElementById("archivo-base-datos");
         const lblEstado = document.getElementById("txt-estado-ingestion");
 
         if (!inputArchivo || !inputArchivo.files || inputArchivo.files.length === 0) {
@@ -212,16 +222,21 @@ export class ImportadorMasivoMensajero {
 
         for (let i = 0; i < listaArchivos.length; i++) {
             const archivo = listaArchivos[i];
-            console.log(`>>> [IMPORTADOR_FILE_INFO ${i + 1}/${listaArchivos.length}]: Nombre: "${archivo.name}", Tipo: "${archivo.type}", Tamaño: ${archivo.size || 0} bytes`);
+            console.log(
+                `>>> [IMPORTADOR_FILE_INFO ${i + 1}/${listaArchivos.length}]: Nombre: "${archivo.name}", Tipo: "${archivo.type}", Tamaño: ${archivo.size || 0} bytes`
+            );
 
             try {
                 const puntosExtraidos = await procesarArchivoTextoCSV(archivo);
                 if (puntosExtraidos && puntosExtraidos.length > 0) {
-                    puntosExtraidos.forEach(p => todasLasParadas.push(p));
+                    puntosExtraidos.forEach((p) => todasLasParadas.push(p));
                     console.log(`✅ [FILE_OK]: ${puntosExtraidos.length} registros extraídos de "${archivo.name}"`);
                 }
             } catch (errArchivo) {
-                console.warn(`⚠️ [FILE_FAIL_LOCAL]: No se pudo extraer datos de "${archivo.name}":`, errArchivo.message || errArchivo);
+                console.warn(
+                    `⚠️ [FILE_FAIL_LOCAL]: No se pudo extraer datos de "${archivo.name}":`,
+                    errArchivo.message || errArchivo
+                );
             }
 
             if (lblEstado) {
@@ -234,13 +249,17 @@ export class ImportadorMasivoMensajero {
                 lblEstado.innerText = `>>> ERROR LOCAL: No se extrajeron datos válidos.`;
                 lblEstado.style.color = "#ff3366";
             }
-            alert(">>> ERROR PROCESANDO ARCHIVOS LOCALES:\n\nNo se lograron extraer datos válidos mediante heurística local.");
+            alert(
+                ">>> ERROR PROCESANDO ARCHIVOS LOCALES:\n\nNo se lograron extraer datos válidos mediante heurística local."
+            );
             return;
         }
 
         const paradasProcesadas = todasLasParadas.map((p, idx) => normalizarParadaTirilla(p, idx));
 
-        console.log(`>>> [IMPORTADOR_PERSIST]: Guardando ${paradasProcesadas.length} tirilla(s) en la base zonificada...`);
+        console.log(
+            `>>> [IMPORTADOR_PERSIST]: Guardando ${paradasProcesadas.length} tirilla(s) en la base zonificada...`
+        );
         guardarRutaZonificada(paradasProcesadas);
 
         if (lblEstado) {
@@ -248,7 +267,9 @@ export class ImportadorMasivoMensajero {
             lblEstado.style.color = "var(--neon-green, #00ff66)";
         }
 
-        alert(`>>> EXTRACCIÓN LOCAL EXITOSA:\n\nSe importaron ${paradasProcesadas.length} paradas a partir de ${listaArchivos.length} archivo(s).`);
+        alert(
+            `>>> EXTRACCIÓN LOCAL EXITOSA:\n\nSe importaron ${paradasProcesadas.length} paradas a partir de ${listaArchivos.length} archivo(s).`
+        );
 
         if (typeof callbackRefresco === "function") {
             callbackRefresco(paradasProcesadas);
@@ -261,9 +282,8 @@ export class ImportadorMasivoMensajero {
      * MODO 1: Procesa múltiples fotografías o documentos mediante la API de Gemini Cloud en bucle aislado.
      */
     async ejecutarImportacionArchivo(callbackRefresco, forzarIA = false) {
-        console.log(">>> [IMPORTADOR_EXEC_IA]: Disparando proceso masivo MODO 1 (IA Cloud / Híbrido)...");
-        const inputArchivo = document.getElementById("archivo-base-datos") || document.getElementById("archivo-base-datos-local");
-        const lblEstado = document.getElementById("txt-estado-ingestion");
+        const inputArchivo =
+            document.getElementById("archivo-base-datos") || document.getElementById("archivo-base-datos-local");
 
         if (!inputArchivo || !inputArchivo.files || inputArchivo.files.length === 0) {
             alert(">>> ALERTA MENSAJERO: Seleccione una o varias tirillas / fotografías.");
@@ -271,23 +291,17 @@ export class ImportadorMasivoMensajero {
         }
 
         const listaArchivos = Array.from(inputArchivo.files);
-        console.log(`🚀 [IMPORTADOR_MASIVO_IA]: Iniciando procesamiento masivo de ${listaArchivos.length} archivo(s)...`);
-
         const paradasAcumuladas = [];
 
-        if (window.visorAnimaciones && typeof window.visorAnimaciones.mostrarAnimacionProcesamientoIA === "function") {
-            window.visorAnimaciones.mostrarAnimacionProcesamientoIA(`Lote Masivo (${listaArchivos.length} archivos)`);
-        }
+        // 1. Mostrar Modal de Progreso
+        visorAnimaciones.mostrarModal("EXTRAYENDO CON IA CLOUD", `Procesando 1 de ${listaArchivos.length}...`);
 
         try {
             for (let i = 0; i < listaArchivos.length; i++) {
                 const archivo = listaArchivos[i];
-                console.log(`\n📄 [IMPORTADOR_FILE ${i + 1}/${listaArchivos.length}]: Nombre: "${archivo.name}", Tipo: "${archivo.type}", Tamaño: ${archivo.size || 0} bytes`);
 
-                if (lblEstado) {
-                    lblEstado.innerText = `>>> PROCESANDO ARCHIVO ${i + 1} DE ${listaArchivos.length}...`;
-                    lblEstado.style.color = "var(--neon-purple, #b359ff)";
-                }
+                // 2. Actualizar barra e información en tiempo real
+                visorAnimaciones.actualizarProgreso(i, listaArchivos.length, `Analizando: ${archivo.name}`);
 
                 try {
                     let puntosExtraidos = [];
@@ -295,62 +309,41 @@ export class ImportadorMasivoMensajero {
                     const esImagen = archivo.type.startsWith("image/");
 
                     if (!esPDF && !esImagen && !forzarIA) {
-                        console.log(`>>> [HEURISTICA_LOCAL_INIT]: Archivo plano detectado (#${i + 1}). Procesando localmente...`);
                         puntosExtraidos = await procesarArchivoTextoCSV(archivo);
                     }
 
                     if (!puntosExtraidos || puntosExtraidos.length === 0) {
-                        console.log(`>>> [IMPORTADOR_IA_REQ]: Solicitando análisis Cloud para archivo #${i + 1}...`);
                         puntosExtraidos = await procesarImagenConGemini(archivo);
                     }
 
                     if (Array.isArray(puntosExtraidos) && puntosExtraidos.length > 0) {
-                        puntosExtraidos.forEach(p => paradasAcumuladas.push(p));
-                        console.log(`✅ [CLOUD_IA_SUCCESS]: Archivo #${i + 1} ("${archivo.name}") procesado -> ${puntosExtraidos.length} registro(s).`);
-                    } else {
-                        console.warn(`⚠️ [CLOUD_IA_EMPTY]: No se obtuvieron datos válidos del archivo #${i + 1} ("${archivo.name}").`);
+                        puntosExtraidos.forEach((p) => paradasAcumuladas.push(p));
                     }
-
                 } catch (errArchivo) {
-                    console.error(`❌ [IMPORTADOR_FILE_FAIL]: Error en archivo #${i + 1} ("${archivo.name}"):`, errArchivo.message || errArchivo);
+                    console.error(`❌ Error en archivo "${archivo.name}":`, errArchivo);
                 }
+
+                // Actualizar progreso tras completar cada archivo
+                visorAnimaciones.actualizarProgreso(i + 1, listaArchivos.length, `Completado: ${archivo.name}`);
             }
 
             if (paradasAcumuladas.length === 0) {
-                throw new Error("No se lograron extraer datos válidos de ninguno de los archivos seleccionados.");
+                throw new Error("No se lograron extraer datos válidos de los archivos seleccionados.");
             }
 
             const paradasProcesadas = paradasAcumuladas.map((p, idx) => normalizarParadaTirilla(p, idx));
-
-            console.log(`>>> [IMPORTADOR_PERSIST]: Guardando ${paradasProcesadas.length} parada(s) acumuladas en almacenamiento local...`);
             guardarRutaZonificada(paradasProcesadas);
 
-            if (lblEstado) {
-                lblEstado.innerText = `>>> ÉXITO: ${paradasProcesadas.length} TIRILLA(S) PROCESADA(S) DE ${listaArchivos.length} ARCHIVO(S)`;
-                lblEstado.style.color = "var(--neon-green, #00ff66)";
-            }
-
-            alert(`>>> TIRILLAS PROCESADAS EXITOSAMENTE:\n\nTotal paradas extraídas: ${paradasProcesadas.length}\nArchivos procesados: ${listaArchivos.length}`);
-
             if (typeof callbackRefresco === "function") {
-                console.log(">>> [IMPORTADOR_REFRESH]: Invocando callback de refresco proporcionado...");
                 callbackRefresco(paradasProcesadas);
             } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
-                console.log(">>> [IMPORTADOR_UI_GLOBAL]: Invocando refrescarConsolaOperacionesUI() tras completar lote masivo...");
                 window.refrescarConsolaOperacionesUI();
             }
-
         } catch (error) {
-            console.error(">>> [IMPORTADOR_FAIL]: Error crítico durante la importación masiva:", error);
-            if (lblEstado) {
-                lblEstado.innerText = `>>> ERROR: ${error.message}`;
-                lblEstado.style.color = "#ff3366";
-            }
             alert(`>>> ERROR PROCESANDO ARCHIVOS:\n\n${error.message}`);
         } finally {
-            if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
-                window.visorAnimaciones.ocultarModal();
-            }
+            // 3. Ocultar Modal al finalizar
+            visorAnimaciones.ocultarModal();
         }
     }
 }

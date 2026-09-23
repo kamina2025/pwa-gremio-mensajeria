@@ -23,8 +23,21 @@
 
         <!-- Librería para lectura local de archivos Excel (.xlsx / .xls) sin servidor/IA -->
         <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
         <!-- Motor OCR Local WebAssembly sin servidor/IA -->
         <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+
+        <!-- Librería para lectura local de archivos PDF sin servidor/IA -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+        <!-- Puente para exposición global de la callback de Google Maps -->
+        <script>
+            window.inicializarMapaMensajero = function () {
+                console.log("🗺️ [MAPA_CALLBACK_BRIDGE]: Google Maps SDK listo. Delegando a módulo...");
+                if (window.inicializarMapaMensajeroModulo) {
+                    window.inicializarMapaMensajeroModulo();
+                }
+            };
+        </script>
     </head>
     <body>
         <!-- Cabecera Principal (Header Grid Area) -->
@@ -50,10 +63,7 @@
                     class="contenedor-pestana activa"
                     data-include="vistas/ruta/ruta-activa.html"></div>
 
-                <div 
-                    id="pestana-ruta-crear" 
-                    class="contenedor-pestana" 
-                    data-include="vistas/ruta/crear.html"></div>
+                <div id="pestana-ruta-crear" class="contenedor-pestana" data-include="vistas/ruta/crear.html"></div>
 
                 <div
                     id="mapa-fullscreen-container"
@@ -125,7 +135,7 @@
 
         <!-- Módulos de Control JavaScript -->
         <script src="./app.js"></script>
-        
+
         <!-- SDK de Mapas en la raíz de la SPA -->
         <script
             src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCP6Wc3JRQIRXu6cXM8KkPasuy8asTIWUE&callback=inicializarMapaMensajero&libraries=places&loading=async"

@@ -1,17 +1,10 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA MENSAJERO: PARSER DE ARCHIVOS Y BASE DE DATOS LOCAL
- * Ubicación: pwa-mensajero/modulos/procesamiento-datos/base-de-datos.js
- * Función: Parsea TXT, CSV, Excel (XLSX/XLS) y Fotografías (vía OCR WASM Tesseract) sin consumir IA Cloud.
+ * Ubicación: pwa-mensajero/modulos/base-de-datos.js
  */
 
 import { procesarTextoHeuristico } from "./procesamiento-datos/heuristico.js";
 
-/**
- * Aplica binarización y filtro de contraste sobre Canvas antes de enviar la imagen a Tesseract.
- * 
- * @param {File|Blob} archivoImagen 
- * @returns {Promise<Blob>}
- */
 function preprocesarImagenCanvas(archivoImagen) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -28,7 +21,6 @@ function preprocesarImagenCanvas(archivoImagen) {
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imgData.data;
 
-            // Escala de grises y binarización por umbral (Thresholding)
             for (let i = 0; i < data.length; i += 4) {
                 const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
                 const v = avg > 135 ? 255 : 0;
@@ -50,12 +42,6 @@ function preprocesarImagenCanvas(archivoImagen) {
     });
 }
 
-/**
- * Convierte una imagen a texto plano utilizando Tesseract.js con inicialización explícita de WASM.
- * 
- * @param {File} archivoImagen 
- * @returns {Promise<string>}
- */
 async function convertirImagenATextoLocal(archivoImagen) {
     if (typeof Tesseract === "undefined") {
         throw new Error("La librería de OCR Local (Tesseract.js) no está disponible en el ámbito global.");
@@ -66,8 +52,6 @@ async function convertirImagenATextoLocal(archivoImagen) {
     let worker = null;
     try {
         const imagenBinarizada = await preprocesarImagenCanvas(archivoImagen);
-        
-        // Inicialización robusta compatible con Tesseract.js v2/v4/v5
         worker = await Tesseract.createWorker();
         if (typeof worker.loadLanguage === "function") {
             await worker.loadLanguage("spa");
@@ -89,11 +73,46 @@ async function convertirImagenATextoLocal(archivoImagen) {
 }
 
 /**
- * Convierte una hoja de cálculo Excel (ArrayBuffer) en una lista de paradas normalizadas.
- * 
- * @param {ArrayBuffer} arrayBuffer 
- * @returns {Array<Object>}
+ * Extrae el texto preserving los saltos de línea entre bloques para evitar cadenas unificadas.
  */
+async function convertirPdfATextoLocal(archivoPdf) {
+    const pdfLib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+    if (!pdfLib) {
+        throw new Error("La librería PDF.js no está disponible en el ámbito global para procesar PDFs sin IA.");
+    }
+
+    console.log(`>>> [PROCESADOR_BD_PDF]: Leyendo buffer binario de PDF -> ${archivoPdf.name}`);
+    const arrayBuffer = await archivoPdf.arrayBuffer();
+    const pdfDoc = await pdfLib.getDocument({ data: arrayBuffer }).promise;
+    
+    let textoCompleto = "";
+    console.log(`>>> [PROCESADOR_BD_PDF]: Páginas detectadas en el documento -> ${pdfDoc.numPages}`);
+
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+        const page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        
+        let lastY = null;
+        let pageText = "";
+
+        // Unir cadenas detectando saltos de línea por posición Y
+        textContent.items.forEach((item) => {
+            if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
+                pageText += "\n";
+            } else if (pageText.length > 0 && !pageText.endsWith("\n")) {
+                pageText += " ";
+            }
+            pageText += item.str;
+            lastY = item.transform[5];
+        });
+
+        textoCompleto += pageText + "\n";
+    }
+
+    console.log(`>>> [PROCESADOR_BD_PDF_SUCCESS]: ${textoCompleto.length} caracteres extraídos del PDF.`);
+    return textoCompleto;
+}
+
 function procesarWorkbookExcel(arrayBuffer) {
     if (typeof XLSX === "undefined") {
         throw new Error("La librería SheetJS (XLSX) no está disponible en el ámbito global.");
@@ -145,28 +164,29 @@ function procesarWorkbookExcel(arrayBuffer) {
     return paradasExtraidas;
 }
 
-/**
- * Lee y procesa un archivo subido (TXT, CSV, XLSX o Imagen/Foto) extrayendo las paradas estructuradas.
- * 
- * @param {File} archivo - Archivo seleccionado en el DOM.
- * @returns {Promise<Array<Object>>} Promesa con la lista de paradas procesadas.
- */
 export async function procesarArchivoTextoCSV(archivo) {
     console.log(`>>> [PROCESADOR_BD]: Leyendo contenido de archivo -> ${archivo.name} (${archivo.type})`);
     
     try {
         let paradas = [];
-        const esExcel = archivo.name.toLowerCase().endsWith(".xlsx") || 
-                        archivo.name.toLowerCase().endsWith(".xls") || 
+        const nombreLower = archivo.name.toLowerCase();
+        
+        const esExcel = nombreLower.endsWith(".xlsx") || 
+                        nombreLower.endsWith(".xls") || 
                         archivo.type.includes("spreadsheetml") || 
                         archivo.type.includes("excel");
 
+        const esPdf = nombreLower.endsWith(".pdf") || archivo.type === "application/pdf";
         const esImagen = archivo.type.startsWith("image/");
 
         if (esExcel) {
             console.log(">>> [PROCESADOR_BD_XLSX]: Invocando parser binario SheetJS...");
             const buffer = await archivo.arrayBuffer();
             paradas = procesarWorkbookExcel(buffer);
+        } else if (esPdf) {
+            console.log(">>> [PROCESADOR_BD_PDF]: PDF detectado en MODO 3. Decodificando con PDF.js local...");
+            const textoPdf = await convertirPdfATextoLocal(archivo);
+            paradas = procesarTextoHeuristico(textoPdf);
         } else if (esImagen) {
             console.log(">>> [PROCESADOR_BD_IMG]: Fotografía detectada en MODO 3. Ejecutando OCR WASM local...");
             const textoExtraido = await convertirImagenATextoLocal(archivo);
@@ -176,11 +196,12 @@ export async function procesarArchivoTextoCSV(archivo) {
             let textoBruto = await archivo.text();
             
             if (textoBruto.includes("%PDF-") || textoBruto.includes("/Root")) {
-                console.warn(">>> [PROCESADOR_BD_WARN]: Se detectó firma PDF binaria en lectura plana. Abortando.");
-                return [];
+                console.warn(">>> [PROCESADOR_BD_WARN]: Se detectó firma PDF binaria en lectura plana. Redirigiendo a parser PDF...");
+                const textoPdf = await convertirPdfATextoLocal(archivo);
+                paradas = procesarTextoHeuristico(textoPdf);
+            } else {
+                paradas = procesarTextoHeuristico(textoBruto);
             }
-
-            paradas = procesarTextoHeuristico(textoBruto);
         }
 
         console.log(`>>> [PROCESADOR_BD_SUCCESS]: ${paradas.length} registro(s) procesado(s) exitosamente desde ${archivo.name}.`);
@@ -191,18 +212,10 @@ export async function procesarArchivoTextoCSV(archivo) {
         throw error;
     }
 }
-/**
- * PROTOCOLO MACONDO - BASE DE DATOS LOCAL CENTRAL (INDEXEDDB)
- * Ubicación: pwa-mensajero/modulos/base-de-datos.js
- */
 
 const NOMBRE_DB = "PWA_Gremio_Mensajeria_DB";
-const VERSION_DB = 2; // Incrementada para soportar los nuevos objectStores
+const VERSION_DB = 2;
 
-/**
- * Abre o inicializa la base de datos IndexedDB local.
- * @returns {Promise<IDBDatabase>} Instancia de la base de datos abierta.
- */
 export function obtenerDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(NOMBRE_DB, VERSION_DB);
@@ -210,17 +223,14 @@ export function obtenerDB() {
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
 
-            // Creación del objectStore para 'planillas'
             if (!db.objectStoreNames.contains("planillas")) {
                 db.createObjectStore("planillas", { keyPath: "id", autoIncrement: true });
             }
 
-            // Creación del objectStore para 'rutas'
             if (!db.objectStoreNames.contains("rutas")) {
                 db.createObjectStore("rutas", { keyPath: "id" });
             }
 
-            // Creación del objectStore para 'perfil_conductor'
             if (!db.objectStoreNames.contains("perfil_conductor")) {
                 db.createObjectStore("perfil_conductor", { keyPath: "id" });
             }

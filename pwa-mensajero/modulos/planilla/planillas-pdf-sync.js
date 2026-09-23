@@ -1,6 +1,8 @@
 /**
  * PROTOCOLO MACONDO - GENERADOR PDF Y EXPORTACIÓN INDIVIDUAL DE PLANILLA
  * Ubicación: pwa-mensajero/modulos/planilla/planillas-pdf-sync.js
+ * Función: Genera la maqueta HTML/PDF estructurada para impresión y compatible
+ *          con la re-ingestión heurística offline local (Modo 3 sin IA).
  */
 
 import { obtenerPlanillasReportadas } from './planillas-db.js';
@@ -42,21 +44,28 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
             paradasDetalle = obtenerRutaZonificada() || [];
         }
 
-        // Generación de filas individuales para el PDF
+        // Generación de filas individuales formateadas estructuralmente para lectura heurística
         const filasTablaHtml = listaSccs.map((codigoScc, index) => {
             // Coincidencia exacta por código SCC o ID de parada
             const detalle = paradasDetalle.find(p => 
                 String(p.ssc || p.id).trim() === String(codigoScc).trim()
             ) || paradasDetalle[index] || {};
 
-            const destinatario = detalle.destinatario || 'Cliente General';
-            const direccion = detalle.direccion || 'Dirección no especificada';
-            const telefono = detalle.telefono || 'N/A';
-            const cuota = (detalle.cuotaModeradora && detalle.cuotaModeradora !== '$0') 
-                ? ` | Cuota: $${detalle.cuotaModeradora}` 
-                : '';
+            const destinatario = (detalle.destinatario && !detalle.destinatario.includes('Cliente ')) 
+                ? detalle.destinatario 
+                : (detalle.nombre || 'Cliente General');
 
-            const estadoScc = detalle.estado || planilla.estadoScc || 'Devuelto';
+            const direccion = detalle.direccion || 'Dirección no especificada';
+            const telefono = detalle.telefono || '3000000000';
+            
+            let cuotaTexto = '$0';
+            if (detalle.cuotaModeradora) {
+                cuotaTexto = String(detalle.cuotaModeradora).startsWith('$') 
+                    ? detalle.cuotaModeradora 
+                    : `$${detalle.cuotaModeradora}`;
+            }
+
+            const estadoScc = detalle.estado || planilla.estadoScc || 'DEVUELTO';
             const fechaHoraNovedad = detalle.registroOperaciones?.fechaHora 
                 || (planilla.creadoEn ? new Date(planilla.creadoEn).toLocaleString('es-CO') : new Date().toLocaleString('es-CO'));
 
@@ -69,9 +78,10 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
                         <strong class="text-scc">${codigoScc}</strong>
                     </td>
                     <td class="col-parada">
-                        <div class="destinatario-pdf"><strong>${destinatario}</strong></div>
+                        <!-- Estructura delimitada con tuberías (|) en saltos de línea para lectura offline -->
+                        <div class="destinatario-pdf">| ${destinatario}</div>
                         <div class="direccion-pdf">${direccion}</div>
-                        <div class="contacto-pdf">Tel: ${telefono}${cuota}</div>
+                        <div class="contacto-pdf">Tel: ${telefono} | Cuota: ${cuotaTexto}</div>
                     </td>
                     <td class="col-novedad">
                         <span class="badge-pdf ${esEntregado ? 'entregado' : 'devuelto'}">
@@ -95,7 +105,7 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
                 <section class="pdf-datos-mensajero">
                     <div class="item-datos-m">
                         <span class="label-m">MENSAJERO:</span>
-                        <strong class="valor-m">${planilla.nombreMensajero || localStorage.getItem("nombreMensajero") || 'kevin'}</strong>
+                        <strong class="valor-m">${planilla.nombreMensajero || localStorage.getItem("nombreMensajero") || 'Kevin'}</strong>
                     </div>
                     <div class="item-datos-m">
                         <span class="label-m">PLACA VEHÍCULO:</span>
@@ -130,6 +140,8 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla) {
 
             </div>
         `;
+
+        console.log(`✅ [PLANILLA_PDF]: Estructura HTML para PDF generada correctamente con delimitación limpia.`);
 
         // Ejecutar impresión a PDF nativa del navegador
         window.print();

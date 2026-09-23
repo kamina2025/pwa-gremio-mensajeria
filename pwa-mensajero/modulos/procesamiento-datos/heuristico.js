@@ -1,14 +1,9 @@
 /**
- * PROTOCOLO MACONDO - SUBSISTEMA MENSAJERO: ANALIZADOR HEURÍSTICO LOCAL DE TIRILLAS
+ * PROTOCOLO MACONDO - SUBSISTEMA MENSAJERO: ANALIZADOR HEURÍSTICO LOCAL DE TIRILLAS Y PLANILLAS
  * Ubicación: pwa-mensajero/modulos/procesamiento-datos/heuristico.js
+ * Función: Extrae de forma robusta y divide líneas fusionadas por PDF.js (Nombre + Dirección).
  */
 
-/**
- * Normaliza y procesa el texto extraído de la tirilla médica.
- * 
- * @param {string} texto - Texto crudo extraído del OCR o documento.
- * @returns {Array<Object>} Arreglo de paradas procesadas.
- */
 export function procesarTextoHeuristico(texto) {
     console.log(">>> [HEURISTICO_LOCAL_START]: Iniciando extracción defensiva local de patrones...");
     if (!texto || typeof texto !== "string") return [];
@@ -16,144 +11,132 @@ export function procesarTextoHeuristico(texto) {
     const textoLimpio = texto.replace(/\x00/g, "").replace(/[\x01-\x09\x0B\x0C\x0E-\x1F]/g, "");
     const lineas = textoLimpio.split(/\r?\n/);
 
-    let currentSsc = "";
-    let currentNombre = "";
-    let currentDireccion = "";
-    let currentTelefono = "";
-    let currentOrigen = "";
-    let currentCuota = "";
+    const paradas = [];
+    let currentParada = null;
 
-    const regexTelBase = /(?:(?:\+|00)?57)?\s*3\d{2}[\s-]?\d{3}[\s-]?\d{4}\b/i;
-    const regexDireccionKeyword = /\b(?:carrera|cra|cr|calle|cll|cl|transversal|tv|diagonal|dg|avenida|av)\b[\s\S]*/i;
+    // Patrones clave (el \b asegura que no detecte letras dentro de nombres, ej: "Cristian" != "cr")
+    const regexScc = /\b(\d{5,8})\b/;
+    const regexTelBase = /(?:Tel(?:éfono)?:\s*)?((?:\+|00)?57)?\s*(3\d{2}[\s-]?\d{3}[\s-]?\d{4})\b/i;
+    const regexCuota = /(?:Cuota(?:\s*Moderadora)?|CUOTA_M|Copago):\s*\$?\s*([\w\.\d]+)/i;
+    const regexDireccionKeyword = /\b(?:carrera|cra|cr|crr|calle|cll|cl|transversal|tv|diagonal|dg|avenida|av)\b/i;
 
-    const esDireccionInstitucional = (str) => {
-        return /Av\.\s*Cra\.?\s*68|Calle\s*100\s*11|Calle\s*6\s*N\s*44|CAFAM\b/i.test(str);
+    // Filtro estricto para ignorar fragmentos del PDF
+    const regexFiltroRuido = /^\s*\|?\s*(DEVUELTO|ENTREGADO|PENDIENTE|CANCELADO|EN RUTA)\s*$|\d{1,2}\/\d{1,2}\/\d{2,4}|p\.\s*m\.|a\.\s*m\.|localhost|ID PLANILLA|PLACA VEHÍCULO|REPORTE DE OPERACIONES|PLANILLA DE MENSAJERÍA|Runner\s*-\s*Mensajero|Documento oficial|FECHA PLANILLA|SCC\/SEGUIMIENTO|DATOS DE LA PARADA|NOVEDADES \/ ESTADO/i;
+
+    const guardarParadaSiValida = (parada) => {
+        if (!parada) return;
+        if (parada.scc || parada.direccion || parada.destinatario) {
+            paradas.push({
+                ssc: parada.scc || `SCC-${Math.floor(100000 + Math.random() * 900000)}`,
+                destinatario: (parada.destinatario && !regexFiltroRuido.test(parada.destinatario)) ? parada.destinatario : "Cliente General",
+                direccion: parada.direccion || "Dirección no especificada",
+                telefono: parada.telefono || "3000000000",
+                puntoOrigen: parada.puntoOrigen || "Punto Disp. Cafam Cali Tequendama",
+                cuotaModeradora: parada.cuotaModeradora || "$0"
+            });
+        }
     };
 
-    lineas.forEach((linea) => {
-        let l = linea.trim();
-        if (!l || l.startsWith("🚚") || l.startsWith("%") || l.startsWith("#")) return;
+    for (let i = 0; i < lineas.length; i++) {
+        let l = lineas[i].trim();
 
-        // 1. Captura SSC
-        if (!currentSsc) {
-            const matchSsc = l.match(/(?:SSC(?:\s*No\.?)?|Guia|Gula|No\.?\s*Formula|Remision)[^\d]*(\d{5,8})/i);
-            if (matchSsc && matchSsc[1]) {
-                currentSsc = matchSsc[1].trim();
-            }
+        // Omitir líneas vacías o de ruido estructural
+        if (!l || l.startsWith("🚚") || l.startsWith("%") || l.startsWith("#") || regexFiltroRuido.test(l)) {
+            continue;
         }
 
-        // 2. Captura Afiliado / Cliente
-        if (!currentNombre) {
-            const matchNombre = l.match(/(?:Afiliado|Nombre\s*Cliente|Usuario|Cliente):?\s*([A-Za-zÁÉÍÓÚáéíóúÑñ\s\.-]{4,60})/i);
-            if (matchNombre && matchNombre[1]) {
-                let nombreLimpio = matchNombre[1].replace(/^\d+[\s-]*:?/, "").trim();
-                nombreLimpio = nombreLimpio.replace(/(?:Identificacion|Nivel|Plan|Sub|NIT).*/i, "").trim();
+        // 1. Detección de número SCC
+        const matchScc = l.match(regexScc);
+        if (matchScc && !l.includes("Tel:") && !l.includes("$") && !l.includes("ID PLANILLA")) {
+            if (currentParada) {
+                guardarParadaSiValida(currentParada);
+            }
 
-                if (nombreLimpio.length > 3 && !/[%\$€#\*\=]/.test(nombreLimpio)) {
-                    currentNombre = nombreLimpio;
+            currentParada = {
+                scc: matchScc[1],
+                destinatario: "",
+                direccion: "",
+                telefono: "",
+                puntoOrigen: "",
+                cuotaModeradora: ""
+            };
+
+            // Caso: El SCC y el nombre están en la misma línea separados por '|'
+            if (l.includes("|")) {
+                const partes = l.split("|").map(p => p.trim());
+                if (partes[1] && !regexFiltroRuido.test(partes[1])) {
+                    // Prevenir que absorba una dirección pegada al nombre
+                    const matchDirCol = partes[1].match(regexDireccionKeyword);
+                    if (matchDirCol && matchDirCol.index > 5) {
+                        currentParada.destinatario = partes[1].substring(0, matchDirCol.index).trim();
+                        currentParada.direccion = partes[1].substring(matchDirCol.index).trim();
+                    } else if (!matchDirCol) {
+                        currentParada.destinatario = partes[1];
+                    }
                 }
             }
+            continue;
         }
 
-        // 3. Captura Dirección
-        const matchDir = l.match(/(?:Direccion\s*Entrega|Lugar\s*Entrega|Direccion|Dir|Entreya):?\s*(.+)/i);
-        if (matchDir && matchDir[1]) {
-            let dirCandidata = matchDir[1].replace(/^Entreya\.?\s*/i, "").trim();
-            dirCandidata = dirCandidata.replace(/PANAVERICANO/i, "PANAMERICANO");
+        if (!currentParada) continue;
 
-            if (!esDireccionInstitucional(dirCandidata) && dirCandidata.length > 6) {
-                currentDireccion = dirCandidata;
+        let lineaContenido = l.startsWith("|") ? l.replace(/^\|\s*/, "").trim() : l;
+        if (regexFiltroRuido.test(lineaContenido)) continue;
+
+        // 2. Extracción de Teléfono y Cuota
+        if (lineaContenido.toLowerCase().includes("tel:") || lineaContenido.toLowerCase().includes("cuota:")) {
+            const matchTel = lineaContenido.match(regexTelBase);
+            if (matchTel && matchTel[2]) {
+                currentParada.telefono = matchTel[2].replace(/[\s-]/g, "");
             }
-        } else if (!currentDireccion && regexDireccionKeyword.test(l) && !esDireccionInstitucional(l)) {
-            currentDireccion = l.replace(/^Jracción\s*/i, "").replace(/PANAMÉRICA/i, "PANAMERICANO").trim();
-            console.log(` -> [HEURISTICO_CAPTURED_DIRECCION_KEYWORD]: ${currentDireccion}`);
-        }
 
-        // 4. Captura Teléfono
-        if (!currentTelefono) {
-            const matchTel = l.match(regexTelBase);
-            if (matchTel && matchTel[0]) {
-                let telLimpio = matchTel[0].replace(/[\s-]/g, "").trim();
-                if (!telLimpio.startsWith("601") && !telLimpio.startsWith("646")) {
-                    currentTelefono = telLimpio;
-                    console.log(` -> [HEURISTICO_CAPTURED_TELEFONO]: ${currentTelefono}`);
-                }
-            }
-        }
-
-        // 5. Captura Origen
-        if (!currentOrigen) {
-            const matchOrigen = l.match(/(?:Punto\s*Origen|Punto\s*Disp\.?|Punto\s*Dispensacion|Cafam):?\s*([^,]+)/i);
-            if (matchOrigen && matchOrigen[1]) {
-                currentOrigen = matchOrigen[1].replace(/^:\d+\s*:?/, "").replace(/^\d+\s*:\s*/, "").trim();
-                console.log(` -> [HEURISTICO_CAPTURED_ORIGEN]: ${currentOrigen}`);
-            }
-        }
-
-        // 6. Captura Cuota
-        if (!currentCuota) {
-            const matchCuota = l.match(/(?:Cuota\s*Moderadora|CUOTA_M|Copago):?\s*\$?\s*([\d\.,]+)/i);
+            const matchCuota = lineaContenido.match(regexCuota);
             if (matchCuota && matchCuota[1]) {
-                let valor = matchCuota[1].replace(/\.00$/, "").trim();
-                currentCuota = valor.startsWith("$") ? valor : `$${valor}`;
+                let cuotaVal = matchCuota[1].trim();
+                currentParada.cuotaModeradora = cuotaVal.startsWith("$") ? cuotaVal : `$${cuotaVal}`;
             }
+            continue;
         }
-    });
 
-    const paradas = [];
-    if (currentDireccion || currentNombre || currentTelefono || currentSsc) {
-        paradas.push({
-            ssc: currentSsc || "103458",
-            destinatario: currentNombre || "Cliente General",
-            direccion: currentDireccion || "Dirección no especificada",
-            telefono: currentTelefono || "3000000000",
-            puntoOrigen: currentOrigen || "Punto Disp. Cafam Cali Tequendama",
-            cuotaModeradora: currentCuota || "$0"
-        });
+        // 3. Extracción Inteligente de Dirección y Posible Nombre Fusionado
+        const matchDir = lineaContenido.match(regexDireccionKeyword);
+        if (matchDir) {
+            // Si la dirección no empieza al principio (índice > 5), lo de atrás es el nombre
+            if (matchDir.index > 5 && !currentParada.destinatario) {
+                const posibleNombre = lineaContenido.substring(0, matchDir.index).trim();
+                currentParada.destinatario = posibleNombre.replace(/\|/g, "").trim();
+            }
+            // Lo de adelante es la dirección
+            const soloDireccion = lineaContenido.substring(matchDir.index).trim();
+            currentParada.direccion = currentParada.direccion ? `${currentParada.direccion} ${soloDireccion}` : soloDireccion;
+            continue;
+        }
+
+        // 4. Captura del Nombre si está completamente solo en la línea
+        if (!currentParada.destinatario && lineaContenido.length > 2) {
+            currentParada.destinatario = lineaContenido.replace(/\|/g, "").trim();
+        }
     }
 
-    console.log(`>>> [HEURISTICO_LOCAL_END]: Total de paradas procesadas: ${paradas.length}`);
+    if (currentParada) {
+        guardarParadaSiValida(currentParada);
+    }
+
+    console.log(`>>> [HEURISTICO_LOCAL_END]: Total de paradas procesadas: ${paradas.length}`, paradas);
     return paradas;
 }
 
-/**
- * Wrapper de compatibilidad para llamadas directas desde ia-gemini.js u otros módulos.
- * Acepta tanto texto en formato String como cadenas Base64 o payloads de fallback.
- * 
- * @param {string|Object} entrada - Texto o payload a procesar
- * @returns {Array<Object>} Paradas generadas
- */
 export function procesarRutaHeuristica(entrada) {
-    console.log("⚙️ [HEURISTICO_FALLBACK_HANDLER]: Recibida solicitud de procesamiento local.");
-
-    if (!entrada) {
-        return procesarTextoHeuristico("");
-    }
-
+    if (!entrada) return procesarTextoHeuristico("");
     if (typeof entrada === "string") {
-        // Verificar si la cadena es un Base64 e intentar decodificarla
         if (/^[A-Za-z0-9+/=]+$/.test(entrada.trim()) && entrada.length > 100) {
-            try {
-                const textoDecodificado = atob(entrada.trim());
-                return procesarTextoHeuristico(textoDecodificado);
-            } catch (e) {
-                console.warn("⚠️ [HEURISTICO_WARN]: La entrada no es un Base64 válido de texto. Procesando como texto plano.");
-            }
+            try { return procesarTextoHeuristico(atob(entrada.trim())); } catch (e) {}
         }
         return procesarTextoHeuristico(entrada);
     }
-
     if (typeof entrada === "object") {
         if (entrada.texto) return procesarTextoHeuristico(entrada.texto);
         if (entrada.data && typeof entrada.data === "string") return procesarTextoHeuristico(entrada.data);
     }
-
-    return [{
-        ssc: "103458",
-        destinatario: "Cliente General",
-        direccion: "Dirección no detectada",
-        telefono: "3000000000",
-        puntoOrigen: "Punto Disp. Cafam Cali Tequendama",
-        cuotaModeradora: "$0"
-    }];
+    return [];
 }

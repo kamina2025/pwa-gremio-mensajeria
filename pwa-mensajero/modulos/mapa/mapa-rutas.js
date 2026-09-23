@@ -4,7 +4,7 @@
  * Arquitectura: Google Maps JavaScript API (Estándar v2026)
  */
 
-import { PALETA_ZONAS } from "./mensajero-zonificacion.js";
+import { PALETA_ZONAS } from "./zonificacion/mensajero-zonificacion.js";
 
 let coleccionPolilineasActivas = [];
 let directionsRendererActivo = null;

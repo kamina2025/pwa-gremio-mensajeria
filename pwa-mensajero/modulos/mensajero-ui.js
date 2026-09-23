@@ -4,7 +4,7 @@
  */
 
 import { actualizarPuntosEnMapa, enfocarZonaEnMapa } from "./mapa/mapa-visor.js";
-import { clasificarParadasPorZona, PALETA_ZONAS } from "./mapa/mensajero-zonificacion.js";
+import { clasificarParadasPorZona, PALETA_ZONAS } from "./mapa/zonificacion/mensajero-zonificacion.js";
 import { IndexedStore } from "./db/indexed-store.js";
 
 const dbStore = new IndexedStore();

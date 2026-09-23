@@ -6,7 +6,7 @@
 import { obtenerPlanillasReportadas, guardarPlanillaReportada } from './planillas-db.js';
 import { exportarYRespaldarPlanillaPDF } from './planillas-pdf-sync.js';
 import { obtenerRutaZonificada, guardarRutaZonificada } from '../mensajero-persistencia.js';
-import { PALETA_ZONAS, clasificarParadasPorZona, obtenerZonaPorCoordenadas } from '../mapa/mensajero-zonificacion.js';
+import { PALETA_ZONAS, clasificarParadasPorZona, obtenerZonaPorCoordenadas } from '../mapa/zonificacion/mensajero-zonificacion.js';
 
 /**
  * Normaliza cualquier variante de texto (ej: "ZONA NORTE 2", "zona_norte_2", "NORTE 2")

@@ -34,7 +34,7 @@ import { registrarIntentoLlamada as registrarLlamadaFlujo, configurarEventosForm
 // Importación de módulos auxiliares
 import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar } from "./modulos/mensajero-sidebar.js";
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
-import { procesarPayloadOStorage, buscarIndiceActivo } from "./modulos/mensajero-rutas.js";
+import { procesarPayloadOStorage, buscarIndiceActivo } from "./modulos/rutas/mensajero-rutas.js";
 
 // Controller de mapa
 import "./modulos/mapa/mapa-controlador.js";

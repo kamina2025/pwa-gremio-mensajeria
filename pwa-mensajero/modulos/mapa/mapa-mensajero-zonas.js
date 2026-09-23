@@ -3,7 +3,7 @@
  * Ubicación: pwa-mensajero/modulos/mapa-mensajero-zonas.js
  */
 
-import { MAPA_ZONAS_CALI, obtenerZonaPorNombre } from "./mensajero-zonificacion.js";
+import { MAPA_ZONAS_CALI, obtenerZonaPorNombre } from "./zonificacion/mensajero-zonificacion.js";
 
 const PALETA_ZONAS = {
   "CENTRO":   { fill: "#ff007f", stroke: "#ff66b2" }, // Rosa Neón

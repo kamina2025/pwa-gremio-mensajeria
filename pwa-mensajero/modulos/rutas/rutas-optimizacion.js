@@ -1,107 +1,158 @@
 /**
- * Módulo de Optimización de Secuencia por Proximidad (Nearest Neighbor)
+ * Módulo de Optimización de Rutas mediante Google Maps Directions API
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-optimizacion.js
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
 import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
-import { buscarParadaMasCercana } from "../mapa/zonificacion/geo-utils.js";
-import { trazarPolilineaRuta } from "../mapa/mapa-rutas.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
-/**
- * Recalcula la secuencia óptima de paradas dentro de una zona usando el algoritmo de Vecino Más Cercano.
- * 
- * @param {string} zonaKeyInput - Clave o nombre de la zona a optimizar
- * @returns {Promise<Array<Object>>} Lista de paradas reordenadas de la zona
- */
-export async function optimizarRutaPorProximidadZona(zonaKeyInput) {
-  if (!zonaKeyInput) {
-    console.warn("⚠️ [OPTIMIZADOR_PROXIMIDAD]: Se requiere una zonaKey válida.");
-    return [];
+function obtenerIdUnicoParada(p) {
+  if (!p) return "";
+  return String(p.id || p.ssc || p.idParada || p.id_parada || "").trim();
+}
+
+export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioFix = null, paradaFinFix = null) {
+  if (!zonaKeyInput) return [];
+
+  const targetCanónico = estandarizarZonaCanonica(zonaKeyInput);
+  const targetLimpio = normalizarClaveZona(targetCanónico);
+
+  console.group(`⚡ [OPTIMIZADOR_GOOGLE]: Optimizando vía Google Directions API para: '${targetCanónico}'`);
+
+  let todasLasParadas = await obtenerParadasGuardadas();
+  if (!todasLasParadas || todasLasParadas.length === 0) {
+    todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
   }
 
-  const targetLimpio = normalizarClaveZona(zonaKeyInput);
-  console.group(`⚡ [OPTIMIZAR_PROXIMIDAD]: Calculando secuencia óptima (Nearest Neighbor) para la zona: [${zonaKeyInput}] (Target: '${targetLimpio}')`);
-
-  let todasLasParadas = (await obtenerParadasGuardadas()) || [];
-  if (!todasLasParadas.length) {
-    todasLasParadas = JSON.parse(localStorage.getItem("ruta_zonificada") || "[]");
-  }
-
-  // Filtrar paradas pertenecientes exclusivamente a esta zona
-  const paradasZona = todasLasParadas.filter((p) => {
-    if (!p) return false;
-    const k1 = normalizarClaveZona(p.zonaKey || "");
-    const k2 = normalizarClaveZona(p.nombreZona || "");
-    const k3 = normalizarClaveZona(p.zona || "");
-    const k4 = normalizarClaveZona(p.zonaNombre || "");
-    const keys = [k1, k2, k3, k4].filter(Boolean);
-    return keys.some(k => k === targetLimpio || k.replace(/-/g, "") === targetLimpio.replace(/-/g, ""));
-  });
+  let paradasZona = todasLasParadas.filter((p) => p && obtenerZonaParadaCanonica(p) === targetCanónico);
 
   if (paradasZona.length <= 1) {
-    console.log("ℹ️ [OPTIMIZAR_PROXIMIDAD]: Insuficientes paradas en zona (<= 1) para reordenar.");
+    console.warn("ℹ️ [OPTIMIZADOR_GOOGLE]: Insuficientes paradas en la zona.");
     console.groupEnd();
     return paradasZona;
   }
 
-  // Algoritmo Vecino Más Cercano (Nearest Neighbor)
-  const copiaPendientes = [...paradasZona];
-  const secuenciaOptimizada = [];
+  if (typeof google === "undefined" || !google.maps || !google.maps.DirectionsService) {
+    console.error("❌ [OPTIMIZADOR_GOOGLE]: SDK de Google Maps no disponible.");
+    console.groupEnd();
+    return paradasZona;
+  }
 
-  let puntoActual = copiaPendientes.shift();
-  secuenciaOptimizada.push(puntoActual);
+  // Configuración de Origen y Destino
+  let origen = paradaInicioFix;
+  let destino = paradaFinFix;
+  let intermedias = [...paradasZona];
 
-  while (copiaPendientes.length > 0) {
-    const res = buscarParadaMasCercana(puntoActual, copiaPendientes);
-    if (res.parada && res.indice !== -1) {
-      puntoActual = copiaPendientes.splice(res.indice, 1)[0];
-      secuenciaOptimizada.push(puntoActual);
-      console.log(` 📍 -> Siguiente parada óptima: ${puntoActual.destinatario || 'Cliente'} (a ${res.distanciaKm.toFixed(2)} km)`);
-    } else {
-      secuenciaOptimizada.push(...copiaPendientes);
-      break;
+  if (origen) {
+    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(origen));
+  } else {
+    origen = intermedias.shift();
+  }
+
+  if (destino) {
+    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(destino));
+  } else if (intermedias.length > 0) {
+    destino = intermedias.pop();
+  } else {
+    destino = origen;
+  }
+
+  const waypointsGoogle = intermedias.map((p) => ({
+    location: new google.maps.LatLng(parseFloat(p.lat || p.latitud), parseFloat(p.lng || p.longitud)),
+    stopover: true
+  }));
+
+  const origenLatLng = new google.maps.LatLng(parseFloat(origen.lat || origen.latitud), parseFloat(origen.lng || origen.longitud));
+  const destinoLatLng = new google.maps.LatLng(parseFloat(destino.lat || destino.latitud), parseFloat(destino.lng || destino.longitud));
+
+  const directionsService = new google.maps.DirectionsService();
+  const request = {
+    origin: origenLatLng,
+    destination: destinoLatLng,
+    waypoints: waypointsGoogle,
+    optimizeWaypoints: true,
+    travelMode: google.maps.TravelMode.DRIVING
+  };
+
+  try {
+    const response = await new Promise((resolve, reject) => {
+      directionsService.route(request, (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK) resolve(result);
+        else reject(status);
+      });
+    });
+
+    const ordenOptimizadoIndices = response.routes[0].waypoint_order;
+    console.log("🧩 [OPTIMIZADOR_GOOGLE]: Secuencia devuelta:", ordenOptimizadoIndices);
+
+    const secuenciaOptimizada = [origen];
+    ordenOptimizadoIndices.forEach((indexDevuelto) => secuenciaOptimizada.push(intermedias[indexDevuelto]));
+    
+    if (obtenerIdUnicoParada(origen) !== obtenerIdUnicoParada(destino)) {
+      secuenciaOptimizada.push(destino);
     }
-  }
 
-  // Mapear los nuevos índices de secuencia en la zona (1, 2, 3...)
-  const mapaNuevosOrdenes = new Map();
-  secuenciaOptimizada.forEach((p, idx) => {
-    const idUnico = p.id || p.ssc;
-    p.secuenciaZona = idx + 1;
-    p.updated_at = new Date().toISOString();
-    mapaNuevosOrdenes.set(idUnico, idx + 1);
-  });
+    // Actualizar atributos de secuencia
+    const mapaNuevosOrdenes = new Map();
+    secuenciaOptimizada.forEach((p, idx) => {
+      const nuevoNumero = idx + 1;
+      p.secuenciaZona = nuevoNumero;
+      p.orden = nuevoNumero;
+      p.secuencia = nuevoNumero;
+      p.updated_at = new Date().toISOString();
+      mapaNuevosOrdenes.set(obtenerIdUnicoParada(p), p);
+      console.log(` 📍 [#${nuevoNumero}] -> ${p.destinatario || p.cliente}`);
+    });
 
-  // Re-ensamblar la lista global respetando las paradas de otras zonas
-  const listaGlobalActualizada = todasLasParadas.map((parada) => {
-    const idUnico = parada.id || parada.ssc;
-    if (mapaNuevosOrdenes.has(idUnico)) {
-      return {
-        ...parada,
-        secuenciaZona: mapaNuevosOrdenes.get(idUnico),
-        updated_at: new Date().toISOString()
-      };
+    // Ensamblar y ordenar físicamente la lista global
+    let listaGlobalActualizada = todasLasParadas.map(p => {
+      const idUnico = obtenerIdUnicoParada(p);
+      return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
+    });
+
+    // ORDENAMIENTO GLOBAL OBLIGATORIO
+    listaGlobalActualizada.sort((a, b) => {
+      const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
+      const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
+      return seqA - seqB;
+    });
+
+    await guardarRutaZonificada(listaGlobalActualizada);
+    window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
+    window.paradasMemoriaLocal = [...listaGlobalActualizada];
+
+    // Trazado vial de Google Maps (curvas y calles reales)
+    const mapaInstancia = window.mapaInstanciaGlobal || window.__MAPA_INSTANCE__;
+    if (mapaInstancia) {
+      if (!window.__DIRECTIONS_RENDERER__) {
+        window.__DIRECTIONS_RENDERER__ = new google.maps.DirectionsRenderer({
+          map: mapaInstancia,
+          suppressMarkers: true,
+          polylineOptions: { strokeColor: "#00e5ff", strokeWeight: 4, strokeOpacity: 0.8 }
+        });
+      } else {
+        window.__DIRECTIONS_RENDERER__.setMap(mapaInstancia);
+      }
+      window.__DIRECTIONS_RENDERER__.setDirections(response);
     }
-    return parada;
-  });
 
-  // Persistir en IndexedDB / localStorage y actualizar cachés globales
-  await guardarRutaZonificada(listaGlobalActualizada);
-  window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
-  window.paradasMemoriaLocal = [...listaGlobalActualizada];
+    if (typeof window.actualizarPuntosEnMapa === "function") {
+      window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
+    }
 
-  console.log(`💾 [OPTIMIZAR_PROXIMIDAD]: Secuencia optimizada y persistida para ${secuenciaOptimizada.length} paradas.`);
+    if (typeof window.renderizarParadasZonificadasUI === "function") {
+      await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
+    }
 
-  // Refrescar mapa y la interfaz de la PWA
-  if (typeof trazarPolilineaRuta === "function") {
-    trazarPolilineaRuta(secuenciaOptimizada, targetLimpio);
+    console.groupEnd();
+    return secuenciaOptimizada;
+
+  } catch (error) {
+    console.error("❌ [OPTIMIZADOR_GOOGLE]: Error calculando ruta:", error);
+    console.groupEnd();
+    return paradasZona;
   }
-
-  if (typeof window.renderizarParadasZonificadasUI === "function") {
-    await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
-  }
-
-  console.groupEnd();
-  return secuenciaOptimizada;
 }
+
+window.optimizarRutaPorProximidadZona = optimizarRutaPorProximidadZona;

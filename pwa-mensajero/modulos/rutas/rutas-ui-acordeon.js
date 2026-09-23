@@ -1,14 +1,15 @@
 /**
- * Módulo de Renderizado de UI Acordeones y Drag & Drop
+ * Módulo de Renderizado de UI Acordeones, Selección de Puntos Fijos y Drag & Drop
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-ui-acordeon.js
  */
 
-import { obtenerParadasGuardadas } from "../mensajero-persistencia.js";
+import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
 let itemArrastrado = null;
 
 /**
- * Renderiza la UI de acordeones con botones de zona y tarjetas interactivas.
+ * Renderiza la UI de acordeones con selectores de inicio/fin, botones de zona y tarjetas interactivas.
  * 
  * @param {Array<Object>|Promise<Array<Object>>} listaPedidosParam - Paradas pasadas como parámetro o resueltas desde storage.
  */
@@ -37,54 +38,88 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         return;
     }
 
-    // Agrupar pedidos por clave o nombre de zona
+    // 1. Agrupar pedidos estrictamente por la clave canónica GeoJSON
     const zonasMap = {};
     listaPedidos.forEach((ped) => {
-        const zonaKey = ped.zonaNombre || ped.zonaKey || ped.zona || "ZONA SIN ASIGNAR";
-        if (!zonasMap[zonaKey]) zonasMap[zonaKey] = [];
-        zonasMap[zonaKey].push(ped);
+        const claveCanonica = obtenerZonaParadaCanonica(ped);
+        if (!zonasMap[claveCanonica]) zonasMap[claveCanonica] = [];
+        zonasMap[claveCanonica].push(ped);
     });
 
-    Object.entries(zonasMap).forEach(([nombreZona, paradasZona]) => {
-        // Ordenar las paradas de la zona respetando secuenciaZona
+    Object.entries(zonasMap).forEach(([claveCanonica, paradasZona]) => {
+        // Ordenar paradas respetando la secuenciaZona
         paradasZona.sort((a, b) => (a.secuenciaZona || 0) - (b.secuenciaZona || 0));
 
         const totalParadas = paradasZona.length;
-        const colorHex = paradasZona[0]?.colorZona || "#39ff14";
+        const colorHex = paradasZona[0]?.colorZona || "#39FF14";
+        const nombreZonaDisplay = `ZONA ${claveCanonica}`;
 
         const details = document.createElement("details");
         details.className = "cyber-accordion";
         details.style.borderColor = colorHex;
-        details.style.marginBottom = "10px";
+        details.style.marginBottom = "12px";
         details.open = true;
 
         const summary = document.createElement("summary");
         summary.className = "cyber-summary";
         summary.style.borderLeft = `4px solid ${colorHex}`;
         summary.innerHTML = `
-            <span>▼ ${nombreZona} (${totalParadas})</span>
+            <span>▼ ${nombreZonaDisplay} (${totalParadas})</span>
             <span class="badge-zone" style="background-color: ${colorHex}; color: #0d1117;">${colorHex}</span>
         `;
 
-        // BARRA DE ACCIONES ZONIFICADA (Incluye Botón Interactivo [ ⚡ OPTIMIZAR ])
-        const accionesBar = document.createElement("div");
-        accionesBar.className = "zona-acciones-bar";
-        accionesBar.style.cssText = "display: flex; gap: 6px; padding: 8px; background: #080b10; border-bottom: 1px solid #30363d; margin-bottom: 8px; overflow-x: auto;";
-        accionesBar.innerHTML = `
-            <button type="button" class="btn-zona-action btn-zona-iniciar" style="background: #0d1117; color: #00e5ff; border: 1px solid #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 8px;" onclick="window.iniciarRutaZona('${nombreZona}')">
+        // 2. BARRA DE ACCIONES DE ZONA CON SELECTORES DE PUNTO INICIAL Y FINAL
+        const accionesContainer = document.createElement("div");
+        accionesContainer.className = "zona-acciones-container";
+        accionesContainer.style.cssText = "background: #080b10; border-bottom: 1px solid #30363d; padding: 8px; margin-bottom: 8px;";
+
+        // Selectores de Inicio/Fin dinámicos
+        let optionsHTML = `<option value="">-- Automático (Por Posición) --</option>`;
+        paradasZona.forEach((p) => {
+            const pId = p.id || p.ssc;
+            const pNombre = p.destinatario || p.cliente || `Parada #${p.secuenciaZona}`;
+            optionsHTML += `<option value="${pId}">[#${p.secuenciaZona}] ${pNombre}</option>`;
+        });
+
+        const selectoresBar = document.createElement("div");
+        selectoresBar.style.cssText = "display: flex; gap: 8px; margin-bottom: 8px; font-size: 0.75rem;";
+        selectoresBar.innerHTML = `
+            <div style="flex:1;">
+                <label style="color: #8b949e; display:block; margin-bottom:2px;">📍 Inicio Fijado:</label>
+                <select id="select-inicio-${claveCanonica}" style="width:100%; background:#161b22; color:#fff; border:1px solid #30363d; padding:4px; border-radius:4px; font-size:0.75rem;">
+                    ${optionsHTML}
+                </select>
+            </div>
+            <div style="flex:1;">
+                <label style="color: #8b949e; display:block; margin-bottom:2px;">🏁 Fin Fijado:</label>
+                <select id="select-fin-${claveCanonica}" style="width:100%; background:#161b22; color:#fff; border:1px solid #30363d; padding:4px; border-radius:4px; font-size:0.75rem;">
+                    ${optionsHTML}
+                </select>
+            </div>
+        `;
+
+        const botonesBar = document.createElement("div");
+        botonesBar.className = "zona-acciones-bar";
+        botonesBar.style.cssText = "display: flex; gap: 6px; overflow-x: auto;";
+        botonesBar.innerHTML = `
+            <button type="button" class="btn-zona-action btn-zona-iniciar" style="background: #0d1117; color: #00e5ff; border: 1px solid #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 8px;" onclick="window.iniciarRutaZona('${claveCanonica}')">
                 ► _INICIAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-optimizar" style="background: #0d1117; color: #ffb300; border: 1px solid #ffb300; font-weight: bold; cursor: pointer; padding: 4px 8px;" onclick="window.optimizarProximidadZona('${nombreZona}')">
+            <button type="button" class="btn-zona-action btn-zona-optimizar" style="background: #0d1117; color: #ffb300; border: 1px solid #ffb300; font-weight: bold; cursor: pointer; padding: 4px 8px;" onclick="window.optimizarProximidadZona('${claveCanonica}')">
                 ⚡ OPTIMIZAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-planillar" style="background: #0d1117; color: #8af7b3; border: 1px solid #8af7b3; cursor: pointer; padding: 4px 8px;" onclick="window.planillarRutaZona('${nombreZona}')">
+            <button type="button" class="btn-zona-action btn-zona-planillar" style="background: #0d1117; color: #8af7b3; border: 1px solid #8af7b3; cursor: pointer; padding: 4px 8px;" onclick="window.planillarRutaZona('${claveCanonica}')">
                 📝 _PLANILLAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-mapa" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 4px 8px;" onclick="window.verMapaZona('${nombreZona}')">
+            <button type="button" class="btn-zona-action btn-zona-mapa" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 4px 8px;" onclick="window.verMapaZona('${claveCanonica}')">
                 🗺️ VER MAPA
             </button>
         `;
 
+        accionesContainer.appendChild(selectoresBar);
+        accionesContainer.appendChild(botonesBar);
+
+        // 3. TARJETAS DE PARADAS DRAG & DROP
         const listContainer = document.createElement("div");
         listContainer.className = "paradas-drag-list";
         listContainer.style.padding = "4px";
@@ -97,7 +132,7 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
             card.className = "parada-card item-parada-lista";
             card.setAttribute("draggable", "true");
             card.setAttribute("data-id", idLimpio);
-            card.setAttribute("data-zona", nombreZona);
+            card.setAttribute("data-zona", claveCanonica);
 
             card.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -108,20 +143,20 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
                         </div>
                     </div>
                     <div class="btn-group-reorder">
-                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${idLimpio}', -1, '${nombreZona}')">▲</button>
-                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${idLimpio}', 1, '${nombreZona}')">▼</button>
+                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${idLimpio}', -1, '${claveCanonica}')">▲</button>
+                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${idLimpio}', 1, '${claveCanonica}')">▼</button>
                         <button type="button" class="btn-reorder" style="border-color: #ffb300; color: #ffb300;" onclick="window.editarParadaUI('${idLimpio}')">✏️</button>
                         <button type="button" class="btn-reorder" style="border-color: #ff3366; color: #ff3366;" onclick="window.eliminarParadaUI('${idLimpio}')">🗑️</button>
                     </div>
                 </div>
             `;
 
-            vincularEventosDragDrop(card, nombreZona);
+            vincularEventosDragDrop(card, claveCanonica);
             listContainer.appendChild(card);
         });
 
         details.appendChild(summary);
-        details.appendChild(accionesBar);
+        details.appendChild(accionesContainer);
         details.appendChild(listContainer);
         contenedor.appendChild(details);
     });
@@ -180,24 +215,44 @@ function vincularEventosDragDrop(cardElement, zonaNombre) {
 }
 
 /**
- * Recalcula y notifica la nueva secuencia tras una reordenación manual vía Drag & Drop.
+ * Recalcula, re-secuencia y persiste atómicamente en IndexedDB tras una reordenación manual vía Drag & Drop.
  */
 async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
     const cards = contenedorPadre.querySelectorAll(".parada-card");
-    const nuevaSecuencia = [];
+    const targetCanónico = estandarizarZonaCanonica(zonaNombre);
 
+    let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || [];
+
+    // Mapeo de nuevas secuencias para la zona
+    const ordenMapa = new Map();
     cards.forEach((card, index) => {
         const id = card.getAttribute("data-id");
         const strongEl = card.querySelector("strong");
         if (strongEl) {
             strongEl.textContent = strongEl.textContent.replace(/\[#\d+\]/, `[#${index + 1}]`);
         }
-        nuevaSecuencia.push({ id, secuencia: index + 1 });
+        ordenMapa.set(String(id), index + 1);
     });
 
-    console.log(`>>> [LOCAL_FIRST] Secuencia manual actualizada para ${zonaNombre}:`, nuevaSecuencia);
+    // Actualizar secuencias manteniendo integridad global
+    todasLasParadas.forEach((p) => {
+        const pId = String(p.id || p.ssc);
+        if (obtenerZonaParadaCanonica(p) === targetCanónico && ordenMapa.has(pId)) {
+            p.secuenciaZona = ordenMapa.get(pId);
+            p.orden = ordenMapa.get(pId);
+            p.updated_at = new Date().toISOString();
+        }
+    });
 
-    window.dispatchEvent(new CustomEvent("rutasReordenadas", {
-        detail: { zonaId: zonaNombre, nuevaSecuencia }
-    }));
+    // Guardar en la base de datos unificada
+    await guardarRutaZonificada(todasLasParadas);
+
+    window.__CACHE_PARADAS_MACONDO__ = [...todasLasParadas];
+    window.paradasMemoriaLocal = [...todasLasParadas];
+
+    console.log(`>>> [LOCAL_FIRST] Secuencia manual actualizada y guardada para ${targetCanónico}.`);
+
+    if (typeof window.actualizarPuntosEnMapa === "function") {
+        window.actualizarPuntosEnMapa(todasLasParadas, 0);
+    }
 }

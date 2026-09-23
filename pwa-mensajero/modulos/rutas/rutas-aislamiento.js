@@ -6,87 +6,76 @@
 import { normalizarClaveZona } from "./rutas-normalizador.js";
 import { obtenerParadasGuardadas } from "../mensajero-persistencia.js";
 import { trazarPolilineaRuta } from "../mapa/mapa-rutas.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
 /**
- * Procesa y recalcula la secuencia de entrega aislando únicamente la zona seleccionada.
+ * Procesa y aísla las paradas de la zona activa asegurando su orden físico secuencial.
  * 
  * @param {string} zonaKeyInput - Clave o nombre crudo de la zona a aislar
  * @returns {Promise<Array<Object>>} Lista de paradas filtradas y secuenciadas
  */
 export async function calcularRutaAisladaPorZona(zonaKeyInput) {
-    if (!zonaKeyInput) {
-        console.warn("⚠️ [MENSAJERO_RUTAS]: Se requiere una zonaKey para aislar la ruta.");
-        return [];
-    }
+  if (!zonaKeyInput) {
+    console.warn("⚠️ [MENSAJERO_RUTAS]: Se requiere una zonaKey para aislar la ruta.");
+    return [];
+  }
 
-    const targetLimpio = normalizarClaveZona(zonaKeyInput);
-    console.group(`⚡ [ZONA_ISOLATION]: Procesando secuencia exclusiva para zona: [${zonaKeyInput}] (Clave limpia target: '${targetLimpio}')`);
+  const targetCanónico = estandarizarZonaCanonica(zonaKeyInput);
+  const targetLimpio = normalizarClaveZona(targetCanónico);
 
-    let todasLasParadas = [];
+  console.group(`⚡ [ZONA_ISOLATION]: Procesando secuencia exclusiva para zona: [${zonaKeyInput}] -> '${targetCanónico}'`);
 
-    if (Array.isArray(window.__CACHE_PARADAS_MACONDO__) && window.__CACHE_PARADAS_MACONDO__.length > 0) {
-        todasLasParadas = [...window.__CACHE_PARADAS_MACONDO__];
-    } else if (Array.isArray(window.paradasMemoriaLocal) && window.paradasMemoriaLocal.length > 0) {
-        todasLasParadas = [...window.paradasMemoriaLocal];
-    } else {
-        try {
-            todasLasParadas = (await obtenerParadasGuardadas()) || [];
-        } catch (err) {
-            console.warn("⚠️ [ZONA_ISOLATION]: Fallo al leer IndexedDB, intentando fallback a localStorage...", err);
-        }
+  let todasLasParadas = [];
 
-        if (!todasLasParadas || todasLasParadas.length === 0) {
-            todasLasParadas = JSON.parse(localStorage.getItem("ruta_zonificada") || "[]");
-        }
-    }
+  try {
+    todasLasParadas = (await obtenerParadasGuardadas()) || [];
+  } catch (err) {
+    console.warn("⚠️ [ZONA_ISOLATION]: Fallo al leer IndexedDB, recurriendo a memoria RAM...", err);
+  }
 
-    console.log(`🔍 [ZONA_ISOLATION]: Total de paradas evaluables: ${todasLasParadas.length}`);
+  if (!todasLasParadas || todasLasParadas.length === 0) {
+    todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+  }
 
-    const paradasDeZona = todasLasParadas.filter((p, index) => {
-        if (!p) return false;
-        
-        const k1 = normalizarClaveZona(p.zonaKey || "");
-        const k2 = normalizarClaveZona(p.nombreZona || "");
-        const k3 = normalizarClaveZona(p.zona || "");
-        const k4 = normalizarClaveZona(p.zonaNombre || "");
+  // 1. Filtrado canónico estricto
+  let paradasDeZona = todasLasParadas.filter((p) => {
+    if (!p) return false;
+    return obtenerZonaParadaCanonica(p) === targetCanónico;
+  });
 
-        const keys = [k1, k2, k3, k4].filter(val => val !== "");
-
-        const busquedaDirecta = keys.some(val => val === targetLimpio);
-        const busquedaSinGuiones = keys.some(val => val.replace(/-/g, "") === targetLimpio.replace(/-/g, ""));
-        
-        const fallbackTextoRaw = (p.zonaNombre || p.zona || p.nombreZona || "").toLowerCase();
-        const busquedaInclusion = fallbackTextoRaw.includes(targetLimpio) || targetLimpio.includes(fallbackTextoRaw);
-
-        const esMatch = busquedaDirecta || busquedaSinGuiones || (keys.length === 0 && busquedaInclusion);
-
-        console.log(` [EVAL_PARADA #${index + 1}]: Target='${targetLimpio}' | Keys Encontradas=[${keys.join(", ")}] | Match=${esMatch}`);
-        return esMatch;
-    });
-
-    if (paradasDeZona.length === 0) {
-        console.warn(`⚠️ [ZONA_ISOLATION]: No hay paradas registradas que coincidan con la zona: ${zonaKeyInput} (Target: '${targetLimpio}')`);
-        console.groupEnd();
-        return [];
-    }
-
-    const paradasSecuenciadas = paradasDeZona.map((parada, index) => ({
-        ...parada,
-        secuenciaZona: index + 1,
-        sincronizado: 0,
-        updated_at: new Date().toISOString()
-    }));
-
-    console.log(`💾 [ZONA_ISOLATION]: ${paradasSecuenciadas.length} parada(s) aislada(s) con éxito para [${targetLimpio}].`);
-
-    if (typeof trazarPolilineaRuta === "function") {
-        trazarPolilineaRuta(paradasSecuenciadas, targetLimpio);
-    }
-
-    if (typeof window.enfocarZonaEnMapa === "function") {
-        window.enfocarZonaEnMapa(paradasSecuenciadas);
-    }
-
+  if (paradasDeZona.length === 0) {
+    console.warn(`⚠️ [ZONA_ISOLATION]: No hay paradas registradas para la zona canónica: '${targetCanónico}'`);
     console.groupEnd();
-    return paradasSecuenciadas;
+    return [];
+  }
+
+  // 2. ORDENAMIENTO FÍSICO (Crucial para que las líneas no se crucen y los marcadores coincidan)
+  // Reemplazamos la reescritura destructiva que ocurría aquí por un simple ordenamiento matemático.
+  paradasDeZona.sort((a, b) => {
+    const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
+    const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
+    return seqA - seqB;
+  });
+
+  console.log(`💾 [ZONA_ISOLATION]: ${paradasDeZona.length} parada(s) aisladas y ORDENADAS con éxito.`);
+
+  // 3. Renderizado Gráfico
+  if (typeof window.actualizarPuntosEnMapa === "function") {
+    console.log("🗺️ [ZONA_ISOLATION]: Delegando al renderizador principal del mapa...");
+    window.actualizarPuntosEnMapa(paradasDeZona, 0);
+  } else {
+    // Fallback de dibujo
+    if (typeof trazarPolilineaRuta === "function") {
+      trazarPolilineaRuta(paradasDeZona, targetLimpio);
+    }
+    if (typeof window.enfocarZonaEnMapa === "function") {
+      window.enfocarZonaEnMapa(paradasDeZona);
+    }
+  }
+
+  console.groupEnd();
+  return paradasDeZona;
 }
+
+window.calcularRutaAisladaPorZona = calcularRutaAisladaPorZona;
+window.aislarParadasPorZona = calcularRutaAisladaPorZona;

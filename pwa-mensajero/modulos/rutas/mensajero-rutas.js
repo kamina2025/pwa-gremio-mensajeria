@@ -10,11 +10,12 @@ import { optimizarRutaPorProximidadZona } from "./rutas-optimizacion.js";
 import { renderizarParadasZonificadasUI } from "./rutas-ui-acordeon.js";
 import { registrarHandlersGlobales } from "./rutas-handlers.js";
 
-console.log("🛣️ [RUTAS_MODULAR]: Módulo de gestión de rutas desacoplado cargado exitosamente.");
+console.log("GM 🛣️ [RUTAS_MODULAR]: Módulo de gestión de rutas desacoplado cargado exitosamente.");
 
-// Registrar bindings en el objeto window global
+// Registrar controladores globales de eventos y botones en el objeto window
 registrarHandlersGlobales();
 
+// Bindings directos para compatibilidad con scripts legados y orquestador
 window.renderizarParadasZonificadasUI = renderizarParadasZonificadasUI;
 window.renderizarAcordeonesZonasUI = renderizarParadasZonificadasUI;
 window.renderizarTablaZonificadaUI = renderizarParadasZonificadasUI;

@@ -4,10 +4,17 @@
  */
 
 import { clasificarParadasPorZona } from "../mapa/zonificacion/mensajero-zonificacion.js";
-import { IndexedStore } from "../db/indexed-store.js";
+import { guardarRutaZonificada } from "../mensajero-persistencia.js"; // <- IMPORTACIÓN CORREGIDA
+import { estandarizarZonaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
-const dbStore = new IndexedStore();
-
+/**
+ * Ejecuta la clasificación espacial táctica por polígonos GeoJSON de Cali,
+ * estandariza atómicamente las claves de zona canónicas y unifica la persistencia.
+ * 
+ * @param {Array<Object>} paradasMemoriaLocal 
+ * @param {Function} renderCallback 
+ * @returns {Promise<Array<Object>>}
+ */
 export async function ejecutarZonificacionAutomaticaUI(paradasMemoriaLocal, renderCallback) {
     console.group("🎨 [ZONIFICAR_UI]: Iniciando clasificación espacial táctica...");
     
@@ -22,6 +29,7 @@ export async function ejecutarZonificacionAutomaticaUI(paradasMemoriaLocal, rend
 
     const geocoder = (typeof google !== "undefined" && google.maps) ? new google.maps.Geocoder() : null;
 
+    // 1. Geocodificación pasiva para paradas sin coordenadas lat/lng
     for (let i = 0; i < paradasMemoriaLocal.length; i++) {
         const p = paradasMemoriaLocal[i];
         
@@ -52,22 +60,61 @@ export async function ejecutarZonificacionAutomaticaUI(paradasMemoriaLocal, rend
         }
     }
 
+    // 2. Clasificación por polígonos espacial GeoJSON
     const paradasProcesadas = clasificarParadasPorZona(paradasMemoriaLocal);
 
-    for (const p of paradasProcesadas) {
-        await dbStore.actualizarParada(p);
-    }
-    localStorage.setItem("ruta_zonificada", JSON.stringify(paradasProcesadas));
-    console.log("💾 [ZONIFICAR_UI]: Paradas actualizadas en IndexedDB y localStorage.");
+    // 3. ESTANDARIZACIÓN ATÓMICA DE CLAVE CANÓNICA A NIVEL DE PARADA
+    paradasProcesadas.forEach((p) => {
+        const zonaRaw = p.zonaKey || p.nombreZona || p.zona || p.zonaNombre;
+        const claveCanonica = estandarizarZonaCanonica(zonaRaw);
 
-    if (typeof renderCallback === "function") renderCallback(paradasProcesadas);
+        p.zona = claveCanonica;
+        p.zonaKey = claveCanonica.toLowerCase();
+        p.nombreZona = `ZONA ${claveCanonica}`;
+        p.zonaNombre = `ZONA ${claveCanonica}`;
+        p.colorZona = p.colorZona || p.color || "#FFE600";
+        p.updated_at = new Date().toISOString();
+    });
+
+    // 4. PERSISTENCIA UNIFICADA EN LA FUENTE GLOBAL (Single Source of Truth)
+    await guardarRutaZonificada(paradasProcesadas);
+
+    localStorage.setItem("ruta_zonificada", JSON.stringify(paradasProcesadas));
+    window.__CACHE_PARADAS_MACONDO__ = [...paradasProcesadas];
+    window.paradasMemoriaLocal = [...paradasProcesadas];
+
+    console.log("💾 [ZONIFICAR_UI]: Paradas estandarizadas y actualizadas globalmente en IndexedDB, LocalStorage y RAM.");
+
+    // 5. Refresco visual del mapa y callback de renderizado UI
+    if (typeof window.actualizarPuntosEnMapa === "function") {
+        window.actualizarPuntosEnMapa(paradasProcesadas, 0);
+    }
+
+    if (typeof renderCallback === "function") {
+        renderCallback(paradasProcesadas);
+    }
+
     console.groupEnd();
     return paradasProcesadas;
 }
 
+/**
+ * Reordena la secuencia de una parada según delta visual (+1 / -1) y sincroniza almacenamiento global.
+ * 
+ * @param {Array<Object>} paradasMemoriaLocal 
+ * @param {string|number} idParada 
+ * @param {number} delta 
+ * @param {Function} renderCallback 
+ */
 export async function moverParadaSecuenciaUI(paradasMemoriaLocal, idParada, delta, renderCallback) {
     console.group(`⚡ [REORDENAMIENTO_UI]: Moviendo parada ${idParada} con delta ${delta}`);
-    const index = paradasMemoriaLocal.findIndex(p => String(p.id) === String(idParada));
+    
+    let listaParadas = paradasMemoriaLocal;
+    if (!Array.isArray(listaParadas) || listaParadas.length === 0) {
+        listaParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+    }
+
+    const index = listaParadas.findIndex(p => String(p.id || p.ssc) === String(idParada));
     if (index === -1) {
         console.warn("⚠️ [REORDENAMIENTO_UI]: Parada no encontrada.");
         console.groupEnd();
@@ -75,23 +122,44 @@ export async function moverParadaSecuenciaUI(paradasMemoriaLocal, idParada, delt
     }
 
     const newIndex = index + delta;
-    if (newIndex < 0 || newIndex >= paradasMemoriaLocal.length) {
+    if (newIndex < 0 || newIndex >= listaParadas.length) {
         console.warn("⚠️ [REORDENAMIENTO_UI]: Índice fuera de límites.");
         console.groupEnd();
         return;
     }
 
-    const temp = paradasMemoriaLocal[index];
-    paradasMemoriaLocal[index] = paradasMemoriaLocal[newIndex];
-    paradasMemoriaLocal[newIndex] = temp;
+    // Intercambio físico de posiciones
+    const temp = listaParadas[index];
+    listaParadas[index] = listaParadas[newIndex];
+    listaParadas[newIndex] = temp;
 
-    for (let i = 0; i < paradasMemoriaLocal.length; i++) {
-        paradasMemoriaLocal[i].secuencia = i + 1;
-        paradasMemoriaLocal[i].secuenciaZona = i + 1;
-        await dbStore.actualizarParada(paradasMemoriaLocal[i]);
+    // Recalcular secuencias numéricas
+    for (let i = 0; i < listaParadas.length; i++) {
+        listaParadas[i].secuencia = i + 1;
+        listaParadas[i].secuenciaZona = i + 1;
+        listaParadas[i].orden = i + 1;
+        listaParadas[i].updated_at = new Date().toISOString();
     }
 
-    localStorage.setItem("ruta_zonificada", JSON.stringify(paradasMemoriaLocal));
-    if (typeof renderCallback === "function") renderCallback(paradasMemoriaLocal);
+    // Persistencia unificada
+    await guardarRutaZonificada(listaParadas);
+
+    // Sincronizar RAM y UI
+    localStorage.setItem("ruta_zonificada", JSON.stringify(listaParadas));
+    window.__CACHE_PARADAS_MACONDO__ = [...listaParadas];
+    window.paradasMemoriaLocal = [...listaParadas];
+
+    if (typeof window.actualizarPuntosEnMapa === "function") {
+        window.actualizarPuntosEnMapa(listaParadas, 0);
+    }
+
+    if (typeof renderCallback === "function") {
+        renderCallback(listaParadas);
+    }
+
     console.groupEnd();
 }
+
+// Bindings globales inmediatos
+window.ejecutarZonificacionAutomaticaUI = ejecutarZonificacionAutomaticaUI;
+window.moverParadaSecuenciaUI = moverParadaSecuenciaUI;

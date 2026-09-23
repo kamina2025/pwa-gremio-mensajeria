@@ -17,6 +17,15 @@ import {
 export { parsearTextoPlanoWhatsApp, parsearPayloadODocumento };
 
 /**
+ * Emitir vibración háptica en Android
+ */
+function emitirHaptico(pattern = 30) {
+    if ('vibrate' in navigator) {
+        try { navigator.vibrate(pattern); } catch (e) {}
+    }
+}
+
+/**
  * Carga e importa paradas desde un enlace o texto plano.
  */
 export async function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco) {
@@ -68,60 +77,110 @@ export class ImportadorMasivoMensajero {
         }
     }
 
+    /**
+     * MODO 3: Extracción heurística local sin IA (CSV, Excel, TXT, PDF Local)
+     */
     async ejecutarImportacionArchivoLocal(callbackRefresco) {
         console.log(">>> [IMPORTADOR_EXEC_LOCAL]: Disparando extracción local MODO 3 Acumulativa...");
-        const inputArchivo = document.getElementById("archivo-base-datos-local") || document.getElementById("archivo-base-datos");
+        emitirHaptico(30);
 
-        if (!inputArchivo || !inputArchivo.files || inputArchivo.files.length === 0) {
+        const inputArchivo = document.getElementById("archivo-base-datos-local") || document.getElementById("archivo-base-datos");
+        let listaArchivos = [];
+
+        // Evaluar buffer en memoria o fallback a FileList
+        if (typeof window.obtenerLoteFotosActual === "function" && window.obtenerLoteFotosActual().length > 0) {
+            listaArchivos = window.obtenerLoteFotosActual();
+        } else if (inputArchivo && inputArchivo.files && inputArchivo.files.length > 0) {
+            listaArchivos = Array.from(inputArchivo.files);
+        }
+
+        if (listaArchivos.length === 0) {
             notificarResultadoImportacion("ALERTA MENSAJERO", "Seleccione uno o varios archivos para la extracción local.", true);
             return;
         }
 
-        const listaArchivos = Array.from(inputArchivo.files);
         const todasLasParadasNuevas = [];
+
+        if (window.visorAnimaciones && typeof window.visorAnimaciones.mostrarModal === "function") {
+            window.visorAnimaciones.mostrarModal("EXTRAYENDO DATOS LOCALMENTE", `Procesando ${listaArchivos.length} archivo(s)...`);
+        }
 
         actualizarEstadoIngestionUI(`>>> EXTRAYENDO DATOS LOCALMENTE (0/${listaArchivos.length})...`, "var(--neon-green, #3eb84a)");
 
-        for (let i = 0; i < listaArchivos.length; i++) {
-            const archivo = listaArchivos[i];
-            try {
-                const puntosExtraidos = await procesarArchivoTextoCSV(archivo);
-                if (puntosExtraidos && puntosExtraidos.length > 0) {
-                    puntosExtraidos.forEach((p) => todasLasParadasNuevas.push(p));
+        try {
+            for (let i = 0; i < listaArchivos.length; i++) {
+                const archivo = listaArchivos[i];
+
+                if (window.visorAnimaciones && typeof window.visorAnimaciones.actualizarProgreso === "function") {
+                    window.visorAnimaciones.actualizarProgreso(i + 1, listaArchivos.length, `Analizando: ${archivo.name}`);
                 }
-            } catch (errArchivo) {
-                console.warn(`⚠️ [FILE_FAIL_LOCAL]: Error en "${archivo.name}":`, errArchivo.message || errArchivo);
+
+                try {
+                    const puntosExtraidos = await procesarArchivoTextoCSV(archivo);
+                    if (puntosExtraidos && puntosExtraidos.length > 0) {
+                        puntosExtraidos.forEach((p) => todasLasParadasNuevas.push(p));
+                    }
+                } catch (errArchivo) {
+                    console.warn(`⚠️ [FILE_FAIL_LOCAL]: Error en "${archivo.name}":`, errArchivo.message || errArchivo);
+                }
+            }
+
+            if (todasLasParadasNuevas.length === 0) {
+                actualizarEstadoIngestionUI(">>> ERROR LOCAL: No se extrajeron datos válidos.", "#ff3366");
+                throw new Error("No se lograron extraer datos válidos mediante heurística local.");
+            }
+
+            const listaTotal = await fusionarYGuardarParadas(todasLasParadasNuevas);
+
+            actualizarEstadoIngestionUI(`>>> ÉXITO LOCAL: ${listaTotal.length} PARADAS EN HOJA DE RUTA`, "var(--neon-green, #00ff66)");
+
+            if (inputArchivo) inputArchivo.value = "";
+            if (typeof window.limpiarLoteFotos === "function") window.limpiarLoteFotos();
+
+            emitirHaptico(50);
+            dispararRefrescoUI(listaTotal, callbackRefresco);
+
+            notificarResultadoImportacion("EXTRACCIÓN COMPLETA", `Se agregaron paradas localmente. Total en ruta: ${listaTotal.length}`);
+
+        } catch (error) {
+            console.error(">>> [IMPORTADOR_LOCAL_FAIL]:", error);
+            notificarResultadoImportacion("ERROR PROCESANDO ARCHIVOS LOCALES", error.message, true);
+        } finally {
+            if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
+                window.visorAnimaciones.ocultarModal();
             }
         }
-
-        if (todasLasParadasNuevas.length === 0) {
-            actualizarEstadoIngestionUI(">>> ERROR LOCAL: No se extrajeron datos válidos.", "#ff3366");
-            notificarResultadoImportacion("ERROR PROCESANDO ARCHIVOS LOCALES", "No se lograron extraer datos válidos mediante heurística local.", true);
-            return;
-        }
-
-        const listaTotal = await fusionarYGuardarParadas(todasLasParadasNuevas);
-
-        actualizarEstadoIngestionUI(`>>> ÉXITO LOCAL: ${listaTotal.length} PARADAS EN HOJA DE RUTA`, "var(--neon-green, #00ff66)");
-
-        inputArchivo.value = "";
-        dispararRefrescoUI(listaTotal, callbackRefresco);
     }
 
-    async ejecutarImportacionArchivo(callbackRefresco, forzarIA = false) {
+    /**
+     * MODO 1: Procesamiento por Lote con IA Cloud (Gemini / OCR)
+     */
+    async ejecutarImportacionArchivo(callbackRefresco, forzarIA = true) {
         console.log(">>> [IMPORTADOR_EXEC_IA]: Disparando proceso acumulativo MODO 1 (IA Cloud)...");
-        const inputArchivo = document.getElementById("archivo-base-datos") || document.getElementById("archivo-base-datos-local");
+        emitirHaptico(30);
 
-        if (!inputArchivo || !inputArchivo.files || inputArchivo.files.length === 0) {
-            notificarResultadoImportacion("ALERTA MENSAJERO", "Seleccione o tome la fotografía de la tirilla.", true);
+        const inputArchivo = document.getElementById("archivo-base-datos") || document.getElementById("archivo-base-datos-local");
+        let listaArchivos = [];
+
+        // Prioridad 1: Lote acumulado en memoria
+        if (typeof window.obtenerLoteFotosActual === "function" && window.obtenerLoteFotosActual().length > 0) {
+            listaArchivos = window.obtenerLoteFotosActual();
+            console.log(`📸 [IMPORTADOR_IA]: Obtenido lote acumulado de ${listaArchivos.length} foto(s).`);
+        } 
+        // Prioridad 2: Archivos seleccionados en el input file
+        else if (inputArchivo && inputArchivo.files && inputArchivo.files.length > 0) {
+            listaArchivos = Array.from(inputArchivo.files);
+        }
+
+        if (listaArchivos.length === 0) {
+            notificarResultadoImportacion("ALERTA MENSAJERO", "Seleccione o tome al menos una fotografía de la tirilla.", true);
             return;
         }
 
-        const listaArchivos = Array.from(inputArchivo.files);
         const paradasNuevasLote = [];
 
         if (window.visorAnimaciones && typeof window.visorAnimaciones.mostrarModal === "function") {
-            window.visorAnimaciones.mostrarModal("EXTRAYENDO CON IA CLOUD", `Analizando ${listaArchivos.length} foto(s)...`);
+            window.visorAnimaciones.mostrarModal("EXTRAYENDO CON IA CLOUD", `Analizando lote de ${listaArchivos.length} foto(s)...`);
         }
 
         try {
@@ -129,7 +188,7 @@ export class ImportadorMasivoMensajero {
                 const archivo = listaArchivos[i];
 
                 if (window.visorAnimaciones && typeof window.visorAnimaciones.actualizarProgreso === "function") {
-                    window.visorAnimaciones.actualizarProgreso(i, listaArchivos.length, `Analizando: ${archivo.name}`);
+                    window.visorAnimaciones.actualizarProgreso(i, listaArchivos.length, `Analizando tirilla ${i + 1} de ${listaArchivos.length}: ${archivo.name}`);
                 }
 
                 try {
@@ -149,7 +208,7 @@ export class ImportadorMasivoMensajero {
                         puntosExtraidos.forEach((p) => paradasNuevasLote.push(p));
                     }
                 } catch (errArchivo) {
-                    console.error(`❌ Error en archivo "${archivo.name}":`, errArchivo);
+                    console.error(`❌ Error procesando archivo "${archivo.name}":`, errArchivo);
                 }
             }
 
@@ -157,17 +216,26 @@ export class ImportadorMasivoMensajero {
                 throw new Error("No se lograron extraer datos válidos de las fotografías seleccionadas.");
             }
 
+            if (window.visorAnimaciones && typeof window.visorAnimaciones.actualizarProgreso === "function") {
+                window.visorAnimaciones.actualizarProgreso(listaArchivos.length, listaArchivos.length, "Fusionando paradas en la Hoja de Ruta...");
+            }
+
             const listaTotalActualizada = await fusionarYGuardarParadas(paradasNuevasLote);
 
             actualizarEstadoIngestionUI(`>>> ÉXITO: ${listaTotalActualizada.length} PARADA(S) EN HOJA DE RUTA`, "var(--neon-green, #00ff66)");
 
-            inputArchivo.value = "";
+            if (inputArchivo) inputArchivo.value = "";
+            if (typeof window.limpiarLoteFotos === "function") window.limpiarLoteFotos();
+
+            emitirHaptico([40, 30, 40]);
             dispararRefrescoUI(listaTotalActualizada, callbackRefresco);
+
+            notificarResultadoImportacion("PROCESO DE IA COMPLETADO", `Se extrajeron ${paradasNuevasLote.length} datos. Total en ruta: ${listaTotalActualizada.length}`);
 
         } catch (error) {
             console.error(">>> [IMPORTADOR_FAIL]: Error en importación acumulativa:", error);
             actualizarEstadoIngestionUI(`>>> ERROR: ${error.message}`, "#ff3366");
-            notificarResultadoImportacion("ERROR AGREGANDO PARADA", error.message, true);
+            notificarResultadoImportacion("ERROR AGREGANDO PARADAS", error.message, true);
         } finally {
             if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
                 window.visorAnimaciones.ocultarModal();
@@ -185,6 +253,6 @@ if (typeof window !== "undefined") {
     window.parsearTextoPlanoWhatsApp = parsearTextoPlanoWhatsApp;
     window.parsearPayloadODocumento = parsearPayloadODocumento;
     window.ImportadorMasivoMensajero = importadorMensajero;
-    window.ejecutarProcesamientoIaCloud = () => importadorMensajero.ejecutarImportacionArchivo();
-    window.ejecutarProcesamientoLocalSinIa = () => importadorMensajero.ejecutarImportacionArchivoLocal();
+    window.ejecutarProcesamientoIaCloud = (cb) => importadorMensajero.ejecutarImportacionArchivo(cb, true);
+    window.ejecutarProcesamientoLocalSinIa = (cb) => importadorMensajero.ejecutarImportacionArchivoLocal(cb);
 }

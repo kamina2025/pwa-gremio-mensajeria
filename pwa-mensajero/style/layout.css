@@ -1,12 +1,20 @@
 @import url("https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap");
 
+/* ==========================================================================
+   SISTEMA DE DISEÑO CYBERPUNK - PALETA GLOBAL Y VARIABLES
+   ========================================================================== */
 :root {
     --bg-color: #030308;
     --panel-bg: rgba(10, 10, 20, 0.85);
-    --neon-cyan: #00f3ff;
+    
+    /* Colores Neón Cyberpunk */
+    --neon-cyan: #00e5ff;
     --neon-cyan-hover: #255a5c;
-    --neon-magenta: #ff0055;
-    --neon-yellow: #f9f002;
+    --neon-magenta: #ff3366;
+    --neon-yellow: #ffb300;
+    --neon-green: #39ff14;
+    --cyber-border: #30363d;
+    
     --text-color: #c3ccdb;
     --cyber-font: "Share Tech Mono", monospace;
 }
@@ -36,7 +44,9 @@ body {
     font-family: var(--cyber-font);
 }
 
-/* --- GRID DEL DASHBOARD Y CONTENEDORES --- */
+/* ==========================================================================
+   GRID DEL DASHBOARD Y CONTENEDORES
+   ========================================================================== */
 .dashboard-container {
     display: grid;
     height: 100dvh;
@@ -75,7 +85,7 @@ body {
     align-items: center;
     border-bottom: 2px solid var(--neon-cyan);
     padding: 0 15px;
-    box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
 }
 
 .logo {
@@ -83,11 +93,13 @@ body {
     font-size: 1.5rem;
     font-weight: bold;
     text-transform: uppercase;
-    text-shadow: 0 0 8px rgba(249, 240, 2, 0.6);
+    text-shadow: 0 0 8px rgba(255, 179, 0, 0.6);
     animation: glitch 4s infinite;
 }
 
-/* --- CONTROL DE PESTAÑAS (SPA) --- */
+/* ==========================================================================
+   CONTROL DE PESTAÑAS (SPA)
+   ========================================================================== */
 .contenedor-pestana {
     display: none;
     width: 100%;
@@ -97,15 +109,6 @@ body {
 .contenedor-pestana.activa {
     display: block;
     animation: fadeIn 0.3s ease-in-out;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
 }
 
 .vista-header {
@@ -120,11 +123,11 @@ body {
     clip-path: polygon(0 0, 90% 0, 100% 30%, 100% 100%, 0 100%);
 }
 .label {
-    color: #00f3ff;
+    color: var(--neon-cyan);
 }
 
 /* ==========================================================================
-   ENVOLTORIO FLOTANTE Y CENTRADO DE LA BARRA INFERIOR
+   BARRA INFERIOR FLOTANTE A NIVEL RAÍZ
    ========================================================================== */
 .barra-inferior-global {
     position: fixed;
@@ -139,7 +142,6 @@ body {
     justify-content: center;
     align-items: center;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    /* Se eliminan 'background' y 'border' de aquí para evitar la franja o barra fantasma por debajo */
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
@@ -150,4 +152,189 @@ body {
     .dashboard-container:not(.collapsed) ~ .barra-inferior-global {
         left: calc(50% + 120px);
     }
+}
+
+/* ==========================================================================
+   SISTEMA DE TOASTS Y AVISOS DE PROCESO (OPTIMIZADO PARA ANDROID)
+   ========================================================================== */
+.cyber-toast-container {
+    position: fixed;
+    bottom: 75px; /* Evita superposición con la barra inferior flotante */
+    right: 16px;
+    left: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+    z-index: 9998;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.cyber-toast {
+    pointer-events: auto;
+    background: var(--bg-color);
+    border: 1px solid var(--neon-cyan);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.35), inset 0 0 6px rgba(0, 229, 255, 0.1);
+    border-radius: 4px;
+    padding: 12px 16px;
+    color: var(--text-color);
+    font-family: var(--cyber-font);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    animation: slideInUp 0.3s ease-out forwards;
+}
+
+.cyber-toast.toast-exito {
+    border-color: var(--neon-green);
+    box-shadow: 0 0 12px rgba(57, 255, 20, 0.35);
+}
+
+.cyber-toast.toast-error {
+    border-color: var(--neon-magenta);
+    box-shadow: 0 0 12px rgba(255, 51, 102, 0.45);
+}
+
+.cyber-toast.toast-advertencia {
+    border-color: var(--neon-yellow);
+    box-shadow: 0 0 12px rgba(255, 179, 0, 0.35);
+}
+
+.cyber-toast-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.cyber-toast-body {
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: #a3b1c2;
+}
+
+.cyber-progress-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: var(--cyber-border);
+    border-radius: 3px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.cyber-progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan);
+    transition: width 0.25s ease-in-out;
+}
+
+.toast-exito .cyber-progress-bar-fill { background: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
+.toast-error .cyber-progress-bar-fill { background: var(--neon-magenta); box-shadow: 0 0 8px var(--neon-magenta); }
+
+.cyber-toast-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* Botones con zona de contacto apta para Android */
+.cyber-btn-touch {
+    min-height: 44px;
+    min-width: 80px;
+    background: transparent;
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    font-family: var(--cyber-font);
+    font-size: 0.85rem;
+    font-weight: bold;
+    padding: 6px 14px;
+    text-transform: uppercase;
+    cursor: pointer;
+    touch-action: manipulation;
+    border-radius: 2px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.cyber-btn-touch:active {
+    background: var(--neon-cyan);
+    color: var(--bg-color);
+}
+
+.cyber-btn-touch.danger {
+    border-color: var(--neon-magenta);
+    color: var(--neon-magenta);
+}
+
+.cyber-btn-touch.danger:active {
+    background: var(--neon-magenta);
+    color: #ffffff;
+}
+
+/* ==========================================================================
+   MODALES OVERLAYS INTERACTIVOS
+   ========================================================================== */
+.cyber-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(3, 3, 8, 0.88);
+    backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.cyber-modal-overlay.hidden {
+    display: none !important;
+}
+
+.cyber-modal-card {
+    background: #0d1117;
+    border: 1.5px solid var(--neon-cyan);
+    box-shadow: 0 0 25px rgba(0, 229, 255, 0.4);
+    width: 100%;
+    max-width: 420px;
+    padding: 24px;
+    border-radius: 6px;
+    animation: glitchGlow 0.3s ease-out;
+}
+
+/* ==========================================================================
+   ANIMACIONES KEYFRAMES
+   ========================================================================== */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes glitchGlow {
+    0% { transform: scale(0.95); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes spinCyber {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes glitch {
+    0%, 100% { text-shadow: 0 0 8px rgba(255, 179, 0, 0.6); }
+    50% { text-shadow: -2px 0 var(--neon-magenta), 2px 0 var(--neon-cyan); }
 }

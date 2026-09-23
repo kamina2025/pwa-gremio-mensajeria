@@ -23,21 +23,24 @@
                 class="grid-balance-monolitico"
                 style="display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0">
                 
-                <!-- MODO 1: FOTOGRAFÍAS DE TIRILLAS / CÁMARA ANDROID / IA CLOUD -->
+                <!-- MODO 1: FOTOGRAFÍAS DE TIRILLAS / CÁMARA ANDROID / IA CLOUD (MULTIPLE ACUMULATIVO) -->
                 <div
                     class="sub-panel-datos"
                     style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
                     <div
                         class="label-titulo"
-                        style="font-size: 0.8rem; font-weight: bold; color: var(--neon-cyan, #00f3ff); margin-bottom: 8px">
-                        [📸] MODO 1: FOTOGRAFÍAS / CÁMARA (LOTE MULTIPLE + IA CLOUD)
+                        style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-weight: bold; color: var(--neon-cyan, #00f3ff); margin-bottom: 8px">
+                        <span>[📸] MODO 1: FOTOGRAFÍAS / CÁMARA (IA CLOUD)</span>
+                        <span id="badge-conteo-fotos" class="badge-zone" style="background: rgba(0,243,255,0.15); border: 1px solid #00f3ff; color: #00f3ff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">
+                            0 Fotos Acumuladas
+                        </span>
                     </div>
                     <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
-                        Tome las fotos con la cámara trasera de su dispositivo Android o seleccione múltiples imágenes/PDFs de tirillas.
+                        Tome fotos una por una con la cámara trasera o seleccione múltiples de la galería. Se irán acumulando en el lote.
                     </p>
                     
                     <label for="archivo-base-datos" style="display: block; font-size: 0.7rem; color: #00f3ff; margin-bottom: 4px;">
-                        Seleccionar o Tomar Fotos:
+                        Capturar o Agregar Foto/Archivo:
                     </label>
                     <input
                         type="file"
@@ -47,14 +50,33 @@
                         multiple
                         class="input-terminal"
                         style="width: 100%; margin-bottom: 10px; font-size: 0.8rem; padding: 6px;" />
-                    
-                    <button
-                        type="button"
-                        id="btn-procesar-archivo-masivo"
-                        class="btn-terminal btn-crypto"
-                        style="width: 100%; font-weight: bold;">
-                        [⚙️] PROCESAR FOTOS / ARCHIVOS CON IA CLOUD
-                    </button>
+
+                    <!-- Galería de Miniaturas para Previsualizar y Eliminar -->
+                    <div 
+                        id="galeria-fotos-lote" 
+                        style="display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; margin-bottom: 10px; min-height: 50px; border-top: 1px dashed #291f33; border-bottom: 1px dashed #291f33;">
+                        <span id="galeria-vacia-msg" style="font-size: 0.7rem; color: #666; font-style: italic;">No hay fotos capturadas aún.</span>
+                    </div>
+
+                    <div style="display: flex; gap: 8px;">
+                        <button
+                            type="button"
+                            id="btn-limpiar-lote-fotos"
+                            class="btn-terminal cyber-btn-touch danger"
+                            onclick="if(typeof window.limpiarLoteFotos === 'function') window.limpiarLoteFotos();"
+                            style="width: 30%; font-size: 0.75rem; background: #1a080c; border-color: #ff3366; color: #ff3366;">
+                            [🗑️] LIMPIAR
+                        </button>
+
+                        <button
+                            type="button"
+                            id="btn-procesar-archivo-masivo"
+                            class="btn-terminal btn-crypto cyber-btn-touch"
+                            onclick="console.log('🤖 [CREAR_RUTA]: Iniciando procesamiento IA Cloud...'); if(typeof window.ejecutarProcesamientoIaCloud === 'function') { window.ejecutarProcesamientoIaCloud(); } else { alert('⚠️ Módulo de importación IA cargando...'); }"
+                            style="width: 70%; font-weight: bold;">
+                            [⚙️] PROCESAR LOTE CON IA CLOUD
+                        </button>
+                    </div>
                 </div>
 
                 <!-- MODO 2: TEXTO PLANO / WHATSAPP / PAYLOAD -->
@@ -83,7 +105,8 @@
                     <button
                         type="button"
                         id="btn-procesar-texto-manual"
-                        class="btn-terminal btn-crypto"
+                        class="btn-terminal btn-crypto cyber-btn-touch"
+                        onclick="console.log('💬 [CREAR_RUTA]: Procesando payload de texto plano...'); if(typeof window.procesarCargaManualEnlace === 'function') { window.procesarCargaManualEnlace(); } else { alert('⚠️ Subsistema de carga manual no listo.'); }"
                         style="width: 100%; border-color: var(--neon-purple, #b359ff); color: #fff; font-weight: bold;">
                         [⚡] IMPORTAR TEXTO PLANO / PAYLOAD
                     </button>
@@ -116,7 +139,8 @@
                     <button
                         type="button"
                         id="btn-procesar-archivo-masivo-local"
-                        class="btn-terminal btn-crypto"
+                        class="btn-terminal btn-crypto cyber-btn-touch"
+                        onclick="console.log('📂 [CREAR_RUTA]: Procesando archivos locales...'); if(typeof window.ImportadorMasivoMensajero?.ejecutarImportacionLocal === 'function') { window.ImportadorMasivoMensajero.ejecutarImportacionLocal(); } else { alert('⚠️ Importador local offline inicializando...'); }"
                         style="width: 100%; border-color: var(--neon-green, #3eb84a); color: #fff; font-weight: bold;">
                         [⚙️] PROCESAR ARCHIVOS LOCALES (OFFLINE)
                     </button>

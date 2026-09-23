@@ -21,16 +21,14 @@
         <link rel="stylesheet" href="./style/botones-contenedor.css" />
         <link rel="stylesheet" href="./style/barra-inferior.css" />
 
-        <!-- Librería para lectura local de archivos Excel (.xlsx / .xls) sin servidor/IA -->
+        <!-- Librerías de Ingestión Local sin servidor/IA -->
         <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-        <!-- Motor OCR Local WebAssembly sin servidor/IA -->
         <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-
-        <!-- Librería para lectura local de archivos PDF sin servidor/IA -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
         <!-- Puente para exposición global de la callback de Google Maps -->
         <script>
+            console.log("🚀 [INDEX2]: Inicializando puente de callback Google Maps");
             window.inicializarMapaMensajero = function () {
                 console.log("🗺️ [MAPA_CALLBACK_BRIDGE]: Google Maps SDK listo. Delegando a módulo...");
                 if (window.inicializarMapaMensajeroModulo) {
@@ -103,11 +101,16 @@
         <!-- CONTENEDOR DE BARRA INFERIOR FLOTANTE A NIVEL RAÍZ -->
         <nav id="contenedor-menu" class="barra-inferior-global"></nav>
 
+        <!-- PORTALES DE UI CYBERPUNK (Toasts & Modales de Proceso) -->
+        <div id="cyber-toast-container" class="cyber-toast-container" aria-live="polite" aria-atomic="true"></div>
+
+        <div id="cyber-modal-overlay" class="cyber-modal-overlay hidden" role="dialog" aria-modal="true">
+            <div class="cyber-modal-card" id="cyber-modal-card"></div>
+        </div>
+
         <script>
-            /**
-             * Carga dinámicamente el componente de barra inferior indicado.
-             */
             window.cargarBarraInferior = function (rutaComponente) {
+                console.log(`[INDEX2] Cargando barra inferior desde: ${rutaComponente}`);
                 const contenedor = document.getElementById("contenedor-menu");
                 if (!contenedor) return;
 
@@ -124,11 +127,11 @@
                         contenedor.innerHTML = html;
                         contenedor.dataset.componenteActual = rutaComponente;
                     })
-                    .catch((error) => console.error("Error al cargar la barra inferior:", error));
+                    .catch((error) => console.error("[INDEX2] Error al cargar la barra inferior:", error));
             };
 
             document.addEventListener("DOMContentLoaded", () => {
-                // Carga inicial de la barra por defecto
+                console.log("[INDEX2] Evento DOMContentLoaded detectado.");
                 window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
             });
         </script>
@@ -136,7 +139,12 @@
         <!-- Módulos de Control JavaScript -->
         <script src="./app.js"></script>
 
-        <!-- SDK de Mapas en la raíz de la SPA -->
+        <!-- Carga como módulos ES6 para soportar la palabra reservada 'export' -->
+        <script type="module" src="./modulos/ui/avisos/visor-animaciones.js"></script>
+        <script type="module" src="./modulos/ui/avisos/avisos-controller.js"></script>
+        <script type="module" src="./modulos/mensajero-ui.js"></script>
+
+        <!-- SDK de Mapas -->
         <script
             src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCP6Wc3JRQIRXu6cXM8KkPasuy8asTIWUE&callback=inicializarMapaMensajero&libraries=places&loading=async"
             async

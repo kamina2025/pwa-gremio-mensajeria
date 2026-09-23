@@ -211,12 +211,43 @@ document.addEventListener("click", (e) => {
         return;
     }
 
-    // 7. MÓDULO PLANILLAS: Exportar PDF
+    // 7. MÓDULO PLANILLAS: Exportar PDF con Notificación de Progreso
     const btnExportarPdf = e.target.closest(".btn-exportar-planilla");
     if (btnExportarPdf) {
         const planillaId = btnExportarPdf.getAttribute("data-id");
         console.log(` 📄 [PLANILLAS]: Solicitud exportar PDF para planilla ID -> ${planillaId}`);
-        exportarYRespaldarPlanillaPDF(planillaId);
+        
+        const toastId = `pdf-${planillaId}`;
+        if (typeof window.mostrarAvisoProceso === 'function') {
+            window.mostrarAvisoProceso({
+                id: toastId,
+                titulo: 'Exportando PDF',
+                mensaje: 'Generando archivo de planilla y respaldo...',
+                estado: 'procesando',
+                progreso: 30
+            });
+        }
+
+        exportarYRespaldarPlanillaPDF(planillaId).then(() => {
+            if (typeof window.actualizarProgresoProceso === 'function') {
+                window.actualizarProgresoProceso(toastId, 100, '¡PDF generado exitosamente!', 'exito');
+            }
+            if (typeof window.cerrarAvisoProceso === 'function') {
+                window.cerrarAvisoProceso(toastId, 1800);
+            }
+        }).catch((err) => {
+            console.error("❌ [PLANILLAS]: Error al exportar PDF:", err);
+            if (typeof window.mostrarAvisoProceso === 'function') {
+                window.mostrarAvisoProceso({
+                    id: toastId,
+                    titulo: 'Error de Exportación',
+                    mensaje: 'No se pudo generar el documento PDF.',
+                    estado: 'error',
+                    progreso: 100,
+                    acciones: [{ texto: 'Cerrar', clase: 'danger', accion: (id) => window.cerrarAvisoProceso(id) }]
+                });
+            }
+        });
         return;
     }
 });
@@ -225,7 +256,6 @@ document.addEventListener("click", (e) => {
 export function alternarVistaPestaña(targetId) {
     console.log(` 🔄 [ALTERNAR_VISTA]: Iniciando transición a -> #${targetId}`);
     
-    // 1. Ocultar todas las pestañas y activar la requerida
     const contenedores = document.querySelectorAll(".contenedor-pestana");
     contenedores.forEach((c) => c.classList.remove("activa"));
 
@@ -234,7 +264,6 @@ export function alternarVistaPestaña(targetId) {
         objetivo.classList.add("activa");
         console.log(` ✅ [ALTERNAR_VISTA]: Pestaña #${targetId} marcada como activa.`);
         
-        // Hooks de carga condicional
         if (targetId === "pestana-notificaciones-planillas") {
             cargarPlanillasReportadasUI();
         } else if (targetId === "pestana-perfil-conductor") {
@@ -247,20 +276,15 @@ export function alternarVistaPestaña(targetId) {
         console.warn(` ⚠️ [ALTERNAR_VISTA]: No se encontró el contenedor con ID '${targetId}' en el DOM.`);
     }
 
-    // Actualizar resaltado de botones en sidebar
     document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
     const sidebarNavBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetId}"]`);
     if (sidebarNavBtn) sidebarNavBtn.classList.add("active");
 
-    // 2. Evaluar y conmutar la barra inferior
     if (targetId === "mapa-fullscreen-container") {
-        console.log(" 🗺️ [BARRA_INFERIOR]: Cargando barra dinámica del MAPA (componentes/barra-inferior/mapa-barra-infe.html)...");
+        console.log(" 🗺️ [BARRA_INFERIOR]: Cargando barra dinámica del MAPA...");
         if (typeof window.cargarBarraInferior === "function") {
             window.cargarBarraInferior("componentes/barra-inferior/mapa-barra-infe.html");
-        } else {
-            console.error(" ❌ [BARRA_INFERIOR]: 'window.cargarBarraInferior' no está definida en el entorno global.");
         }
-
         setTimeout(() => {
             if (window.mapaMensajero && typeof google !== "undefined") {
                 console.log(" 📐 [MAPA]: Re-calculando dimensiones del mapa (resize)...");
@@ -268,19 +292,13 @@ export function alternarVistaPestaña(targetId) {
             }
         }, 150);
     } else {
-        console.log(" 🏠 [BARRA_INFERIOR]: Cargando barra dinámica INICIO (componentes/barra-inferior/inicio-barra-infe.html)...");
+        console.log(" 🏠 [BARRA_INFERIOR]: Cargando barra dinámica INICIO...");
         if (typeof window.cargarBarraInferior === "function") {
             window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
-        } else {
-            console.error(" ❌ [BARRA_INFERIOR]: 'window.cargarBarraInferior' no está definida en el entorno global.");
         }
     }
 }
 
-/**
- * Función global para navegar utilizando alias de rutas.
- * @param {string} rutaVista - Ejemplo: 'vistas/perfil/conductor.html'
- */
 window.navegarA = function(rutaVista) {
     console.log(` 🧭 [NAVEGAR_A]: Invocado con la ruta -> ${rutaVista}`);
     if (rutaVista.includes("mapa-activa")) {
@@ -298,35 +316,96 @@ window.navegarA = function(rutaVista) {
     } else if (rutaVista.includes("reportes")) {
         alternarVistaPestaña("pestana-notificaciones-reportes");
     } else if (rutaVista.includes("conductor")) {
-        alternarVistaPestaña("pestana-perfil-conductor");
+        alternarVistaPestaÑA("pestana-perfil-conductor");
     } else {
         console.warn(` ⚠️ [NAVEGAR_A]: Ruta no reconocida -> ${rutaVista}`);
     }
 };
 
 window.alternarVistaPestaña = alternarVistaPestaña;
-
-// --- BINDINGS EN WINDOW PARA OPERACIONES DE BD Y RUTAS ---
 window.refrescarUI = refrescarUI;
+
+// --- BINDINGS EN WINDOW CON ANIMACIÓN Y AVISOS DE PROCESOS ---
 
 window.ejecutarPasoAceptarPedido = async function(idPedido) {
     console.log(` 📥 [OPERACION]: Aceptando pedido -> ${idPedido}`);
+    
+    if (typeof window.mostrarAvisoProceso === 'function') {
+        window.mostrarAvisoProceso({
+            id: `aceptar-${idPedido}`,
+            titulo: 'Aceptando Pedido',
+            mensaje: 'Actualizando estado en base local...',
+            estado: 'procesando',
+            progreso: 50
+        });
+    }
+
     listaPedidosGlobal = await actualizarEstadoPedido(idPedido, "EN_CAMINO");
     refrescarUI();
+
+    if (typeof window.actualizarProgresoProceso === 'function') {
+        window.actualizarProgresoProceso(`aceptar-${idPedido}`, 100, '¡Pedido En Camino!', 'exito');
+        window.cerrarAvisoProceso(`aceptar-${idPedido}`, 1200);
+    }
 };
 
 window.ejecutarPasoNotificarLlegada = async function(idPedido) {
     console.log(` 🔔 [OPERACION]: Notificando llegada para pedido -> ${idPedido}`);
+    
+    if (typeof window.mostrarAvisoProceso === 'function') {
+        window.mostrarAvisoProceso({
+            id: `llegada-${idPedido}`,
+            titulo: 'Notificando Llegada',
+            mensaje: 'Registrando estado de arribo...',
+            estado: 'procesando',
+            progreso: 50
+        });
+    }
+
     llamadasRealizadas = 0;
     listaPedidosGlobal = await actualizarEstadoPedido(idPedido, "LLEGADO");
     refrescarUI();
+
+    if (typeof window.actualizarProgresoProceso === 'function') {
+        window.actualizarProgresoProceso(`llegada-${idPedido}`, 100, '¡Arribo Registrado!', 'exito');
+        window.cerrarAvisoProceso(`llegada-${idPedido}`, 1200);
+    }
 };
 
 window.ejecutarPasoFinalizarPedido = async function(idPedido) {
     console.log(` ✅ [OPERACION]: Finalizando pedido -> ${idPedido}`);
-    const coords = await capturarCoordenadasGPS();
-    listaPedidosGlobal = await actualizarEstadoPedido(idPedido, "FINALIZADO", { coordenadasGPS: coords });
-    await avanzarAlSiguientePedido();
+    const toastId = `fin-${idPedido}`;
+
+    if (typeof window.mostrarAvisoProceso === 'function') {
+        window.mostrarAvisoProceso({
+            id: toastId,
+            titulo: 'Finalizando Pedido',
+            mensaje: 'Obteniendo coordenadas GPS de entrega...',
+            estado: 'procesando',
+            progreso: 30
+        });
+    }
+
+    try {
+        const coords = await capturarCoordenadasGPS();
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 70, 'Guardando evidencia y avanzando...');
+        }
+
+        listaPedidosGlobal = await actualizarEstadoPedido(idPedido, "FINALIZADO", { coordenadasGPS: coords });
+        await avanzarAlSiguientePedido();
+
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, '¡Entrega registrada con éxito!', 'exito');
+            window.cerrarAvisoProceso(toastId, 1500);
+        }
+    } catch (err) {
+        console.error("❌ Error finalizando pedido:", err);
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, 'Error al capturar ubicación GPS', 'error');
+            window.cerrarAvisoProceso(toastId, 2500);
+        }
+    }
 };
 
 window.registrarIntentoLlamada = function() {
@@ -336,26 +415,96 @@ window.registrarIntentoLlamada = function() {
 
 window.procesarCargaManualEnlace = function() {
     const inputTxt = document.getElementById("txt-payload-manual");
-    if (inputTxt) {
+    if (inputTxt && inputTxt.value.trim()) {
         console.log(" 📝 [OPERACION]: Cargando enlace/payload manual...");
+        
+        const toastId = 'carga-manual';
+        if (typeof window.mostrarAvisoProceso === 'function') {
+            window.mostrarAvisoProceso({
+                id: toastId,
+                titulo: 'Procesando Enlace',
+                mensaje: 'Decodificando paradas de la ruta...',
+                estado: 'procesando',
+                progreso: 30
+            });
+        }
+
         cargarRutaDesdeTextoOEnlace(inputTxt.value, async (nuevasParadas) => {
+            if (typeof window.actualizarProgresoProceso === 'function') {
+                window.actualizarProgresoProceso(toastId, 80, 'Actualizando consola y mapa...');
+            }
+
             listaPedidosGlobal = nuevasParadas;
             await determinarSiguientePedidoActivo();
             refrescarUI();
+
+            if (typeof window.actualizarProgresoProceso === 'function') {
+                window.actualizarProgresoProceso(toastId, 100, '¡Ruta cargada exitosamente!', 'exito');
+                window.cerrarAvisoProceso(toastId, 1500);
+            }
         });
+    } else {
+        alert("⚠️ [ALERTA]: Por favor ingrese un texto o enlace de payload válido.");
     }
 };
 
-window.ejecutarProcesamientoIaCloud = function() {
-    console.log(" 🤖 [OPERACION]: Ejecutando procesamiento IA Cloud...");
-    if (window.ImportadorMasivoMensajero && typeof window.ImportadorMasivoMensajero.ejecutarImportacionArchivo === "function") {
-        window.ImportadorMasivoMensajero.ejecutarImportacionArchivo(async (nuevasParadas) => {
-            listaPedidosGlobal = nuevasParadas;
-            await determinarSiguientePedidoActivo();
-            refrescarUI();
-        });
-    } else {
-        alert(">>> ALERTA: Subsistema de importación masiva no instanciado.");
+window.ejecutarProcesamientoIaCloud = async function() {
+    const loteArchivos = typeof window.obtenerLoteFotosActual === "function" 
+        ? window.obtenerLoteFotosActual() 
+        : [];
+
+    if (loteArchivos.length === 0) {
+        if (typeof window.notificarError === "function") {
+            window.notificarError("LOTE VACÍO", "Capture o seleccione al menos una foto antes de procesar.");
+        } else {
+            alert("⚠️ Capture al menos una foto antes de procesar.");
+        }
+        return;
+    }
+
+    console.log(`🤖 [OPERACION]: Enviando lote de ${loteArchivos.length} fotos a IA Cloud...`);
+
+    // Abrir Modal de Progreso Cyberpunk
+    if (window.visorAnimaciones && typeof window.visorAnimaciones.mostrarModal === "function") {
+        window.visorAnimaciones.mostrarModal("EXTRAYENDO DATOS CON IA CLOUD", `Procesando 0 de ${loteArchivos.length} tirillas...`);
+    }
+
+    try {
+        // Enviar la lista completa al importador masivo
+        if (window.ImportadorMasivoMensajero && typeof window.ImportadorMasivoMensajero.ejecutarImportacionLote === "function") {
+            
+            await window.ImportadorMasivoMensajero.ejecutarImportacionLote(loteArchivos, (progresoActual, total) => {
+                // Actualizar la barra y porcentaje en tiempo real
+                if (window.visorAnimaciones && typeof window.visorAnimaciones.actualizarProgreso === "function") {
+                    window.visorAnimaciones.actualizarProgreso(progresoActual, total, `Analizando tirilla ${progresoActual} de ${total}...`);
+                }
+            }, async (nuevasParadas) => {
+                listaPedidosGlobal = nuevasParadas;
+                await determinarSiguientePedidoActivo();
+                refrescarUI();
+
+                // Ocultar modal y limpiar el lote
+                if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
+                    window.visorAnimaciones.ocultarModal();
+                }
+                if (typeof window.limpiarLoteFotos === "function") {
+                    window.limpiarLoteFotos();
+                }
+                if (typeof window.notificarExito === "function") {
+                    window.notificarExito("PROCESO COMPLETADO", `Se extrajeron ${nuevasParadas.length} paradas exitosamente.`);
+                }
+            });
+
+        } else {
+            alert("⚠️ Subsistema de importación por lote no configurado.");
+            if (window.visorAnimaciones) window.visorAnimaciones.ocultarModal();
+        }
+    } catch (err) {
+        console.error("❌ [IA_CLOUD]: Error al procesar el lote:", err);
+        if (window.visorAnimaciones) window.visorAnimaciones.ocultarModal();
+        if (typeof window.notificarError === "function") {
+            window.notificarError("ERROR IA CLOUD", err.message || "Fallo en el procesamiento masivo.");
+        }
     }
 };
 
@@ -379,9 +528,25 @@ window.borrarParadaLocalUI = async function(idParada) {
 window.purgarTodaLaRutaUI = async function() {
     console.log(" 🧹 [OPERACION]: Purgando toda la ruta local...");
     if (confirm(">>> ¿Desea borrar TODAS las paradas?")) {
+        const toastId = 'purgar-ruta';
+        if (typeof window.mostrarAvisoProceso === 'function') {
+            window.mostrarAvisoProceso({
+                id: toastId,
+                titulo: 'Eliminando Ruta',
+                mensaje: 'Limpiando IndexedDB y registros...',
+                estado: 'procesando',
+                progreso: 50
+            });
+        }
+
         listaPedidosGlobal = await borrarRutaCompletaLocal();
         indicePedidoActivo = 0;
         refrescarUI();
+
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, '¡Ruta purgada completamente!', 'advertencia');
+            window.cerrarAvisoProceso(toastId, 1500);
+        }
     }
 };
 
@@ -461,6 +626,17 @@ window.guardarParadaManualUI = async function () {
         return;
     }
 
+    const toastId = 'guardar-parada';
+    if (typeof window.mostrarAvisoProceso === 'function') {
+        window.mostrarAvisoProceso({
+            id: toastId,
+            titulo: id ? 'Actualizando Parada' : 'Creando Parada',
+            mensaje: 'Sincronizando con almacenamiento IndexedDB...',
+            estado: 'procesando',
+            progreso: 40
+        });
+    }
+
     if (id) {
         console.log(` 💾 [FORMULARIO]: Guardando cambios de edición para ID -> ${id}`);
         let rutaActual = (await obtenerParadasGuardadas()) || [];
@@ -483,7 +659,6 @@ window.guardarParadaManualUI = async function () {
         await determinarSiguientePedidoActivo();
         refrescarUI();
         window.limpiarFormularioParadaUI();
-        alert(">>> [ÉXITO]: Parada actualizada correctamente en la base local.");
     } else {
         console.log(" 💾 [FORMULARIO]: Creando nueva parada manual...");
         await window.agregarParadaLocal({
@@ -494,13 +669,14 @@ window.guardarParadaManualUI = async function () {
             cuotaModeradora
         });
         window.limpiarFormularioParadaUI();
-        alert(">>> [ÉXITO]: Parada guardada correctamente.");
+    }
+
+    if (typeof window.actualizarProgresoProceso === 'function') {
+        window.actualizarProgresoProceso(toastId, 100, '¡Parada guardada con éxito!', 'exito');
+        window.cerrarAvisoProceso(toastId, 1500);
     }
 };
 
-/**
- * Inicia el recorrido desde la primera parada hasta la última en el mapa.
- */
 window.iniciarRutaCompleta = async function() {
     console.log("🚀 [OPERACION]: Iniciando recorrido completo de la ruta...");
     listaPedidosGlobal = (await obtenerParadasGuardadas()) || [];
@@ -516,14 +692,19 @@ window.iniciarRutaCompleta = async function() {
     if (typeof window.alternarVistaPestaña === "function") {
         window.alternarVistaPestaña("mapa-fullscreen-container");
     }
-    
-    alert("🧭 [RUTA INICIADA]: Navegando a la primera parada en el mapa.");
+
+    if (typeof window.mostrarAvisoProceso === 'function') {
+        window.mostrarAvisoProceso({
+            id: 'inicio-ruta',
+            titulo: 'Ruta Iniciada',
+            mensaje: 'Navegando a la primera parada en el mapa.',
+            estado: 'exito',
+            progreso: 100
+        });
+        window.cerrarAvisoProceso('inicio-ruta', 2000);
+    }
 };
 
-/**
- * Extrae los SCC, fecha, mensajero, estados actuales y el detalle completo de cada parada,
- * y los guarda en el almacén de Planillas de IndexedDB.
- */
 window.generarPlanillaDesdeRuta = async function() {
     console.log("📝 [OPERACION]: Generando planilla desde la ruta activa...");
     const paradasActuales = (await obtenerParadasGuardadas()) || [];
@@ -533,13 +714,20 @@ window.generarPlanillaDesdeRuta = async function() {
         return;
     }
 
-    // Mapear Códigos SCC en string concatenado para vista rápida
+    const toastId = `planilla-${Date.now()}`;
+    if (typeof window.mostrarAvisoProceso === 'function') {
+        window.mostrarAvisoProceso({
+            id: toastId,
+            titulo: 'Generando Planilla',
+            mensaje: 'Procesando historial y estados SCC...',
+            estado: 'procesando',
+            progreso: 30
+        });
+    }
+
     const listaScc = paradasActuales.map(p => p.ssc || p.id).join(", ");
-    
-    // Determinar estado consolidado del paquete
     const estadosScc = paradasActuales.every(p => p.estado === "FINALIZADO") ? "Entregado" : "Devuelto";
 
-    // Mapeo detallado de paradas preservando todos los campos para el PDF
     const paradasDetalle = paradasActuales.map(p => ({
         id: p.id,
         ssc: p.ssc || p.id,
@@ -562,14 +750,31 @@ window.generarPlanillaDesdeRuta = async function() {
     };
 
     try {
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 75, 'Guardando en módulo de planillas...');
+        }
+
         await guardarPlanillaReportada(nuevaPlanilla);
-        alert(`✅ [PLANILLA CREADA]: Planilla guardada exitosamente.\nSCCs: ${listaScc}\nEstado: ${estadosScc}`);
-        
+
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, '¡Planilla guardada exitosamente!', 'exito');
+            window.cerrarAvisoProceso(toastId, 1500);
+        }
+
         if (typeof window.navegarA === "function") {
             window.navegarA("vistas/notificaciones/planillas.html");
         }
     } catch (err) {
         console.error("❌ [PLANILLA]: Error generando planilla:", err);
-        alert("❌ Error al guardar la planilla.");
+        if (typeof window.mostrarAvisoProceso === 'function') {
+            window.mostrarAvisoProceso({
+                id: toastId,
+                titulo: 'Error de Planilla',
+                mensaje: 'Ocurrió un fallo al guardar la planilla local.',
+                estado: 'error',
+                progreso: 100,
+                acciones: [{ texto: 'Cerrar', clase: 'danger', accion: (id) => window.cerrarAvisoProceso(id) }]
+            });
+        }
     }
 };

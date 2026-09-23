@@ -12,10 +12,10 @@
 </div>
 
 <!-- CONTENEDOR PRINCIPAL DE LA RUTA -->
-<div class="modulo-ruta-container">
+<div class="modulo-ruta-container" style="display: flex; flex-direction: column; gap: 10px;">
 
     <!-- ACORDEÓN PARA CARGAR / PEGAR RUTA DESDE WHATSAPP O TELEGRAM -->
-    <section class="panel-maquina" style="border-color: var(--neon-purple, #b359ff); margin-bottom: 12px">
+    <section class="panel-maquina" style="border-color: var(--neon-purple, #b359ff); flex-shrink: 0;">
         <details style="cursor: pointer">
             <summary style="color: var(--neon-purple, #b359ff); font-weight: bold; font-size: 0.85rem">
                 [📥] CARGAR / PEGAR RUTA DESDE WHATSAPP O TELEGRAM
@@ -41,7 +41,7 @@
     </section>
 
     <!-- FORMULARIO ACORDEÓN PARA CREAR / EDITAR PARADA MANUALMENTE -->
-    <section class="panel-maquina" style="border-color: var(--neon-green, #00ff66); margin-bottom: 12px">
+    <section class="panel-maquina" style="border-color: var(--neon-green, #00ff66); flex-shrink: 0;">
         <details id="details-formulario-parada" style="cursor: pointer">
             <summary style="color: var(--neon-green, #00ff66); font-weight: bold; font-size: 0.85rem">
                 [➕ / ✏️] GESTIÓN MANUAL DE PARADA (NUEVA O EDICIÓN)
@@ -84,11 +84,11 @@
     </section>
 
     <!-- POOL DINÁMICA DE CONTRATOS DISPONIBLES -->
-    <div id="pool-pedidos-dinamico" style="margin-bottom: 12px"></div>
+    <div id="pool-pedidos-dinamico" style="flex-shrink: 0;"></div>
 
-    <!-- LISTA DE PARADAS ZONIFICADAS Y REORDENABLES CON ACORDEONES -->
-    <section class="panel-maquina">
-        <div class="header-status" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+    <!-- LISTA DE PARADAS ZONIFICADAS -->
+    <section class="panel-maquina" style="display: flex; flex-direction: column; min-height: 0;">
+        <div class="header-status" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0;">
             <span style="color: var(--neon-blue, #00e5ff); font-weight: bold">[📋] HOJA_DE_RUTA_ZONIFICADA</span>
             <div style="display: flex; gap: 6px; align-items: center">
                 <span id="txt-total-paradas" style="margin-right: 4px; font-size: 0.8rem; color: #aaa">0 PARADAS</span>
@@ -101,11 +101,9 @@
             </div>
         </div>
 
-        <!-- CONTENEDOR DINÁMICO PARA TABLAS Y ACORDEONES POR ZONA -->
-        <!-- Cada acordeón inyectará internamente la barra de acciones:
-             [ ► _INICIAR ] [ ⚡ OPTIMIZAR PROXIMIDAD ] [ 📝 _PLANILLAR ] [ 🗺️ MAPA ] -->
-        <div id="contenedor-acordeones-zonas" class="zonas-accordion-container" style="margin-top: 10px">
-            <div id="lista-paradas-zonificadas" style="max-height: 450px; overflow-y: auto"></div>
+        <!-- CONTENEDOR DESPLAZABLE ÚNICO (SCROLLMASTER) SIN SCROLLS ANIDADOS -->
+        <div id="contenedor-acordeones-zonas" class="cyber-scroll-container">
+            <div id="lista-paradas-zonificadas"></div>
         </div>
     </section>
 

@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA RENDERIZADOR DE INTERFAZ OPERACIONAL (TIRILLAS & ZONAS)
  * Ubicación: pwa-mensajero/modulos/mensajero-ui.js
- * Fachada principal modularizada
+ * Fachada principal modularizada con acordeones exclusivos y scroll por zona
  */
 
 let actualizarPuntosEnMapaFn = null;
@@ -64,7 +64,7 @@ function emitirHaptico(ms = 30) {
  * Renderiza la consola de operaciones táctica desplegando los campos clave de la tirilla y acordeones zonificados.
  */
 export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 0, llamadasRealizadas = 0) {
-    console.group("🖥️ [MENSAJERO_UI]: Renderizando Consola de Operaciones y Acordeones");
+    console.group("🖥️ [MENSAJERO_UI]: Renderizando Consola de Operaciones y Acordeones Independientes");
     
     paradasMemoriaLocal = Array.isArray(listaPedidos) ? [...listaPedidos] : [];
     console.log(`📊 Paradas totales recibidas: ${paradasMemoriaLocal.length} | Ítem Activo: Índice ${indiceActivo}`);
@@ -112,34 +112,49 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
             grupos[zKey].push({ ...item, origIndex: index });
         });
 
-        Object.keys(grupos).forEach(zonaKey => {
+        const keysZona = Object.keys(grupos);
+
+        keysZona.forEach((zonaKey, indexZona) => {
             const infoZona = PALETA_ZONAS_REF[zonaKey] || { color: "#00e5ff", label: zonaKey };
             const itemsGrupo = grupos[zonaKey];
 
             itemsGrupo.sort((a, b) => (a.secuenciaZona || a.secuencia || 0) - (b.secuenciaZona || b.secuencia || 0));
 
             const details = document.createElement("details");
-            details.className = "cyber-accordion";
-            details.style.cssText = `background:#0d1117; border:1px solid ${infoZona.color}; margin-bottom:8px; border-radius:4px; overflow:hidden;`;
-            details.open = true;
+            details.className = "cyber-accordion acordeon-zona-item";
+            details.style.cssText = `background:#0d1117; border:1px solid ${infoZona.color}; margin-bottom:10px; border-radius:6px; overflow:hidden; position:relative;`;
+            
+            // Abrir únicamente la primera zona por defecto
+            details.open = (indexZona === 0);
 
+            // Cierre automático exclusivo de otros acordeones al abrir uno nuevo
             details.addEventListener("toggle", () => {
                 if (details.open) {
+                    console.log(`📂 [MENSAJERO_UI]: Enfocando zona exclusiva -> ${infoZona.label}`);
+                    
                     if (typeof enfocarZonaEnMapaFn === "function") {
                         enfocarZonaEnMapaFn(itemsGrupo);
                     } else if (typeof window.enfocarZonaEnMapa === "function") {
                         window.enfocarZonaEnMapa(itemsGrupo);
                     }
+
+                    // Cerrar automáticamente todos los demás acordeones del contenedor
+                    const todosLosAcordeones = contenedorAcordeones.querySelectorAll(".acordeon-zona-item");
+                    todosLosAcordeones.forEach((otroAcc) => {
+                        if (otroAcc !== details && otroAcc.open) {
+                            otroAcc.open = false;
+                        }
+                    });
                 }
             });
 
             // Cabecera Summary
             const summary = document.createElement("summary");
             summary.className = "cyber-summary";
-            summary.style.cssText = `padding:8px 12px; background:#161b22; color:${infoZona.color}; font-weight:bold; font-size:0.85rem; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none;`;
+            summary.style.cssText = `padding:10px 14px; background:#161b22; color:${infoZona.color}; font-weight:bold; font-size:0.85rem; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; border-bottom:1px solid rgba(255,255,255,0.05);`;
             summary.innerHTML = `
-                <span>▼ ${infoZona.label} (${itemsGrupo.length})</span>
-                <span class="badge-zone" style="background:${infoZona.color}22; border:1px solid ${infoZona.color}; font-size:0.7rem; padding:1px 6px; border-radius:3px;">
+                <span>▼ ${infoZona.label} (${itemsGrupo.length} Envíos)</span>
+                <span class="badge-zone" style="background:${infoZona.color}22; border:1px solid ${infoZona.color}; font-size:0.7rem; padding:2px 8px; border-radius:3px; color:${infoZona.color}; font-family:monospace;">
                     ${infoZona.color}
                 </span>
             `;
@@ -163,10 +178,21 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                 </button>
             `;
 
-            // Lista con DnD
+            // Lista con Drag & Drop y barra deslizante independiente propia
             const listContainer = document.createElement("div");
-            listContainer.className = "paradas-drag-list";
-            listContainer.style.cssText = "padding:6px; background:#05070f; display:flex; flex-direction:column; gap:6px;";
+            listContainer.className = "paradas-drag-list zona-scroll-dedicado";
+            listContainer.style.cssText = `
+                max-height: clamp(200px, 38dvh, 400px);
+                overflow-y: auto !important;
+                touch-action: pan-y !important;
+                -webkit-overflow-scrolling: touch;
+                padding: 8px 6px 30px 6px;
+                background: #05070f;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                position: relative;
+            `;
 
             itemsGrupo.forEach((p, idx) => {
                 const idParadaLimpio = String(p.id || p.ssc || `p_${idx}`).replace(/'/g, "\\'");
@@ -176,7 +202,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                 card.setAttribute("draggable", "true");
                 card.setAttribute("data-id", p.id || p.ssc);
                 card.setAttribute("data-orig-index", p.origIndex);
-                card.style.cssText = `background:#0c080f; border:1px solid ${p.origIndex === indiceActivo ? 'var(--neon-cyan, #00e5ff)' : '#291f33'}; padding:6px 8px; font-size:0.75rem; border-radius:3px; cursor:grab;`;
+                card.style.cssText = `background:#0c080f; border:1px solid ${p.origIndex === indiceActivo ? 'var(--neon-cyan, #00e5ff)' : '#291f33'}; padding:8px 10px; font-size:0.75rem; border-radius:4px; cursor:grab; margin-bottom:2px;`;
 
                 card.innerHTML = `
                     <div id="vista-lectura-${p.origIndex}" style="display:flex; justify-content:space-between; align-items:center;">

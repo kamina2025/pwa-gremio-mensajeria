@@ -12,15 +12,15 @@
 <div id="tab-generar-planilla" class="tab-content active">
     <header class="cyber-header flex-between">
         <h3>_GENERACIÓN DE PLANILLAS ZONIFICADAS</h3>
-        <button class="cyber-btn btn-sm" onclick="renderizarModuloPlanillas()">
+        <button class="tab-btn" onclick="renderizarModuloPlanillas()">
             <i class="fa-solid fa-rotate-right"></i> _ACTUALIZAR_ZONAS
         </button>
     </header>
     <div class="panel-contenido">
         <p class="cyber-text">Seleccione los envíos o confirme la zona para conformar y emitir la planilla oficial en PDF.</p>
         
-        <!-- CONTENEDOR DINÁMICO DONDE SE RENDERIZAN LAS ZONAS Y SUS PARADAS -->
-        <div id="contenedor-planillado-zonas" class="zonas-accordion-container" style="margin-top: 15px;">
+        <!-- CONTENEDOR DINÁMICO CON SCROLLMASTER UNIFICADO Y PADDING DE SEGURIDAD -->
+        <div id="contenedor-planillado-zonas" class="zonas-accordion-container cyber-scroll-container" style="margin-top: 15px;">
             <div class="text-center text-muted" style="padding: 20px;">
                 🔍 Cargando zonas pendientes para planillar...
             </div>

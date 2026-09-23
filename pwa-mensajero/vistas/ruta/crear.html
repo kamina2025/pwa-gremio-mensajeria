@@ -5,7 +5,7 @@
 </div>
 
 <!-- Contenedor Principal de la Ruta e Ingestión -->
-<div class="modulo-ruta-container">
+<div class="modulo-ruta-container" style="padding-bottom: 90px;">
     <div class="card-info-ruta">
         <div class="card-header">
             <i class="fa-solid fa-file-medical"></i>
@@ -16,137 +16,191 @@
         </p>
     </div>
 
-    <!-- Módulo de Métodos de Carga Masiva -->
+    <!-- Módulo de Métodos de Carga Masiva (Acordeones Desplegables Exclusivos) -->
     <section id="mod-creacion" class="modulo-vista">
         <div class="panel-maquina panel-billetera">
             <div
                 class="grid-balance-monolitico"
-                style="display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0">
+                style="display: flex; flex-direction: column; gap: 10px; margin: 12px 0">
                 
                 <!-- MODO 1: FOTOGRAFÍAS DE TIRILLAS / CÁMARA ANDROID / IA CLOUD (ACUMULATIVO) -->
-                <div
-                    class="sub-panel-datos"
-                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
-                    <div
-                        class="label-titulo"
-                        style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-weight: bold; color: var(--neon-cyan, #00f3ff); margin-bottom: 8px">
-                        <span>[📸] MODO 1: FOTOGRAFÍAS / CÁMARA (IA CLOUD)</span>
+                <details
+                    name="acordeon-modos"
+                    class="sub-panel-datos modo-acordeon"
+                    open
+                    style="background: #0c080f; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px; overflow: hidden; transition: all 0.3s ease;">
+                    
+                    <summary
+                        class="cyber-btn-touch"
+                        onclick="if('vibrate' in navigator) navigator.vibrate(20);"
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 12px; font-size: 0.8rem; font-weight: bold; color: var(--neon-cyan, #00f3ff); background: #120b17; cursor: pointer; user-select: none; outline: none; list-style: none;">
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <span class="flecha-indicador" style="font-size: 0.7rem; transition: transform 0.2s;">▶</span>
+                            [📸] MODO 1: FOTOGRAFÍAS / CÁMARA (IA CLOUD)
+                        </span>
                         <span id="badge-conteo-fotos" class="badge-zone" style="background: rgba(0,243,255,0.15); border: 1px solid #00f3ff; color: #00f3ff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">
                             0 Fotos Acumuladas
                         </span>
-                    </div>
-                    <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
-                        Tome fotos una por una con la cámara trasera o seleccione múltiples de la galería. Se irán acumulando en el lote.
-                    </p>
-                    
-                    <label for="archivo-base-datos" style="display: block; font-size: 0.7rem; color: #00f3ff; margin-bottom: 4px;">
-                        Capturar o Agregar Foto/Archivo:
-                    </label>
-                    <input
-                        type="file"
-                        id="archivo-base-datos"
-                        accept="image/*,application/pdf"
-                        capture="environment"
-                        multiple
-                        class="input-terminal"
-                        style="width: 100%; margin-bottom: 10px; font-size: 0.8rem; padding: 6px;" />
+                    </summary>
 
-                    <!-- Galería de Miniaturas para Previsualizar y Eliminar -->
-                    <div 
-                        id="galeria-fotos-lote" 
-                        style="display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; margin-bottom: 10px; min-height: 50px; border-top: 1px dashed #291f33; border-bottom: 1px dashed #291f33;">
-                        <span id="galeria-vacia-msg" style="font-size: 0.7rem; color: #666; font-style: italic;">No hay fotos capturadas aún.</span>
-                    </div>
+                    <div class="contenido-acordeon" style="padding: 12px; border-top: 1px solid #291f33;">
+                        <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
+                            Tome fotos una por una con la cámara trasera o seleccione múltiples de la galería. Se irán acumulando en el lote.
+                        </p>
+                        
+                        <label for="archivo-base-datos" style="display: block; font-size: 0.7rem; color: #00f3ff; margin-bottom: 4px;">
+                            Capturar o Agregar Foto/Archivo:
+                        </label>
+                        <input
+                            type="file"
+                            id="archivo-base-datos"
+                            accept="image/*,application/pdf"
+                            capture="environment"
+                            multiple
+                            class="input-terminal"
+                            style="width: 100%; margin-bottom: 10px; font-size: 0.8rem; padding: 6px;" />
 
-                    <div style="display: flex; gap: 8px;">
-                        <button
-                            type="button"
-                            id="btn-limpiar-lote-fotos"
-                            class="btn-terminal cyber-btn-touch danger"
-                            onclick="if(typeof window.limpiarLoteFotos === 'function') window.limpiarLoteFotos();"
-                            style="width: 30%; font-size: 0.75rem; background: #1a080c; border-color: #ff3366; color: #ff3366;">
-                            [🗑️] LIMPIAR
-                        </button>
+                        <!-- Galería de Miniaturas para Previsualizar y Eliminar -->
+                        <div 
+                            id="galeria-fotos-lote" 
+                            style="display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; margin-bottom: 10px; min-height: 50px; border-top: 1px dashed #291f33; border-bottom: 1px dashed #291f33;">
+                            <span id="galeria-vacia-msg" style="font-size: 0.7rem; color: #666; font-style: italic;">No hay fotos capturadas aún.</span>
+                        </div>
 
-                        <button
-                            type="button"
-                            id="btn-procesar-archivo-masivo"
-                            class="btn-terminal btn-crypto cyber-btn-touch"
-                            onclick="console.log('🤖 [CREAR_RUTA]: Iniciando procesamiento IA Cloud...'); if(typeof window.ejecutarProcesamientoIaCloud === 'function') { window.ejecutarProcesamientoIaCloud(); } else { alert('⚠️ Módulo de importación IA cargando...'); }"
-                            style="width: 70%; font-weight: bold;">
-                            [⚙️] PROCESAR LOTE CON IA CLOUD
-                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            <button
+                                type="button"
+                                id="btn-limpiar-lote-fotos"
+                                class="btn-terminal cyber-btn-touch danger"
+                                onclick="if(typeof window.limpiarLoteFotos === 'function') window.limpiarLoteFotos();"
+                                style="width: 30%; font-size: 0.75rem; background: #1a080c; border-color: #ff3366; color: #ff3366;">
+                                [🗑️] LIMPIAR
+                            </button>
+
+                            <button
+                                type="button"
+                                id="btn-procesar-archivo-masivo"
+                                class="btn-terminal btn-crypto cyber-btn-touch"
+                                onclick="console.log('🤖 [CREAR_RUTA]: Iniciando procesamiento IA Cloud...'); if(typeof window.ejecutarProcesamientoIaCloud === 'function') { window.ejecutarProcesamientoIaCloud(); } else { alert('⚠️ Módulo de importación IA cargando...'); }"
+                                style="width: 70%; font-weight: bold;">
+                                [⚙️] PROCESAR LOTE CON IA CLOUD
+                            </button>
+                        </div>
                     </div>
-                </div>
+                </details>
 
                 <!-- MODO 2: TEXTO PLANO / WHATSAPP / PAYLOAD -->
-                <div
-                    class="sub-panel-datos"
-                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
-                    <div
-                        class="label-titulo"
-                        style="font-size: 0.8rem; font-weight: bold; color: var(--neon-purple, #b359ff); margin-bottom: 8px">
-                        [💬] MODO 2: MANIFIESTO EN TEXTO PLANO / WHATSAPP / PAYLOAD
+                <details
+                    name="acordeon-modos"
+                    class="sub-panel-datos modo-acordeon"
+                    style="background: #0c080f; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px; overflow: hidden; transition: all 0.3s ease;">
+                    
+                    <summary
+                        class="cyber-btn-touch"
+                        onclick="if('vibrate' in navigator) navigator.vibrate(20);"
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 12px; font-size: 0.8rem; font-weight: bold; color: var(--neon-purple, #b359ff); background: #120b17; cursor: pointer; user-select: none; outline: none; list-style: none;">
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <span class="flecha-indicador" style="font-size: 0.7rem; transition: transform 0.2s;">▶</span>
+                            [💬] MODO 2: MANIFIESTO EN TEXTO PLANO / WHATSAPP / PAYLOAD
+                        </span>
+                    </summary>
+
+                    <div class="contenido-acordeon" style="padding: 12px; border-top: 1px solid #291f33;">
+                        <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
+                            Pegue la lista de paradas enviada por chat o la URL con payload recibida:
+                        </p>
+                        
+                        <label for="txt-payload-manual" style="display: block; font-size: 0.7rem; color: #b359ff; margin-bottom: 4px;">
+                            Ingresar Contenido de Texto:
+                        </label>
+                        <textarea
+                            id="txt-payload-manual"
+                            rows="3"
+                            class="input-terminal"
+                            placeholder="Ej: SSC: 103458, Carmen Edith Landazuri, carrera 49 b n 12 - 106, 3147714013, Cuota: $20.100&#10;o enlace payload=..."
+                            style="width: 100%; font-size: 0.8rem; margin-bottom: 10px; padding: 6px;"></textarea>
+                        
+                        <button
+                            type="button"
+                            id="btn-procesar-texto-manual"
+                            class="btn-terminal btn-crypto cyber-btn-touch"
+                            onclick="console.log('💬 [CREAR_RUTA]: Procesando payload de texto plano...'); if(typeof window.procesarCargaManualEnlace === 'function') { window.procesarCargaManualEnlace(); } else { alert('⚠️ Subsistema de carga manual no listo.'); }"
+                            style="width: 100%; border-color: var(--neon-purple, #b359ff); color: #fff; font-weight: bold;">
+                            [⚡] IMPORTAR TEXTO PLANO / PAYLOAD
+                        </button>
                     </div>
-                    <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
-                        Pegue la lista de paradas enviada por chat o la URL con payload recibida:
-                    </p>
-                    
-                    <label for="txt-payload-manual" style="display: block; font-size: 0.7rem; color: #b359ff; margin-bottom: 4px;">
-                        Ingresar Contenido de Texto:
-                    </label>
-                    <textarea
-                        id="txt-payload-manual"
-                        rows="3"
-                        class="input-terminal"
-                        placeholder="Ej: SSC: 103458, Carmen Edith Landazuri, carrera 49 b n 12 - 106, 3147714013, Cuota: $20.100&#10;o enlace payload=..."
-                        style="width: 100%; font-size: 0.8rem; margin-bottom: 10px; padding: 6px;"></textarea>
-                    
-                    <button
-                        type="button"
-                        id="btn-procesar-texto-manual"
-                        class="btn-terminal btn-crypto cyber-btn-touch"
-                        onclick="console.log('💬 [CREAR_RUTA]: Procesando payload de texto plano...'); if(typeof window.procesarCargaManualEnlace === 'function') { window.procesarCargaManualEnlace(); } else { alert('⚠️ Subsistema de carga manual no listo.'); }"
-                        style="width: 100%; border-color: var(--neon-purple, #b359ff); color: #fff; font-weight: bold;">
-                        [⚡] IMPORTAR TEXTO PLANO / PAYLOAD
-                    </button>
-                </div>
+                </details>
 
                 <!-- MODO 3: EXTRAER DATOS LOCALES SIN IA (HEURÍSTICA/CSV/EXCEL) -->
-                <div
-                    class="sub-panel-datos"
-                    style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
-                    <div
-                        class="label-titulo"
-                        style="font-size: 0.8rem; font-weight: bold; color: var(--neon-green, #3eb84a); margin-bottom: 8px">
-                        [📂] MODO 3: ARCHIVOS LOCALES (TXT, CSV, EXCEL - SIN IA)
+                <details
+                    name="acordeon-modos"
+                    class="sub-panel-datos modo-acordeon"
+                    style="background: #0c080f; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px; overflow: hidden; transition: all 0.3s ease;">
+                    
+                    <summary
+                        class="cyber-btn-touch"
+                        onclick="if('vibrate' in navigator) navigator.vibrate(20);"
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 12px; font-size: 0.8rem; font-weight: bold; color: var(--neon-green, #3eb84a); background: #120b17; cursor: pointer; user-select: none; outline: none; list-style: none;">
+                        <span style="display: flex; align-items: center; gap: 6px;">
+                            <span class="flecha-indicador" style="font-size: 0.7rem; transition: transform 0.2s;">▶</span>
+                            [📂] MODO 3: ARCHIVOS LOCALES (TXT, CSV, EXCEL - SIN IA)
+                        </span>
+                    </summary>
+
+                    <div class="contenido-acordeon" style="padding: 12px; border-top: 1px solid #291f33;">
+                        <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
+                            Adjunte archivos de hoja de cálculo o texto para procesar localmente mediante el parser heurístico offline:
+                        </p>
+
+                        <label for="archivo-base-datos-local" style="display: block; font-size: 0.7rem; color: #3eb84a; margin-bottom: 4px;">
+                            Seleccionar Archivo de Datos Local:
+                        </label>
+                        <input
+                            type="file"
+                            id="archivo-base-datos-local"
+                            accept=".csv,.txt,.xlsx,.xls,application/pdf"
+                            multiple
+                            class="input-terminal"
+                            style="width: 100%; margin-bottom: 10px; font-size: 0.8rem; padding: 6px;" />
+
+                        <button
+                            type="button"
+                            id="btn-procesar-archivo-masivo-local"
+                            class="btn-terminal btn-crypto cyber-btn-touch"
+                            onclick="console.log('📂 [CREAR_RUTA]: Procesando archivos locales...'); if(typeof window.ImportadorMasivoMensajero?.ejecutarImportacionArchivoLocal === 'function') { window.ImportadorMasivoMensajero.ejecutarImportacionArchivoLocal(); } else if (typeof window.ImportadorMasivoMensajero?.ejecutarImportacionLocal === 'function') { window.ImportadorMasivoMensajero.ejecutarImportacionLocal(); } else { alert('⚠️ Importador local offline inicializando...'); }"
+                            style="width: 100%; border-color: var(--neon-green, #3eb84a); color: #fff; font-weight: bold;">
+                            [⚙️] PROCESAR ARCHIVOS LOCALES (OFFLINE)
+                        </button>
                     </div>
-                    <p style="font-size: 0.75rem; color: #aaa; margin-bottom: 8px">
-                        Adjunte archivos de hoja de cálculo o texto para procesar localmente mediante el parser heurístico offline:
-                    </p>
-
-                    <label for="archivo-base-datos-local" style="display: block; font-size: 0.7rem; color: #3eb84a; margin-bottom: 4px;">
-                        Seleccionar Archivo de Datos Local:
-                    </label>
-                    <input
-                        type="file"
-                        id="archivo-base-datos-local"
-                        accept=".csv,.txt,.xlsx,.xls,application/pdf"
-                        multiple
-                        class="input-terminal"
-                        style="width: 100%; margin-bottom: 10px; font-size: 0.8rem; padding: 6px;" />
-
-                    <button
-                        type="button"
-                        id="btn-procesar-archivo-masivo-local"
-                        class="btn-terminal btn-crypto cyber-btn-touch"
-                        onclick="console.log('📂 [CREAR_RUTA]: Procesando archivos locales...'); if(typeof window.ImportadorMasivoMensajero?.ejecutarImportacionArchivoLocal === 'function') { window.ImportadorMasivoMensajero.ejecutarImportacionArchivoLocal(); } else { alert('⚠️ Importador local offline inicializando...'); }"
-                        style="width: 100%; border-color: var(--neon-green, #3eb84a); color: #fff; font-weight: bold;">
-                        [⚙️] PROCESAR ARCHIVOS LOCALES (OFFLINE)
-                    </button>
-                </div>
+                </details>
 
             </div>
         </div>
     </section>
 </div>
+
+<!-- Script de Orquestación Exclusiva y Animación de Flechas -->
+<script>
+    (function inicializarAcordeonesIngesta() {
+        const acordeones = document.querySelectorAll('.modo-acordeon');
+
+        acordeones.forEach((det) => {
+            det.addEventListener('toggle', () => {
+                const flecha = det.querySelector('.flecha-indicador');
+                if (flecha) {
+                    flecha.style.transform = det.open ? 'rotate(90deg)' : 'rotate(0deg)';
+                }
+
+                // Cierre manual garantizado para compatibilidad con navegadores antiguos
+                if (det.open) {
+                    console.log(`📂 [ACORDEON]: Desplegado modo de ingesta -> ${det.querySelector('summary').innerText.trim()}`);
+                    acordeones.forEach((otro) => {
+                        if (otro !== det && otro.open) {
+                            otro.open = false;
+                        }
+                    });
+                }
+            });
+        });
+    })();
+</script>

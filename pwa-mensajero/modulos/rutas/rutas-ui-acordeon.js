@@ -9,6 +9,8 @@ let itemArrastrado = null;
 
 /**
  * Renderiza la UI de acordeones con botones de zona y tarjetas interactivas.
+ * 
+ * @param {Array<Object>|Promise<Array<Object>>} listaPedidosParam - Paradas pasadas como parámetro o resueltas desde storage.
  */
 export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
     console.log(">>> [RUTAS_UI] Ejecutando renderizarParadasZonificadasUI...");
@@ -35,6 +37,7 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         return;
     }
 
+    // Agrupar pedidos por clave o nombre de zona
     const zonasMap = {};
     listaPedidos.forEach((ped) => {
         const zonaKey = ped.zonaNombre || ped.zonaKey || ped.zona || "ZONA SIN ASIGNAR";
@@ -43,6 +46,9 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
     });
 
     Object.entries(zonasMap).forEach(([nombreZona, paradasZona]) => {
+        // Ordenar las paradas de la zona respetando secuenciaZona
+        paradasZona.sort((a, b) => (a.secuenciaZona || 0) - (b.secuenciaZona || 0));
+
         const totalParadas = paradasZona.length;
         const colorHex = paradasZona[0]?.colorZona || "#39ff14";
 
@@ -60,17 +66,21 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
             <span class="badge-zone" style="background-color: ${colorHex}; color: #0d1117;">${colorHex}</span>
         `;
 
+        // BARRA DE ACCIONES ZONIFICADA (Incluye Botón Interactivo [ ⚡ OPTIMIZAR ])
         const accionesBar = document.createElement("div");
         accionesBar.className = "zona-acciones-bar";
-        accionesBar.style.cssText = "display: flex; gap: 8px; padding: 8px; background: #080b10; border-bottom: 1px solid #30363d; margin-bottom: 8px;";
+        accionesBar.style.cssText = "display: flex; gap: 6px; padding: 8px; background: #080b10; border-bottom: 1px solid #30363d; margin-bottom: 8px; overflow-x: auto;";
         accionesBar.innerHTML = `
-            <button type="button" class="btn-zona-action btn-zona-iniciar" onclick="window.iniciarRutaZona('${nombreZona}')">
-                ► _INICIAR_RUTA
+            <button type="button" class="btn-zona-action btn-zona-iniciar" style="background: #0d1117; color: #00e5ff; border: 1px solid #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 8px;" onclick="window.iniciarRutaZona('${nombreZona}')">
+                ► _INICIAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-planillar" onclick="window.planillarRutaZona('${nombreZona}')">
+            <button type="button" class="btn-zona-action btn-zona-optimizar" style="background: #0d1117; color: #ffb300; border: 1px solid #ffb300; font-weight: bold; cursor: pointer; padding: 4px 8px;" onclick="window.optimizarProximidadZona('${nombreZona}')">
+                ⚡ OPTIMIZAR
+            </button>
+            <button type="button" class="btn-zona-action btn-zona-planillar" style="background: #0d1117; color: #8af7b3; border: 1px solid #8af7b3; cursor: pointer; padding: 4px 8px;" onclick="window.planillarRutaZona('${nombreZona}')">
                 📝 _PLANILLAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-mapa" onclick="window.verMapaZona('${nombreZona}')">
+            <button type="button" class="btn-zona-action btn-zona-mapa" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 4px 8px;" onclick="window.verMapaZona('${nombreZona}')">
                 🗺️ VER MAPA
             </button>
         `;
@@ -81,6 +91,7 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
 
         paradasZona.forEach((parada, idx) => {
             const idLimpio = String(parada.id || parada.ssc || `p_${idx}`).replace(/'/g, "\\'");
+            const numSecuencia = parada.secuenciaZona || (idx + 1);
             const card = document.createElement("div");
             
             card.className = "parada-card item-parada-lista";
@@ -91,7 +102,7 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
             card.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="flex:1; padding-right:8px;">
-                        <strong style="color: var(--neon-green, #00ff66);">[#${idx + 1}] ${parada.destinatario || parada.cliente || 'Cliente'}</strong> - ${parada.direccion || ''}
+                        <strong style="color: var(--neon-green, #00ff66);">[#${numSecuencia}] ${parada.destinatario || parada.cliente || 'Cliente'}</strong> - ${parada.direccion || ''}
                         <div style="font-size: 0.72rem; color: #aaa; margin-top: 2px;">
                             SSC: ${parada.ssc || 'N/A'} | Tel: ${parada.telefono || 'N/A'} | Cuota: ${parada.cuotaModeradora || '$0'}
                         </div>
@@ -118,6 +129,9 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
     console.log(">>> [RUTAS_UI] Renderizado dinámico de acordeones completado con éxito.");
 }
 
+/**
+ * Vincula los eventos nativos de Drag and Drop a cada tarjeta de parada.
+ */
 function vincularEventosDragDrop(cardElement, zonaNombre) {
     cardElement.addEventListener("dragstart", (e) => {
         itemArrastrado = cardElement;
@@ -165,6 +179,9 @@ function vincularEventosDragDrop(cardElement, zonaNombre) {
     });
 }
 
+/**
+ * Recalcula y notifica la nueva secuencia tras una reordenación manual vía Drag & Drop.
+ */
 async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
     const cards = contenedorPadre.querySelectorAll(".parada-card");
     const nuevaSecuencia = [];
@@ -178,7 +195,7 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
         nuevaSecuencia.push({ id, secuencia: index + 1 });
     });
 
-    console.log(`>>> [LOCAL_FIRST] Secuencia actualizada para ${zonaNombre}:`, nuevaSecuencia);
+    console.log(`>>> [LOCAL_FIRST] Secuencia manual actualizada para ${zonaNombre}:`, nuevaSecuencia);
 
     window.dispatchEvent(new CustomEvent("rutasReordenadas", {
         detail: { zonaId: zonaNombre, nuevaSecuencia }

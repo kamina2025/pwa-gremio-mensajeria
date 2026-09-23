@@ -1,4 +1,11 @@
-<!-- pwa-mensajero/vistas/ruta/ruta-activa.html -->
+<!-- ==========================================================================
+     PROTOCOLO MACONDO - VISTA RUTA ACTIVA & ZONIFICACIÓN TÁCTICA
+     Ubicación: pwa-mensajero/vistas/ruta/ruta-activa.html
+     ========================================================================== -->
+
+<!-- Hoja de Estilo Modularizada Cyberpunk -->
+<link rel="stylesheet" href="style/ruta-activa.css" />
+
 <div class="vista-header">
     <h2>// RUTAS_ACTIVAS</h2>
     <span class="badge-status online">EN LINEA</span>
@@ -6,6 +13,7 @@
 
 <!-- CONTENEDOR PRINCIPAL DE LA RUTA -->
 <div class="modulo-ruta-container">
+
     <!-- ACORDEÓN PARA CARGAR / PEGAR RUTA DESDE WHATSAPP O TELEGRAM -->
     <section class="panel-maquina" style="border-color: var(--neon-purple, #b359ff); margin-bottom: 12px">
         <details style="cursor: pointer">
@@ -94,9 +102,11 @@
         </div>
 
         <!-- CONTENEDOR DINÁMICO PARA TABLAS Y ACORDEONES POR ZONA -->
-        <!-- Cada acordeón inyectará internamente la barra de acciones: _INICIAR_RUTA, _PLANILLAR y [ 🗺️ VER MAPA ] -->
+        <!-- Cada acordeón inyectará internamente la barra de acciones:
+             [ ► _INICIAR ] [ ⚡ OPTIMIZAR PROXIMIDAD ] [ 📝 _PLANILLAR ] [ 🗺️ MAPA ] -->
         <div id="contenedor-acordeones-zonas" class="zonas-accordion-container" style="margin-top: 10px">
             <div id="lista-paradas-zonificadas" style="max-height: 450px; overflow-y: auto"></div>
         </div>
     </section>
+
 </div>

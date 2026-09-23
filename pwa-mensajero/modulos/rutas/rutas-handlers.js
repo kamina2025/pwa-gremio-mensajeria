@@ -4,6 +4,7 @@
  */
 
 import { calcularRutaAisladaPorZona } from "./rutas-aislamiento.js";
+import { optimizarRutaPorProximidadZona } from "./rutas-optimizacion.js";
 
 export function registrarHandlersGlobales() {
     window.iniciarRutaZona = function (zona) {
@@ -16,6 +17,11 @@ export function registrarHandlersGlobales() {
         } else {
             window.location.href = `vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(zona)}`;
         }
+    };
+
+    window.optimizarProximidadZona = async function (zona) {
+        console.log(`⚡ [MENSAJERO_RUTAS]: Invocando optimización por proximidad para Zona: ${zona}`);
+        await optimizarRutaPorProximidadZona(zona);
     };
 
     window.planillarRutaZona = function (zona) {

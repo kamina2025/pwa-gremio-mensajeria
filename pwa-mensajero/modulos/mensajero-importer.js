@@ -11,7 +11,6 @@ import {
 import { procesarArchivoTextoCSV } from "./base-de-datos.js";
 import { procesarImagenConGemini } from "./procesamiento-datos/ia-gemini.js";
 import { procesarTextoHeuristico } from "./procesamiento-datos/heuristico.js";
-import { visorAnimaciones } from "./visor-animaciones.js";
 
 /**
  * Normaliza y valida la estructura de cada parada asegurando los campos clave de la tirilla médica.
@@ -33,6 +32,11 @@ function normalizarParadaTirilla(p, idx) {
         cuotaModeradora: p.cuotaModeradora || p.cuota_moderadora || "$0",
         carga: p.carga || "Medicamentos Dispensación",
         estado: p.estado || "ASIGNADO",
+        lat: p.lat ? parseFloat(p.lat) : null,
+        lng: p.lng ? parseFloat(p.lng) : null,
+        zonaKey: p.zonaKey || p.zona || null,
+        nombreZona: p.nombreZona || null,
+        colorZona: p.colorZona || null,
         registroOperaciones: p.registroOperaciones || {}
     };
 
@@ -78,6 +82,21 @@ async function fusionarYGuardarParadas(nuevasParadasRaw) {
     console.log(`>>> [IMPORTER_PERSIST]: Guardando un total de ${listaFusionada.length} parada(s) acumuladas en IndexedDB/LocalState.`);
     await guardarRutaZonificada(listaFusionada);
     return listaFusionada;
+}
+
+/**
+ * Invoca el refresco dinámico de la interfaz en cascada.
+ */
+function dispararRefrescoUI(listaParadasActualizada, callbackRefresco) {
+    if (typeof callbackRefresco === "function") {
+        callbackRefresco(listaParadasActualizada);
+    } else if (typeof window.refrescarConsolaOperaciones === "function") {
+        window.refrescarConsolaOperaciones();
+    } else if (typeof window.refrescarUI === "function") {
+        window.refrescarUI();
+    } else if (typeof window.renderizarConsolaOperaciones === "function") {
+        window.renderizarConsolaOperaciones(listaParadasActualizada, 0, 0);
+    }
 }
 
 /**
@@ -191,11 +210,7 @@ export async function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco
             `>>> RUTA ACTUALIZADA EXITOSAMENTE:\n\nTotal de paradas en Hoja de Ruta: ${paradasAcumuladas.length}`
         );
 
-        if (typeof callbackRefresco === "function") {
-            callbackRefresco(paradasAcumuladas);
-        } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
-            window.refrescarConsolaOperacionesUI();
-        }
+        dispararRefrescoUI(paradasAcumuladas, callbackRefresco);
         return true;
     } catch (error) {
         alert(`>>> ERROR DE IMPORTACIÓN:\n\n${error.message}`);
@@ -284,11 +299,7 @@ export class ImportadorMasivoMensajero {
 
         inputArchivo.value = ""; // Limpiar input para permitir capturas subsecuentes
 
-        if (typeof callbackRefresco === "function") {
-            callbackRefresco(listaTotal);
-        } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
-            window.refrescarConsolaOperacionesUI();
-        }
+        dispararRefrescoUI(listaTotal, callbackRefresco);
     }
 
     /**
@@ -356,11 +367,7 @@ export class ImportadorMasivoMensajero {
 
             inputArchivo.value = ""; // Limpiar input para permitir tomar otra foto consecutiva
 
-            if (typeof callbackRefresco === "function") {
-                callbackRefresco(listaTotalActualizada);
-            } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
-                window.refrescarConsolaOperacionesUI();
-            }
+            dispararRefrescoUI(listaTotalActualizada, callbackRefresco);
 
         } catch (error) {
             console.error(">>> [IMPORTADOR_FAIL]: Error en importación acumulativa:", error);

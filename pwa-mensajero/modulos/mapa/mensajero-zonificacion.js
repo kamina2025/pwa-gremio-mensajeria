@@ -4,7 +4,7 @@
  */
 
 export const PALETA_ZONAS = {
-  "CENTRO":   { color: "#ff007f", badge: "badge-centro",   label: "ZONA CENTRO" },
+  "CENTRO":   { color: "#ff007f", badge: "badge-centro",  label: "ZONA CENTRO" },
   "NORTE-1":  { color: "#00f0ff", badge: "badge-norte-1", label: "ZONA NORTE 1" },
   "NORTE-2":  { color: "#39ff14", badge: "badge-norte-2", label: "ZONA NORTE 2" },
   "OESTE":    { color: "#ff9900", badge: "badge-oeste",   label: "ZONA OESTE" },
@@ -162,11 +162,6 @@ export const MAPA_ZONAS_CALI = {
   ]
 };
 
-/**
- * Busca y retorna la característica GeoJSON de una zona dada su nombre o clave
- * @param {string} nombreZona 
- * @returns {Object|null}
- */
 export function obtenerZonaPorNombre(nombreZona) {
   if (!nombreZona) return null;
   return MAPA_ZONAS_CALI.features.find(
@@ -255,3 +250,51 @@ export function clasificarParadasPorZona(listaParadas) {
   console.groupEnd();
   return paradasClasificadas;
 }
+
+/**
+ * Valida y agrupa paradas estrictamente en contenedores aislados por zona.
+ * 
+ * @param {Array<Object>} paradas 
+ * @returns {Object} Diccionario con zonas como claves y sus arreglos aislados como valor
+ */
+export function validarYAgruparParadasPorZonaEstricta(paradas) {
+  if (!Array.isArray(paradas) || paradas.length === 0) return {};
+
+  console.group("📌 [ZONIFICACION_ESTRICTA]: Clasificando paradas en contenedores aislados...");
+
+  const mapaGrupos = {};
+
+  paradas.forEach((parada, idx) => {
+    let featureZona = null;
+
+    if (parada.lat && parada.lng) {
+      featureZona = obtenerZonaPorCoordenadas(parada.lat, parada.lng);
+    }
+
+    const zonaKey = featureZona ? featureZona.properties.key : (parada.zonaKey || "GENERAL");
+    const infoMeta = PALETA_ZONAS[zonaKey] || PALETA_ZONAS["GENERAL"];
+
+    const paradaAjustada = {
+      ...parada,
+      zonaKey,
+      zona: zonaKey,
+      nombreZona: featureZona ? featureZona.properties.nombre : `zona_${zonaKey.toLowerCase()}`,
+      colorZona: infoMeta.color
+    };
+
+    if (!mapaGrupos[zonaKey]) {
+      mapaGrupos[zonaKey] = [];
+    }
+
+    mapaGrupos[zonaKey].push(paradaAjustada);
+    console.log(`📍 Parada #${idx + 1} (${parada.destinatario || 'Cliente'}) -> Grupo Aislado: [${zonaKey}]`);
+  });
+
+  console.groupEnd();
+  return mapaGrupos;
+}
+
+// Bindings globales
+window.validarYAgruparParadasPorZonaEstricta = validarYAgruparParadasPorZonaEstricta;
+window.clasificarParadasPorZona = clasificarParadasPorZona;
+window.obtenerZonaPorCoordenadas = obtenerZonaPorCoordenadas;

@@ -13,26 +13,19 @@ import {
     activarModoSeleccionMapaUI 
 } from "./mapa-eventos.js";
 
-window.mapaMensajero = null;
-window.renderRutasMensajero = null;
-window.marcadoresRutaMensajero = [];
-window.infoWindowMensajero = null;
-window.pendientesParaRenderizar = null;
-
-// Re-exportar funciones telemáticas y de eventos para compatibilidad de módulos
-export { 
-    ejecutarBusquedaDireccion, 
-    toggleBuscadorMapaUI, 
-    activarModoSeleccionMapaUI, 
-    registrarEventosClicMapa 
-};
+// Inicialización de variables globales en window
+window.mapaMensajero = window.mapaMensajero || null;
+window.renderRutasMensajero = window.renderRutasMensajero || null;
+window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
+window.infoWindowMensajero = window.infoWindowMensajero || null;
+window.pendientesParaRenderizar = window.pendientesParaRenderizar || null;
 
 /**
  * Inicializa el lienzo de Google Maps con la estética Cyberpunk y registra los escuchadores.
  */
 export function inicializarMapaMensajero() {
-    if (typeof google === "undefined" || !google.maps || !google.maps.InfoWindow) {
-        console.warn("⚠️ [MAPA_MENSAJERO]: Esperando a que cargue el SDK de Google Maps...");
+    if (typeof google === "undefined" || !google.maps) {
+        console.warn("⏳ [MAPA_MENSAJERO]: Esperando SDK de Google Maps...");
         return;
     }
 
@@ -44,7 +37,11 @@ export function inicializarMapaMensajero() {
 
     try {
         console.log("🗺️ [MAPA_MENSAJERO]: Inicializando mapa Cyberpunk...");
-        window.infoWindowMensajero = new google.maps.InfoWindow();
+        
+        if (!window.infoWindowMensajero && google.maps.InfoWindow) {
+            window.infoWindowMensajero = new google.maps.InfoWindow();
+        }
+
         window.mapaMensajero = new google.maps.Map(contenedorMapa, {
             center: { lat: 3.4516, lng: -76.532 },
             zoom: 13,
@@ -59,14 +56,12 @@ export function inicializarMapaMensajero() {
             ]
         });
 
-        // Ocultar menú radial activo al hacer clic sobre el mapa neutral
         window.mapaMensajero.addListener("click", () => {
-            if (window.overlayMenuActivo) {
+            if (window.overlayMenuActivo && typeof window.overlayMenuActivo.cerrar === "function") {
                 window.overlayMenuActivo.cerrar();
             }
         });
 
-        // Evento para asegurar ajuste correcto del lienzo al cargar
         setTimeout(() => {
             if (window.mapaMensajero && typeof google !== "undefined") {
                 google.maps.event.trigger(window.mapaMensajero, "resize");
@@ -74,17 +69,18 @@ export function inicializarMapaMensajero() {
             }
         }, 200);
 
-        window.renderRutasMensajero = new google.maps.DirectionsRenderer({
-            map: window.mapaMensajero,
-            suppressMarkers: true,
-            polylineOptions: { strokeColor: "#00e5ff", strokeOpacity: 0.8, strokeWeight: 4 }
-        });
+        if (google.maps.DirectionsRenderer) {
+            window.renderRutasMensajero = new google.maps.DirectionsRenderer({
+                map: window.mapaMensajero,
+                suppressMarkers: true,
+                polylineOptions: { strokeColor: "#00e5ff", strokeOpacity: 0.8, strokeWeight: 4 }
+            });
+        }
 
         if (typeof desplegarZonaMensajeroEnMapa === "function") {
             desplegarZonaMensajeroEnMapa(window.mapaMensajero);
         }
 
-        // Suscripción al listener para capturar clics en el mapa
         registrarEventosClicMapa((nuevaParada) => {
             if (typeof window.agregarParadaLocal === "function") {
                 window.agregarParadaLocal(nuevaParada);
@@ -97,15 +93,12 @@ export function inicializarMapaMensajero() {
             actualizarPuntosEnMapa(listaPedidos, indiceActivo);
         }
     } catch (e) {
-        console.error(">>> [MAPA_ERROR]: Fallo inicializando el visor:", e);
+        console.error("❌ [MAPA_ERROR]: Fallo inicializando el visor:", e);
     }
 }
 
 /**
  * Actualiza los marcadores, trayectos y polígonos sobre el lienzo del mapa.
- * 
- * @param {Array} listaPedidos - Arreglo de paradas a proyectar.
- * @param {number} indiceActivo - Íntem activo en foco.
  */
 export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
     if (!window.mapaMensajero || typeof google === "undefined" || !google.maps) {
@@ -118,10 +111,8 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
         desplegarZonaMensajeroEnMapa(window.mapaMensajero, zonaDetectada);
     }
 
-    // Trazar línea de ruta en polilínea
     trazarPolilineaRuta(listaPedidos);
 
-    // Renderizar marcadores interactivos con overlay en cruz
     renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, () => {
         if (typeof window.refrescarUI === "function") {
             window.refrescarUI();
@@ -132,9 +123,7 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo) {
 }
 
 /**
- * Encuadra dinámicamente el lienzo del mapa para enfocar las paradas de una zona desplegada (fitBounds).
- * 
- * @param {Array<Object>} paradasZona - Subconjunto de paradas pertenecientes al acordeón.
+ * Enfoca los límites geográficos de las paradas pertenecientes a la zona.
  */
 export function enfocarZonaEnMapa(paradasZona) {
     if (!window.mapaMensajero || typeof google === "undefined" || !google.maps) {
@@ -171,7 +160,19 @@ export function enfocarZonaEnMapa(paradasZona) {
     }
 }
 
-// Vinculación explícita a window para soporte y compatibilidad global
+// BINDINGS GLOBALES INMEDIATOS (Resuelve el error InvalidValueError)
 window.inicializarMapaMensajero = inicializarMapaMensajero;
 window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;
 window.enfocarZonaEnMapa = enfocarZonaEnMapa;
+
+// Exportación para compatibilidad de módulos ES6
+export { 
+    ejecutarBusquedaDireccion, 
+    toggleBuscadorMapaUI, 
+    activarModoSeleccionMapaUI, 
+    registrarEventosClicMapa 
+};
+
+if (typeof google !== "undefined" && google.maps && document.getElementById("mapa-mensajero") && !window.mapaMensajero) {
+    inicializarMapaMensajero();
+}

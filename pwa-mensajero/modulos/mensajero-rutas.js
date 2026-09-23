@@ -9,13 +9,29 @@ import {
     obtenerRutaZonificada, 
     obtenerParadasGuardadas 
 } from "./mensajero-persistencia.js";
+import { trazarPolilineaRuta } from "./mapa/mapa-rutas.js";
 
 let itemArrastrado = null;
 
 /**
- * Procesa la carga inicial de paradas desde la URL (payload=) o lee la persistencia local IndexedDB.
+ * Normaliza y limpia una clave de zona de forma determinista a letras minúsculas sin prefijos.
+ * Ejemplos: "ZONA ORIENTE" -> "oriente", "ZONA NORTE-2" -> "norte-2", "zona_oriente" -> "oriente"
  * 
- * @returns {Promise<Array<Object>>} Lista de pedidos normalizados.
+ * @param {string} zonaRaw - Cadena cruda recibida de la UI o payload
+ * @returns {string} Clave limpia estandarizada
+ */
+function normalizarClaveZona(zonaRaw) {
+    if (!zonaRaw || typeof zonaRaw !== "string") return "";
+    return zonaRaw
+        .trim()
+        .toLowerCase()
+        .replace(/^zona[_\s-]*/i, "") // Sin espacios adicionales al final de la expresión
+        .replace(/\s+/g, "-")
+        .replace(/_/g, "-");
+}
+
+/**
+ * Procesa la carga inicial de paradas desde la URL (payload=) o lee la persistencia local IndexedDB.
  */
 export async function procesarPayloadOStorage() {
     console.log(">>> [RUTAS]: Evaluando origen de datos (URL Payload vs IndexedDB Local)...");
@@ -45,9 +61,6 @@ export async function procesarPayloadOStorage() {
 
 /**
  * Busca el índice del primer pedido activo o pendiente.
- * 
- * @param {Array<Object>|Promise<Array<Object>>} listaPedidosRaw 
- * @returns {Promise<number>} Índice del ítem activo.
  */
 export async function buscarIndiceActivo(listaPedidosRaw) {
     let listaPedidos = await Promise.resolve(listaPedidosRaw);
@@ -68,17 +81,86 @@ export async function buscarIndiceActivo(listaPedidosRaw) {
 }
 
 /**
- * FUNCIÓN CLAVE DE RENDERIZADO DE ACORDEONES ZONIFICADOS
- * Inyecta la barra de botones [.zona-acciones-bar] y registra Handlers.
- * 
- * @param {Array<Object>|Promise<Array<Object>>} listaPedidosParam 
+ * Procesa y recalcula la secuencia de entrega aislando únicamente la zona seleccionada.
+ */
+export async function calcularRutaAisladaPorZona(zonaKeyInput) {
+    if (!zonaKeyInput) {
+        console.warn("⚠️ [MENSAJERO_RUTAS]: Se requiere una zonaKey para aislar la ruta.");
+        return [];
+    }
+
+    const targetLimpio = normalizarClaveZona(zonaKeyInput);
+    console.group(`⚡ [ZONA_ISOLATION]: Procesando secuencia exclusiva para zona: [${zonaKeyInput}] (Clave limpia: '${targetLimpio}')`);
+
+    let todasLasParadas = [];
+
+    if (Array.isArray(window.__CACHE_PARADAS_MACONDO__) && window.__CACHE_PARADAS_MACONDO__.length > 0) {
+        todasLasParadas = [...window.__CACHE_PARADAS_MACONDO__];
+    } else if (Array.isArray(window.paradasMemoriaLocal) && window.paradasMemoriaLocal.length > 0) {
+        todasLasParadas = [...window.paradasMemoriaLocal];
+    } else {
+        try {
+            todasLasParadas = (await obtenerParadasGuardadas()) || [];
+        } catch (err) {
+            console.warn("⚠️ [ZONA_ISOLATION]: Fallo al leer IndexedDB, intentando fallback a localStorage...", err);
+        }
+
+        if (!todasLasParadas || todasLasParadas.length === 0) {
+            todasLasParadas = JSON.parse(localStorage.getItem("ruta_zonificada") || "[]");
+        }
+    }
+
+    const paradasDeZona = todasLasParadas.filter((p) => {
+        if (!p) return false;
+        
+        const k1 = normalizarClaveZona(p.zonaKey || "");
+        const k2 = normalizarClaveZona(p.nombreZona || "");
+        const k3 = normalizarClaveZona(p.zona || "");
+        const k4 = normalizarClaveZona(p.zonaNombre || "");
+
+        const keys = [k1, k2, k3, k4].filter(val => val !== "");
+        const busquedaDirecta = keys.some(val => val === targetLimpio);
+        const busquedaSinGuiones = keys.some(val => val.replace(/-/g, "") === targetLimpio.replace(/-/g, ""));
+
+        return busquedaDirecta || busquedaSinGuiones;
+    });
+
+    if (paradasDeZona.length === 0) {
+        console.warn(`⚠️ [ZONA_ISOLATION]: No hay paradas registradas para la zona: ${zonaKeyInput}`);
+        console.groupEnd();
+        return [];
+    }
+
+    const paradasSecuenciadas = paradasDeZona.map((parada, index) => ({
+        ...parada,
+        secuenciaZona: index + 1,
+        sincronizado: 0,
+        updated_at: new Date().toISOString()
+    }));
+
+    console.log(`💾 [ZONA_ISOLATION]: ${paradasSecuenciadas.length} parada(s) aislada(s) con éxito para [${targetLimpio}].`);
+
+    if (typeof trazarPolilineaRuta === "function") {
+        trazarPolilineaRuta(paradasSecuenciadas, targetLimpio);
+    }
+
+    if (typeof window.enfocarZonaEnMapa === "function") {
+        window.enfocarZonaEnMapa(paradasSecuenciadas);
+    }
+
+    console.groupEnd();
+    return paradasSecuenciadas;
+}
+
+/**
+ * RENDERIZADO DE ACORDEONES ZONIFICADOS
  */
 export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
     console.log(">>> [RUTAS_UI] Ejecutando renderizarParadasZonificadasUI...");
 
     const contenedor = document.getElementById("lista-paradas-zonificadas") || document.getElementById("contenedor-acordeones-zonas");
     if (!contenedor) {
-        console.warn(">>> [RUTAS_WARN]: Contenedor 'lista-paradas-zonificadas' no hallado en el DOM.");
+        console.warn(">>> [RUTAS_WARN]: Contenedor de acordeones no hallado en el DOM.");
         return;
     }
 
@@ -88,6 +170,9 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         listaPedidos = (await obtenerParadasGuardadas()) || [];
     }
 
+    window.__CACHE_PARADAS_MACONDO__ = [...listaPedidos];
+    window.paradasMemoriaLocal = [...listaPedidos];
+
     contenedor.innerHTML = "";
 
     if (!Array.isArray(listaPedidos) || listaPedidos.length === 0) {
@@ -95,10 +180,9 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         return;
     }
 
-    // Agrupar por zona geográfica
     const zonasMap = {};
     listaPedidos.forEach((ped) => {
-        const zonaKey = ped.zona || ped.zonaNombre || "ZONA SIN ASIGNAR";
+        const zonaKey = ped.zonaNombre || ped.zonaKey || ped.zona || "ZONA SIN ASIGNAR";
         if (!zonasMap[zonaKey]) zonasMap[zonaKey] = [];
         zonasMap[zonaKey].push(ped);
     });
@@ -141,10 +225,12 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         listContainer.style.padding = "4px";
 
         paradasZona.forEach((parada, idx) => {
+            const idLimpio = String(parada.id || parada.ssc || `p_${idx}`).replace(/'/g, "\\'");
             const card = document.createElement("div");
+            
             card.className = "parada-card item-parada-lista";
             card.setAttribute("draggable", "true");
-            card.setAttribute("data-id", parada.id || parada.ssc || `p_${idx}`);
+            card.setAttribute("data-id", idLimpio);
             card.setAttribute("data-zona", nombreZona);
 
             card.innerHTML = `
@@ -156,10 +242,10 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
                         </div>
                     </div>
                     <div class="btn-group-reorder">
-                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${parada.id}', -1, '${nombreZona}')">▲</button>
-                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${parada.id}', 1, '${nombreZona}')">▼</button>
-                        <button type="button" class="btn-reorder" style="border-color: #ffb300; color: #ffb300;" onclick="window.editarParadaUI('${parada.id}')">✏️</button>
-                        <button type="button" class="btn-reorder" style="border-color: #ff3366; color: #ff3366;" onclick="window.eliminarParadaUI('${parada.id}')">🗑️</button>
+                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${idLimpio}', -1, '${nombreZona}')">▲</button>
+                        <button type="button" class="btn-reorder" onclick="window.moverParadaManual('${idLimpio}', 1, '${nombreZona}')">▼</button>
+                        <button type="button" class="btn-reorder" style="border-color: #ffb300; color: #ffb300;" onclick="window.editarParadaUI('${idLimpio}')">✏️</button>
+                        <button type="button" class="btn-reorder" style="border-color: #ff3366; color: #ff3366;" onclick="window.eliminarParadaUI('${idLimpio}')">🗑️</button>
                     </div>
                 </div>
             `;
@@ -244,33 +330,26 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
     }));
 }
 
-// ==========================================================================
-// CONTROLADORES REALES DE NAVEGACIÓN Y PLANILLADOR EN EL SCOPE GLOBAL
-// ==========================================================================
-
+// BINDINGS GLOBALES Y NAVEGACIÓN
 window.renderizarParadasZonificadasUI = renderizarParadasZonificadasUI;
 window.renderizarAcordeonesZonasUI = renderizarParadasZonificadasUI;
 window.renderizarTablaZonificadaUI = renderizarParadasZonificadasUI;
 window.buscarIndiceActivo = buscarIndiceActivo;
 window.procesarPayloadOStorage = procesarPayloadOStorage;
+window.calcularRutaAisladaPorZona = calcularRutaAisladaPorZona;
 
-/**
- * Inicia la operación táctica de la zona seleccionada y redirige al mapa activo.
- */
 window.iniciarRutaZona = function (zona) {
     console.log(`► [MENSAJERO_RUTAS]: Iniciar Ruta ejecutado para Zona: ${zona}`);
     localStorage.setItem("zona_activa_operacion", zona);
 
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/mapa-activa.html", { zona: zona });
+        setTimeout(() => calcularRutaAisladaPorZona(zona), 350);
     } else {
         window.location.href = `vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(zona)}`;
     }
 };
 
-/**
- * Redirige al subsistema de planillas e invoca la UI de planillador.
- */
 window.planillarRutaZona = function (zona) {
     console.log(`📝 [MENSAJERO_RUTAS]: Generando planilla para Zona: ${zona}`);
     localStorage.setItem("zona_planillar_activa", zona);
@@ -284,20 +363,18 @@ window.planillarRutaZona = function (zona) {
     }
 };
 
-/**
- * Transición al visor de mapa activo.
- */
 window.verMapaZona = function (zona) {
     console.log(`🗺️ [MENSAJERO_RUTAS]: Abrir Mapa Zona: ${zona}`);
     localStorage.setItem("zona_activa_operacion", zona);
 
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/mapa-activa.html", { zona: zona });
+        setTimeout(() => calcularRutaAisladaPorZona(zona), 350);
     } else {
         window.location.href = `vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(zona)}`;
     }
 };
 
 window.moverParadaManual = function (paradaId, direccion, zonaNombre) {
-    console.log(`>>> [REORDER_MANUAL]: Mover parada ${paradaId} dirección: ${direccion}`);
+    console.log(`>>> [REORDER_MANUAL]: Mover parada ${paradaId} dirección: ${direccion} en zona: ${zonaNombre}`);
 };

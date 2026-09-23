@@ -16,8 +16,11 @@ import {
 // Re-exportar para retrocompatibilidad
 export { parsearTextoPlanoWhatsApp, parsearPayloadODocumento };
 
+// Buffer local en memoria para acumular fotos del Modo 1
+let loteFotosAcumuladas = [];
+
 /**
- * Emitir vibración háptica en Android
+ * Emitir vibración háptica en dispositivos móviles
  */
 function emitirHaptico(pattern = 30) {
     if ('vibrate' in navigator) {
@@ -75,21 +78,106 @@ export class ImportadorMasivoMensajero {
             this._onProcesarLocalClick = () => this.ejecutarImportacionArchivoLocal();
             btnProcesarLocal.addEventListener("click", this._onProcesarLocalClick);
         }
+
+        // Vincular el acumulador multifoto
+        this.inicializarGestorLoteFotos();
     }
 
     /**
-     * MODO 3: Extracción heurística local sin IA (CSV, Excel, TXT, PDF Local)
+     * Escucha los eventos del input file del Modo 1 y acumula en loteFotosAcumuladas
+     */
+    inicializarGestorLoteFotos() {
+        const inputFoto = document.getElementById("archivo-base-datos");
+        if (!inputFoto) return;
+
+        inputFoto.removeEventListener("change", this._onFotoChange);
+        this._onFotoChange = (e) => {
+            const archivosNuevos = Array.from(e.target.files || []);
+            if (archivosNuevos.length === 0) return;
+
+            console.log(`📸 [LOTE_FOTOS]: Agregando ${archivosNuevos.length} archivo(s) al lote actual (${loteFotosAcumuladas.length}).`);
+
+            archivosNuevos.forEach(archivo => loteFotosAcumuladas.push(archivo));
+
+            // Resetear el valor del input para permitir tomar otra foto con la cámara inmediatamente
+            inputFoto.value = "";
+
+            this.renderizarGaleriaLote();
+        };
+
+        inputFoto.addEventListener("change", this._onFotoChange);
+    }
+
+    /**
+     * Renderiza las miniaturas e indicadores del lote
+     */
+    renderizarGaleriaLote() {
+        const contenedorGaleria = document.getElementById("galeria-fotos-lote");
+        const badgeConteo = document.getElementById("badge-conteo-fotos");
+
+        if (badgeConteo) {
+            badgeConteo.innerText = `${loteFotosAcumuladas.length} Foto(s) Acumulada(s)`;
+        }
+
+        if (!contenedorGaleria) return;
+
+        if (loteFotosAcumuladas.length === 0) {
+            contenedorGaleria.innerHTML = `<span id="galeria-vacia-msg" style="font-size: 0.7rem; color: #666; font-style: italic;">No hay fotos capturadas aún.</span>`;
+            return;
+        }
+
+        contenedorGaleria.innerHTML = "";
+
+        loteFotosAcumuladas.forEach((file, index) => {
+            const thumbDiv = document.createElement("div");
+            thumbDiv.style.cssText = "position: relative; width: 55px; height: 55px; min-width: 55px; border: 1px solid #00f3ff; border-radius: 4px; overflow: hidden; background: #000;";
+
+            if (file.type.startsWith("image/")) {
+                const img = document.createElement("img");
+                img.src = URL.createObjectURL(file);
+                img.style.cssText = "width: 100%; height: 100%; object-fit: cover;";
+                thumbDiv.appendChild(img);
+            } else {
+                thumbDiv.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%; font-size:0.6rem; color:#00f3ff; text-align:center; padding:2px;">${file.name.substring(0, 8)}...</div>`;
+            }
+
+            const btnDelete = document.createElement("button");
+            btnDelete.innerHTML = "×";
+            btnDelete.style.cssText = "position: absolute; top: 0; right: 0; background: rgba(255,51,102,0.85); color: #fff; border: none; font-size: 10px; width: 16px; height: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;";
+            btnDelete.onclick = (e) => {
+                e.stopPropagation();
+                this.eliminarFotoDelLote(index);
+            };
+
+            thumbDiv.appendChild(btnDelete);
+            contenedorGaleria.appendChild(thumbDiv);
+        });
+    }
+
+    eliminarFotoDelLote(index) {
+        console.log(`🗑️ [LOTE_FOTOS]: Eliminando foto índice ${index}`);
+        loteFotosAcumuladas.splice(index, 1);
+        this.renderizarGaleriaLote();
+    }
+
+    limpiarLoteFotos() {
+        console.log("🧹 [LOTE_FOTOS]: Vaciando lote completo.");
+        loteFotosAcumuladas = [];
+        this.renderizarGaleriaLote();
+    }
+
+    /**
+     * MODO 3: Extracción heurística local sin IA (CSV, Excel, TXT)
      */
     async ejecutarImportacionArchivoLocal(callbackRefresco) {
-        console.log(">>> [IMPORTADOR_EXEC_LOCAL]: Disparando extracción local MODO 3 Acumulativa...");
+        console.log(">>> [IMPORTADOR_EXEC_LOCAL]: Disparando extracción local MODO 3...");
         emitirHaptico(30);
 
         const inputArchivo = document.getElementById("archivo-base-datos-local") || document.getElementById("archivo-base-datos");
         let listaArchivos = [];
 
-        // Evaluar buffer en memoria o fallback a FileList
-        if (typeof window.obtenerLoteFotosActual === "function" && window.obtenerLoteFotosActual().length > 0) {
-            listaArchivos = window.obtenerLoteFotosActual();
+        if (loteFotosAcumuladas.length > 0) {
+            listaArchivos = loteFotosAcumuladas;
         } else if (inputArchivo && inputArchivo.files && inputArchivo.files.length > 0) {
             listaArchivos = Array.from(inputArchivo.files);
         }
@@ -135,7 +223,7 @@ export class ImportadorMasivoMensajero {
             actualizarEstadoIngestionUI(`>>> ÉXITO LOCAL: ${listaTotal.length} PARADAS EN HOJA DE RUTA`, "var(--neon-green, #00ff66)");
 
             if (inputArchivo) inputArchivo.value = "";
-            if (typeof window.limpiarLoteFotos === "function") window.limpiarLoteFotos();
+            this.limpiarLoteFotos();
 
             emitirHaptico(50);
             dispararRefrescoUI(listaTotal, callbackRefresco);
@@ -153,7 +241,7 @@ export class ImportadorMasivoMensajero {
     }
 
     /**
-     * MODO 1: Procesamiento por Lote con IA Cloud (Gemini / OCR)
+     * MODO 1: Procesamiento por Lote Acumulado con IA Cloud (Gemini)
      */
     async ejecutarImportacionArchivo(callbackRefresco, forzarIA = true) {
         console.log(">>> [IMPORTADOR_EXEC_IA]: Disparando proceso acumulativo MODO 1 (IA Cloud)...");
@@ -162,13 +250,10 @@ export class ImportadorMasivoMensajero {
         const inputArchivo = document.getElementById("archivo-base-datos") || document.getElementById("archivo-base-datos-local");
         let listaArchivos = [];
 
-        // Prioridad 1: Lote acumulado en memoria
-        if (typeof window.obtenerLoteFotosActual === "function" && window.obtenerLoteFotosActual().length > 0) {
-            listaArchivos = window.obtenerLoteFotosActual();
-            console.log(`📸 [IMPORTADOR_IA]: Obtenido lote acumulado de ${listaArchivos.length} foto(s).`);
-        } 
-        // Prioridad 2: Archivos seleccionados en el input file
-        else if (inputArchivo && inputArchivo.files && inputArchivo.files.length > 0) {
+        if (loteFotosAcumuladas.length > 0) {
+            listaArchivos = loteFotosAcumuladas;
+            console.log(`📸 [IMPORTADOR_IA]: Procesando lote acumulado de ${listaArchivos.length} foto(s).`);
+        } else if (inputArchivo && inputArchivo.files && inputArchivo.files.length > 0) {
             listaArchivos = Array.from(inputArchivo.files);
         }
 
@@ -225,7 +310,7 @@ export class ImportadorMasivoMensajero {
             actualizarEstadoIngestionUI(`>>> ÉXITO: ${listaTotalActualizada.length} PARADA(S) EN HOJA DE RUTA`, "var(--neon-green, #00ff66)");
 
             if (inputArchivo) inputArchivo.value = "";
-            if (typeof window.limpiarLoteFotos === "function") window.limpiarLoteFotos();
+            this.limpiarLoteFotos();
 
             emitirHaptico([40, 30, 40]);
             dispararRefrescoUI(listaTotalActualizada, callbackRefresco);
@@ -255,4 +340,6 @@ if (typeof window !== "undefined") {
     window.ImportadorMasivoMensajero = importadorMensajero;
     window.ejecutarProcesamientoIaCloud = (cb) => importadorMensajero.ejecutarImportacionArchivo(cb, true);
     window.ejecutarProcesamientoLocalSinIa = (cb) => importadorMensajero.ejecutarImportacionArchivoLocal(cb);
+    window.limpiarLoteFotos = () => importadorMensajero.limpiarLoteFotos();
+    window.obtenerLoteFotosActual = () => loteFotosAcumuladas;
 }

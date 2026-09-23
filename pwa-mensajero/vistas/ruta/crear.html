@@ -23,7 +23,7 @@
                 class="grid-balance-monolitico"
                 style="display: grid; grid-template-columns: 1fr; gap: 12px; margin: 12px 0">
                 
-                <!-- MODO 1: FOTOGRAFÍAS DE TIRILLAS / CÁMARA ANDROID / IA CLOUD (MULTIPLE ACUMULATIVO) -->
+                <!-- MODO 1: FOTOGRAFÍAS DE TIRILLAS / CÁMARA ANDROID / IA CLOUD (ACUMULATIVO) -->
                 <div
                     class="sub-panel-datos"
                     style="background: #0c080f; padding: 12px; border: 1px solid var(--border-rigid, #291f33); border-radius: 6px;">
@@ -140,7 +140,7 @@
                         type="button"
                         id="btn-procesar-archivo-masivo-local"
                         class="btn-terminal btn-crypto cyber-btn-touch"
-                        onclick="console.log('📂 [CREAR_RUTA]: Procesando archivos locales...'); if(typeof window.ImportadorMasivoMensajero?.ejecutarImportacionLocal === 'function') { window.ImportadorMasivoMensajero.ejecutarImportacionLocal(); } else { alert('⚠️ Importador local offline inicializando...'); }"
+                        onclick="console.log('📂 [CREAR_RUTA]: Procesando archivos locales...'); if(typeof window.ImportadorMasivoMensajero?.ejecutarImportacionArchivoLocal === 'function') { window.ImportadorMasivoMensajero.ejecutarImportacionArchivoLocal(); } else { alert('⚠️ Importador local offline inicializando...'); }"
                         style="width: 100%; border-color: var(--neon-green, #3eb84a); color: #fff; font-weight: bold;">
                         [⚙️] PROCESAR ARCHIVOS LOCALES (OFFLINE)
                     </button>

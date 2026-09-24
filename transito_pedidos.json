@@ -37,5 +37,58 @@
         "lat": 3.4525152,
         "lng": -76.4996916,
         "updated_at": "2026-09-24 09:27:06"
+    },
+    {
+        "action": "actualizar_parada",
+        "accion": "actualizar_parada",
+        "id": "#PNT-9054",
+        "ssc": "147715",
+        "lat": 3.4508740256498216,
+        "lng": -76.48090937561035,
+        "latitud": 3.4508740256498216,
+        "longitud": -76.48090937561035,
+        "direccion": "Cra. 8 #7530, Angel Del Hogar, Palmira, Cali, Valle del Cauca, Colombia",
+        "updated_at": "2026-09-24 19:07:18",
+        "estado": "no-entregado",
+        "destinatario": "MARIA CONSUELO DE JESUS RUEDA DE",
+        "telefono": "3193749040"
+    },
+    {
+        "action": "actualizar_parada",
+        "accion": "actualizar_parada",
+        "id": "#PNT-3762",
+        "ssc": "327458",
+        "lat": 3.448094118808205,
+        "lng": -76.4899988450829,
+        "latitud": 3.448094118808205,
+        "longitud": -76.4899988450829,
+        "direccion": "Cra. 11a #6618, Comuna 8, Cali, Valle del Cauca, Colombia",
+        "updated_at": "2026-09-24 19:23:18"
+    },
+    {
+        "action": "actualizar_parada",
+        "accion": "actualizar_parada",
+        "id": "#PNT-3226",
+        "ssc": "245991",
+        "estado": "en-camino",
+        "destinatario": "MIRIHAM MARULANDA CARMONA",
+        "direccion": "Calle 33 A # 11 B - 09",
+        "telefono": "3205031097",
+        "lat": null,
+        "lng": null,
+        "updated_at": "2026-09-24 19:31:30"
+    },
+    {
+        "action": "actualizar_parada",
+        "accion": "actualizar_parada",
+        "id": "#PNT-5522",
+        "ssc": "314901",
+        "estado": "en-camino",
+        "destinatario": "MARIA NELLY LUGO DE HERNANDEZ",
+        "direccion": "Cra. 11g # 38-5, Comuna 8, Cali, Valle del Cauca, Colombia",
+        "telefono": "322661984",
+        "lat": null,
+        "lng": null,
+        "updated_at": "2026-09-24 19:42:31"
     }
 ]

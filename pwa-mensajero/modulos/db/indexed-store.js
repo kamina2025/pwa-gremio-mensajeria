@@ -1,16 +1,16 @@
 /**
  * PROTOCOLO MACONDO - CAPA DE PERSISTENCIA LOCAL (INDEXEDDB)
- * Ubicación: modulos/db/indexed-store.js
+ * Ubicación: pwa-mensajero/modulos/db/indexed-store.js
  */
 
 export class IndexedStore {
-  constructor(dbName = 'pwa_gremio_db', storeName = 'paradas') {
+  constructor(dbName = 'PWA_Mensajero_DB', storeName = 'paradas_rutas') {
     this.dbName = dbName;
     this.storeName = storeName;
   }
 
   /**
-   * Abre o crea la conexión con la base de datos IndexedDB.
+   * Abre o crea la conexión con la base de datos IndexedDB unificada.
    * @returns {Promise<IDBDatabase>}
    */
   async openDB() {
@@ -114,7 +114,7 @@ export class IndexedStore {
       
       // Garantizar la presencia del atributo id para el KeyPath
       if (!copiaParada.id) {
-        copiaParada.id = `#PNT-${copiaParada.secuencia || copiaParada.orden || Date.now()}`;
+        copiaParada.id = copiaParada.ssc || `#PNT-${copiaParada.secuencia || copiaParada.orden || Date.now()}`;
       }
 
       // Metadata Local-First
@@ -136,6 +136,16 @@ export class IndexedStore {
   }
 
   /**
+   * Alias genérico para guardar o actualizar un registro.
+   * @param {string} storeName - Nombre del store (opcional)
+   * @param {Object} registro 
+   * @returns {Promise<boolean>}
+   */
+  async guardarRegistro(storeName, registro) {
+    return this.actualizarParada(registro);
+  }
+
+  /**
    * Guarda o reemplaza de forma masiva un arreglo de paradas en una sola transacción.
    * @param {Array<Object>} listaParadas 
    * @returns {Promise<boolean>}
@@ -148,10 +158,13 @@ export class IndexedStore {
       const tx = db.transaction(this.storeName, 'readwrite');
       const store = tx.objectStore(this.storeName);
 
+      // Limpiar datos previos en la colección para sobrescritura atómica
+      store.clear();
+
       listaParadas.forEach((parada, index) => {
         const item = { ...parada };
         if (!item.id) {
-          item.id = `#PNT-${item.secuencia || item.orden || index + 1}`;
+          item.id = item.ssc || `#PNT-${item.secuencia || item.orden || index + 1}`;
         }
         item.updated_at = new Date().toISOString();
         store.put(item);
@@ -191,6 +204,13 @@ export class IndexedStore {
         reject(request.error);
       };
     });
+  }
+
+  /**
+   * Alias de compatibilidad para eliminación.
+   */
+  async eliminarRegistro(storeName, id) {
+    return this.eliminarParada(id);
   }
 
   /**

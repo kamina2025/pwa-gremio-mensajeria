@@ -20,14 +20,19 @@ function obtenerIdUnicoParada(p) {
 }
 
 /**
- * Garantiza la extracción de coordenadas numéricas válidas.
+ * Garantiza la extracción de coordenadas numéricas válidas de forma totalmente flexible.
  * @param {Object} p 
  * @returns {{lat: number, lng: number}|null}
  */
 function obtenerCoordenadasValidas(p) {
   if (!p) return null;
-  const lat = parseFloat(p.lat || p.latitud);
-  const lng = parseFloat(p.lng || p.longitud);
+  
+  const latVal = p.lat !== undefined ? p.lat : (p.latitud !== undefined ? p.latitud : (p.coordenadas?.lat));
+  const lngVal = p.lng !== undefined ? p.lng : (p.longitud !== undefined ? p.longitud : (p.coordenadas?.lng));
+
+  const lat = parseFloat(latVal);
+  const lng = parseFloat(lngVal);
+
   if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return null;
   return { lat, lng };
 }
@@ -62,6 +67,14 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
     console.warn("ℹ️ [OPTIMIZADOR_GOOGLE]: Insuficientes paradas en la zona para realizar optimización.");
     console.groupEnd();
     return paradasZona;
+  }
+
+  // Control preventivo: Si los waypoints superan el límite de Google Directions (25 paradas total), conmutar a Haversine
+  if (paradasZona.length > 25) {
+    console.warn(`⚠️ [OPTIMIZADOR_GOOGLE]: La zona tiene ${paradasZona.length} paradas (> máx 25 de Google Directions API). Ejecutando optimizador geodésico Haversine offline...`);
+    const resultadoFallback = await optimizarFallbackHaversine(paradasZona, paradaInicioFix, todasLasParadas);
+    console.groupEnd();
+    return resultadoFallback;
   }
 
   // 3. Comprobar disponibilidad del SDK clásico de Google Maps

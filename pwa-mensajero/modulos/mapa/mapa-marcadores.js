@@ -485,9 +485,38 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
         const nuevaLat = event.latLng.lat();
         const nuevaLng = event.latLng.lng();
 
+        // 1. Homologar de forma atómica todas las variantes de nombres de propiedades geográficas
         pedido.lat = nuevaLat;
         pedido.lng = nuevaLng;
+        pedido.latitud = nuevaLat;
+        pedido.longitud = nuevaLng;
+        if (pedido.coordenadas && typeof pedido.coordenadas === "object") {
+            pedido.coordenadas.lat = nuevaLat;
+            pedido.coordenadas.lng = nuevaLng;
+        }
         pedido.updated_at = new Date().toISOString();
+
+        // 2. Sincronizar inmediatamente los buffers RAM globales
+        const actualizarBufferRAM = (arr) => {
+            if (!Array.isArray(arr)) return;
+            const idx = arr.findIndex(p => String(p.id || p.ssc || "").trim() === String(pedido.id || pedido.ssc || idParada).trim());
+            if (idx !== -1) {
+                arr[idx].lat = nuevaLat;
+                arr[idx].lng = nuevaLng;
+                arr[idx].latitud = nuevaLat;
+                arr[idx].longitud = nuevaLng;
+                if (arr[idx].coordenadas && typeof arr[idx].coordenadas === "object") {
+                    arr[idx].coordenadas.lat = nuevaLat;
+                    arr[idx].coordenadas.lng = nuevaLng;
+                }
+                arr[idx].updated_at = pedido.updated_at;
+            }
+        };
+
+        actualizarBufferRAM(window.__CACHE_PARADAS_MACONDO__);
+        actualizarBufferRAM(window.paradasMemoriaLocal);
+        actualizarBufferRAM(window.paradasRutaActiva);
+        actualizarBufferRAM(window.pedidosGlobales);
 
         geocoder.geocode({ location: { lat: nuevaLat, lng: nuevaLng } }, async (results, status) => {
             if (status === "OK" && results[0]) {
@@ -517,6 +546,8 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                 ssc: pedido.ssc || idParada,
                 lat: nuevaLat,
                 lng: nuevaLng,
+                latitud: nuevaLat,
+                longitud: nuevaLng,
                 direccion: pedido.direccion,
                 updated_at: pedido.updated_at
             };

@@ -1,21 +1,10 @@
-<!-- vistas/ruta/mapa-activa.html -->
-<div id="mapa-container" class="mapa-fullscreen-wrapper">
+<!-- ==========================================================================
+   PROTOCOLO MACONDO - VISTA COMPLETA DEL MAPA INTERACTIVO
+   Ubicación: vistas/ruta/mapa-activa.html
+   ========================================================================== -->
+<div class="cyber-map-container">
     
-    <!-- 🔍 BUSCADOR FLOTANTE Y LUPA -->
-    <div class="contenedor-busqueda-mapa">
-        <input
-            type="text"
-            id="input-mapa-buscar-dir"
-            class="input-terminal"
-            placeholder="[SYS]: Buscar dirección..."
-            autocomplete="off" />
-
-        <button type="button" id="btn-toggle-busqueda" class="btn-terminal btn-crypto" onclick="toggleBuscadorMapaUI()">
-            🔍
-        </button>
-    </div>
-
-    <!-- ⚡ BUSCADOR DINÁMICO DE PARADAS EN RUTA -->
+    <!-- ⚡ BUSCADOR FLOTANTE DUAL CON LISTA DESPLEGABLE DE SUGERENCIAS -->
     <div class="cyber-search-wrapper" id="cyber-search-wrapper">
         <div class="cyber-search-input-box">
             <span class="cyber-search-icon">🔍</span>
@@ -28,11 +17,10 @@
             />
             <button type="button" id="btn-limpiar-busqueda" class="cyber-btn-clear" style="display:none;">✕</button>
         </div>
-        
         <ul class="cyber-sugerencias-lista" id="sugerencias-paradas-mapa" style="display:none;"></ul>
     </div>
 
-    <!-- 🎛️ CONTROLES FLOTANTES DE MAPA PARA ANDROID (ZOOM & LOCK) -->
+    <!-- 🎛️ CONTROLES VERTICALES FLOTANTES (ZOOM & LOCK) -->
     <div class="cyber-map-controls" id="cyber-map-controls">
         <button type="button" class="cyber-btn-map" id="btn-zoom-in" aria-label="Acercar mapa">
             <span class="cyber-btn-icon">➕</span>
@@ -40,12 +28,7 @@
         <button type="button" class="cyber-btn-map" id="btn-zoom-out" aria-label="Alejar mapa">
             <span class="cyber-btn-icon">➖</span>
         </button>
-        <button
-            type="button"
-            class="cyber-btn-map"
-            id="btn-toggle-lock"
-            aria-label="Bloquear/Desbloquear mapa"
-            data-locked="false">
+        <button type="button" class="cyber-btn-map" id="btn-toggle-lock" aria-label="Bloquear/Desbloquear mapa" data-locked="false">
             <span class="cyber-btn-icon" id="icon-lock-state">🔓</span>
         </button>
     </div>
@@ -68,7 +51,6 @@
         </div>
     </div>
 
-    <!-- 🗺️ UNICO LIENZO INTERACTIVO DEL MAPA DE PANTALLA COMPLETA -->
+    <!-- 🗺️ LIENZO DE MAPA GOOGLE MAPS PANTALLA COMPLETA -->
     <div id="mapa-mensajero-view" class="mapa-canvas"></div>
-
 </div>

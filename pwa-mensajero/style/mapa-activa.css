@@ -1,70 +1,236 @@
 /* ==========================================================================
    VISOR DE MAPA FULLSCREEN & CONTROLES CIBERPUNK
    Ruta: style/mapa-activa.css
+   Optimizado para PWA, Android Accessibility y Alto Contraste Neón
    ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. CONTENEDOR FULLSCREEN Y CANVAS DE MAPA
+   -------------------------------------------------------------------------- */
 .cyber-map-container,
 .mapa-fullscreen-wrapper,
 .mapa-contenedor-principal {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-    background-color: var(--bg-color) !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--bg-color, #030308);
     z-index: 1;
 }
 
 #mapa-mensajero,
 #mapa-mensajero-view,
 .mapa-canvas {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     flex: 1;
-    z-index: 1 !important;
+    z-index: 1;
     background-color: #0a0c10;
 }
 
-/* Buscador Flotante */
+/* --------------------------------------------------------------------------
+   2. BUSCADOR FLOTANTE DEL MAPA & INPUTS
+   -------------------------------------------------------------------------- */
 .cyber-search-wrapper,
 .contenedor-busqueda-mapa {
     position: absolute;
     top: 14px;
     left: 14px;
-    z-index: 200;
+    z-index: 1000;
     width: calc(100% - 90px);
-    max-width: 400px;
+    max-width: 420px;
 }
 
 .cyber-search-input-box {
     display: flex;
     align-items: center;
-    background: rgba(13, 17, 23, 0.96);
-    border: 1px solid var(--neon-cyan);
+    background: rgba(13, 17, 23, 0.98);
+    border: 1.5px solid var(--neon-cyan, #00e5ff);
     border-radius: 8px;
-    padding: 4px 10px;
-    box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
-    backdrop-filter: blur(8px);
+    padding: 6px 12px;
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.35), inset 0 0 8px rgba(0, 229, 255, 0.1);
+    backdrop-filter: blur(12px);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cyber-search-input-box:focus-within {
+    border-color: var(--neon-green, #39ff14);
+    box-shadow: 0 0 20px rgba(57, 255, 20, 0.4), inset 0 0 10px rgba(57, 255, 20, 0.15);
+}
+
+.cyber-search-icon {
+    color: var(--neon-cyan, #00e5ff);
+    font-size: 1rem;
+    margin-right: 8px;
+    filter: drop-shadow(0 0 4px var(--neon-cyan, #00e5ff));
 }
 
 #buscador-paradas-mapa,
 #input-mapa-buscar-dir {
     flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: #ffffff;
-    font-family: var(--cyber-font);
-    font-size: 0.85rem;
-    padding: 8px 0;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    color: #ffffff !important;
+    font-family: var(--cyber-font, "Share Tech Mono", monospace);
+    font-size: 0.88rem;
+    font-weight: 700;
+    padding: 6px 0;
 }
 
-/* Controles Verticales del Mapa */
+#buscador-paradas-mapa::placeholder,
+#input-mapa-buscar-dir::placeholder {
+    color: var(--text-color, #c3ccdb);
+    opacity: 0.6;
+    font-weight: 400;
+}
+
+.cyber-btn-clear {
+    background: transparent;
+    border: none;
+    color: var(--neon-magenta, #ff3366);
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0 6px;
+    font-size: 1rem;
+    touch-action: manipulation;
+    transition: transform 0.15s ease;
+}
+
+.cyber-btn-clear:active {
+    transform: scale(0.85);
+}
+
+/* --------------------------------------------------------------------------
+   3. LISTA DESPLEGABLE DE SUGERENCIAS CYBERPUNK (ELEVACIÓN & ALTO CONTRASTE)
+   -------------------------------------------------------------------------- */
+.cyber-sugerencias-lista {
+    list-style: none;
+    margin: 8px 0 0 0;
+    padding: 4px 0;
+    background: #0d1117 !important;
+    border: 1.5px solid var(--neon-cyan, #00e5ff) !important;
+    border-radius: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.95), 0 0 15px rgba(0, 229, 255, 0.3) !important;
+    backdrop-filter: blur(12px);
+    position: absolute;
+    width: 100%;
+    left: 0;
+    top: 100%;
+    z-index: 1001 !important;
+}
+
+.cyber-sugerencias-lista::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cyber-sugerencias-lista::-webkit-scrollbar-track {
+    background: #080c14;
+}
+
+.cyber-sugerencias-lista::-webkit-scrollbar-thumb {
+    background: var(--neon-cyan, #00e5ff);
+    border-radius: 3px;
+}
+
+.cyber-sugerencia-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(48, 54, 61, 0.8);
+    background: #0d1117;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    touch-action: manipulation;
+}
+
+.cyber-sugerencia-item:last-child {
+    border-bottom: none;
+}
+
+.cyber-sugerencia-item:hover,
+.cyber-sugerencia-item:active {
+    background: rgba(0, 229, 255, 0.18) !important;
+}
+
+/* Badges de clasificación en la lista */
+.cyber-sug-badge {
+    font-size: 0.72rem;
+    font-weight: 900;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    font-family: var(--cyber-font, monospace);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.cyber-sug-badge.badge-stop {
+    background: var(--neon-cyan, #00e5ff) !important;
+    color: #030308 !important;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+}
+
+.cyber-sug-badge.badge-cliente {
+    background: #b359ff !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 10px rgba(179, 89, 255, 0.6);
+}
+
+.cyber-sug-badge.badge-dir {
+    background: var(--neon-green, #39ff14) !important;
+    color: #030308 !important;
+    box-shadow: 0 0 10px rgba(57, 255, 20, 0.6);
+}
+
+.cyber-sug-badge.badge-geo {
+    background: var(--neon-magenta, #ff3366) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 10px rgba(255, 51, 102, 0.6);
+}
+
+.cyber-sug-info {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--cyber-font, monospace);
+}
+
+.cyber-sug-info strong {
+    color: #ffffff !important;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cyber-sug-info small {
+    color: var(--text-color, #c3ccdb) !important;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+    opacity: 0.8;
+}
+
+/* --------------------------------------------------------------------------
+   4. CONTROLES VERTICALES FLOTANTES (ZOOM & LOCK)
+   -------------------------------------------------------------------------- */
 .cyber-map-controls {
     position: absolute;
     top: 50%;
@@ -77,7 +243,8 @@
     background: rgba(13, 17, 23, 0.88);
     padding: 8px;
     border-radius: 10px;
-    border: 1px solid var(--neon-cyan);
+    border: 1px solid var(--neon-cyan, #00e5ff);
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
     backdrop-filter: blur(6px);
 }
 
@@ -85,18 +252,35 @@
     width: 48px;
     height: 48px;
     background: #0d1117;
-    border: 1px solid var(--neon-cyan);
+    border: 1px solid var(--neon-cyan, #00e5ff);
     border-radius: 8px;
-    color: var(--neon-cyan);
+    color: var(--neon-cyan, #00e5ff);
     font-size: 1.2rem;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s ease-in-out;
 }
 
-/* Panel Inferior de Acciones */
+.cyber-btn-map:active {
+    transform: scale(0.92);
+    background: var(--neon-cyan, #00e5ff);
+    color: #0d1117;
+    box-shadow: 0 0 12px var(--neon-cyan, #00e5ff);
+}
+
+.cyber-btn-map[data-locked="true"] {
+    border-color: var(--neon-magenta, #ff3366);
+    color: var(--neon-magenta, #ff3366);
+    box-shadow: 0 0 12px rgba(255, 51, 102, 0.4);
+}
+
+/* --------------------------------------------------------------------------
+   5. PANEL INFERIOR DE ACCIONES (FLOTANTE OVERLAY)
+   -------------------------------------------------------------------------- */
 .panel-inferior-mapa {
     position: absolute;
     bottom: 12px;
@@ -105,12 +289,14 @@
     z-index: 100;
     display: flex;
     justify-content: space-around;
+    align-items: center;
     gap: 8px;
-    background: rgba(13, 17, 23, 0.92);
+    background: rgba(13, 17, 23, 0.95);
     backdrop-filter: blur(10px);
     padding: 8px;
-    border: 1px solid var(--border-rigid);
+    border: 1px solid var(--neon-cyan, #00e5ff);
     border-radius: 8px;
+    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.6);
 }
 
 .panel-inferior-mapa .btn-terminal {
@@ -118,10 +304,47 @@
     min-height: 44px;
     font-size: 0.8rem;
     padding: 8px 6px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
     background: transparent;
-    color: var(--neon-cyan);
-    border: 1px solid var(--neon-cyan);
-    font-family: var(--cyber-font);
+    color: var(--neon-cyan, #00e5ff);
+    border: 1px solid var(--neon-cyan, #00e5ff);
+    font-family: var(--cyber-font, monospace);
+    font-weight: bold;
     border-radius: 6px;
     cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s ease-in-out;
+}
+
+.panel-inferior-mapa .btn-terminal:active {
+    background: var(--neon-cyan, #00e5ff);
+    color: #000000;
+    box-shadow: 0 0 10px var(--neon-cyan, #00e5ff);
+}
+
+/* --------------------------------------------------------------------------
+   6. ADAPTABILIDAD RESPONSIVE (PANTALLAS ESTRECHAS / MÓVILES)
+   -------------------------------------------------------------------------- */
+@media screen and (max-width: 480px) {
+    .cyber-search-wrapper,
+    .contenedor-busqueda-mapa {
+        top: 10px;
+        left: 10px;
+        width: calc(100% - 80px);
+    }
+
+    .cyber-map-controls {
+        right: 10px;
+    }
+
+    .panel-inferior-mapa {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        padding: 6px;
+    }
 }

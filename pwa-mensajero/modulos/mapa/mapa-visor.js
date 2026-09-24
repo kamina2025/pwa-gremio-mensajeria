@@ -1,6 +1,6 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL DEL MAPA (MODO RÁSTER ESTABLE 2D)
- * Ubicación: modulos/mapa/mapa-visor.js
+ * Ubicación: pwa-mensajero/modulos/mapa/mapa-visor.js
  */
 
 import { desplegarZonaMensajeroEnMapa } from "./mapa-mensajero-zonas.js";
@@ -13,6 +13,7 @@ import {
     activarModoSeleccionMapaUI,
     mapaEventos 
 } from "./mapa-eventos.js";
+import { guardarRutaZonificada } from "../mensajero-persistencia.js";
 
 // Instancias y variables de estado global
 window.mapaMensajero = window.mapaMensajero || null;
@@ -26,8 +27,45 @@ let observadorResizeContenedor = null;
 let temporizadorDebounceResize = null;
 
 /**
- * Redimensiona el lienzo del mapa de forma segura tras cambios en el DOM o conmutación de pestañas SPA.
- * Utiliza doble requestAnimationFrame (Post-Paint) para eliminar definitivamente las baldosas negras.
+ * Extrae y valida coordenadas numéricas de un objeto parada soportando múltiples esquemas de datos.
+ * @param {Object} parada 
+ * @returns {{lat: number, lng: number}|null}
+ */
+export function obtenerCoordenadasValidasParada(parada) {
+    if (!parada || typeof parada !== "object") return null;
+
+    // Evaluaciones defensivas para Latitud
+    let rawLat = parada.lat ?? parada.latitud ?? parada.latitud_num ?? parada.y ?? parada.lat_num;
+    if ((rawLat === undefined || rawLat === null) && parada.coordenadas) {
+        rawLat = parada.coordenadas.lat ?? parada.coordenadas.latitud;
+    }
+
+    // Evaluaciones defensivas para Longitud
+    let rawLng = parada.lng ?? parada.longitud ?? parada.longitud_num ?? parada.x ?? parada.lng_num;
+    if ((rawLng === undefined || rawLng === null) && parada.coordenadas) {
+        rawLng = parada.coordenadas.lng ?? parada.coordenadas.longitud;
+    }
+
+    if (rawLat === undefined || rawLng === undefined || rawLat === null || rawLng === null) {
+        return null;
+    }
+
+    // Convertir strings con comas a formato flotante estándar con puntos
+    const latStr = String(rawLat).trim().replace(',', '.');
+    const lngStr = String(rawLng).trim().replace(',', '.');
+
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+
+    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+        return null;
+    }
+
+    return { lat, lng };
+}
+
+/**
+ * Redimensiona el lienzo del mapa de forma segura tras cambios en el DOM.
  */
 export function refrescarLienzoMapa() {
     const mapa = window.mapaMensajero || window.mapaInstancia;
@@ -41,7 +79,6 @@ export function refrescarLienzoMapa() {
     if (temporizadorDebounceResize) clearTimeout(temporizadorDebounceResize);
 
     temporizadorDebounceResize = setTimeout(() => {
-        // Garantizar que el Reflow y Repaint del navegador se hayan ejecutado completamente
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 if (contenedor.clientWidth > 0 && contenedor.clientHeight > 0) {
@@ -59,28 +96,23 @@ export function refrescarLienzoMapa() {
 }
 
 /**
- * Inicializa la instancia de Google Maps en modo 2D estable (Sin WebGL / Sin mapId disputado).
- * Soporta control Singleton y recupera waypoints pendientes tras la carga.
- * 
- * @param {string} [idContenedor="mapa-mensajero"] - ID del elemento contenedor en el DOM
- * @returns {google.maps.Map|null} Instancia del mapa
+ * Inicializa la instancia de Google Maps en modo 2D estable.
+ * @param {string} [idContenedor="mapa-mensajero"] - ID del elemento contenedor
+ * @returns {google.maps.Map|null}
  */
 export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
-    // 1. Control Singleton: Reutilizar si la instancia ya existe en memoria global
     if (window.mapaMensajero || window.mapaInstancia) {
         console.log("ℹ️ [MAPA_VISOR]: Reutilizando instancia existente del mapa Google Maps.");
         refrescarLienzoMapa();
         return window.mapaMensajero || window.mapaInstancia;
     }
 
-    // 2. Esperar disponibilidad asíncrona del SDK
     if (typeof google === "undefined" || !google.maps || typeof google.maps.Map !== "function") {
         console.warn("⏳ [MAPA_VISOR]: SDK de Google Maps aún no está listo. Reintentando en 300ms...");
         setTimeout(() => inicializarMapaMensajero(idContenedor), 300);
         return null;
     }
 
-    // 3. Fallbacks de contenedores DOM
     const contenedorMapa = document.getElementById(idContenedor) || 
                            document.getElementById("mapa-mensajero-view") || 
                            document.getElementById("map");
@@ -97,7 +129,6 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
             window.infoWindowMensajero = new google.maps.InfoWindow();
         }
 
-        // Configuración Ráster 2D Dark Cyberpunk
         const instancia = new google.maps.Map(contenedorMapa, {
             center: { lat: 3.4516467, lng: -76.5319854 }, // Coordenadas Base Cali
             zoom: 13,
@@ -122,14 +153,12 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
         window.mapaMensajero = instancia;
         window.mapaInstancia = instancia;
 
-        // Cierre de overlay de menú radial activo al hacer clic sobre el mapa
         instancia.addListener("click", () => {
             if (window.overlayMenuActivo && typeof window.overlayMenuActivo.cerrar === "function") {
                 window.overlayMenuActivo.cerrar();
             }
         });
 
-        // Activar observador de cambios de tamaño sobre el contenedor para autoreparación visual
         if (window.ResizeObserver && !observadorResizeContenedor) {
             observadorResizeContenedor = new ResizeObserver(() => {
                 refrescarLienzoMapa();
@@ -137,7 +166,6 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
             observadorResizeContenedor.observe(contenedorMapa);
         }
 
-        // Vincular controles e interacciones del mapa
         if (mapaEventos && typeof mapaEventos.inicializarControles === "function") {
             mapaEventos.inicializarControles(instancia);
         }
@@ -156,7 +184,6 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
             desplegarZonaMensajeroEnMapa(instancia, "TODAS");
         }
 
-        // Procesar cola diferida de waypoints si intentaron renderizarse antes de que el mapa estuviera listo
         if (window.pendientesParaRenderizar) {
             const { listaPedidos, indiceActivo } = window.pendientesParaRenderizar;
             window.pendientesParaRenderizar = null;
@@ -172,7 +199,7 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
 }
 
 /**
- * Actualiza los waypoints, polilínia y marcadores sobre el mapa.
+ * Actualiza waypoints, polilínia y marcadores sobre el mapa.
  * @param {Array<Object>} listaPedidos 
  * @param {number} [indiceActivo=0] 
  */
@@ -213,10 +240,9 @@ export function enfocarZonaEnMapa(paradasZona) {
 
     paradasZona.forEach(p => {
         if (p) {
-            const lat = parseFloat(p.lat || p.latitud);
-            const lng = parseFloat(p.lng || p.longitud);
-            if (!isNaN(lat) && !isNaN(lng)) {
-                bounds.extend(new google.maps.LatLng(lat, lng));
+            const coords = obtenerCoordenadasValidasParada(p);
+            if (coords) {
+                bounds.extend(new google.maps.LatLng(coords.lat, coords.lng));
                 puntosValidos++;
             }
         }
@@ -235,19 +261,72 @@ export function enfocarZonaEnMapa(paradasZona) {
 
 /**
  * Centra y acerca suavemente la cámara a una parada específica.
- * @param {Object} parada 
+ * Incluye fallback por dirección de texto con auto-guardado en IndexedDB.
+ * @param {Object} parada - Objeto de la parada a enfocar
  */
 export function enfocarParadaEnMapa(parada) {
     const mapa = window.mapaMensajero || window.mapaInstancia;
-    if (!mapa || !parada) return;
+    
+    if (!mapa) {
+        console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible para enfocar la parada.", parada);
+        return;
+    }
 
-    const lat = parseFloat(parada.lat || parada.latitud);
-    const lng = parseFloat(parada.lng || parada.longitud);
-    if (isNaN(lat) || isNaN(lng)) return;
+    // 1. Intentar extracción directa de coordenadas sanitizadas
+    const coords = obtenerCoordenadasValidasParada(parada);
 
-    mapa.panTo(new google.maps.LatLng(lat, lng));
-    mapa.setZoom(17);
-    refrescarLienzoMapa();
+    if (coords) {
+        console.log(`🎯 [MAPA_VISOR]: Enfocando posición en mapa -> [Lat: ${coords.lat}, Lng: ${coords.lng}]`);
+        const centroObjetivo = new google.maps.LatLng(coords.lat, coords.lng);
+        mapa.panTo(centroObjetivo);
+        mapa.setZoom(17);
+        refrescarLienzoMapa();
+        return;
+    }
+
+    // 2. Fallback por Geocodificación en vivo si la parada solo posee dirección escrita
+    const direccionTexto = parada?.direccion || parada?.dir;
+    if (direccionTexto && typeof google !== "undefined" && google.maps && google.maps.Geocoder) {
+        console.warn(`⚠️ [MAPA_VISOR]: Parada sin coordenadas directas. Geocodificando dirección en vivo: "${direccionTexto}"`);
+        const geocoder = new google.maps.Geocoder();
+        const query = direccionTexto.toLowerCase().includes("cali") ? direccionTexto : `${direccionTexto}, Cali, Colombia`;
+
+        geocoder.geocode({ address: query }, async (results, status) => {
+            if (status === "OK" && results[0]) {
+                const loc = results[0].geometry.location;
+                const latNum = loc.lat();
+                const lngNum = loc.lng();
+
+                console.log(`✅ [MAPA_VISOR]: Dirección geocodificada con éxito -> [Lat: ${latNum}, Lng: ${lngNum}]`);
+
+                // Actualizar atributos de geolocalización en memoria
+                parada.lat = latNum;
+                parada.lng = lngNum;
+                parada.latitud = latNum;
+                parada.longitud = lngNum;
+
+                // Persistir las coordenadas recién obtenidas en IndexedDB para no re-consultar a Google Maps
+                const coleccionActual = window.paradasRutaActiva || window.pedidosGlobales || [];
+                if (Array.isArray(coleccionActual) && coleccionActual.length > 0) {
+                    try {
+                        await guardarRutaZonificada(coleccionActual);
+                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc} persistidas en IndexedDB.`);
+                    } catch (err) {
+                        console.warn("⚠️ [MAPA_VISOR]: No se pudo auto-guardar la coordenada en IndexedDB:", err);
+                    }
+                }
+
+                mapa.panTo(loc);
+                mapa.setZoom(17);
+                refrescarLienzoMapa();
+            } else {
+                console.error(`❌ [MAPA_VISOR]: No se pudo geocodificar la dirección "${query}". Status: ${status}`);
+            }
+        });
+        return;
+    }
+
+    console.error("❌ [MAPA_VISOR]: Parada con coordenadas e información de dirección completamente inválidas:", parada);
 }
 
 /**
@@ -258,7 +337,8 @@ export function obtenerInstanciaMapa() {
     return window.mapaMensajero || window.mapaInstancia || null;
 }
 
-// BINDINGS GLOBALES PARA COMPATIBILIDAD CON HANDLERS INLINE Y DELEGACIÓN EN WINDOW
+// BINDINGS GLOBALES
+window.obtenerCoordenadasValidasParada = obtenerCoordenadasValidasParada;
 window.inicializarMapaMensajero = inicializarMapaMensajero;
 window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;
 window.enfocarZonaEnMapa = enfocarZonaEnMapa;
@@ -273,7 +353,6 @@ export {
     registrarEventosClicMapa 
 };
 
-// Autoejecución segura si el SDK y el contenedor ya se encuentran disponibles en el DOM
 if (typeof google !== "undefined" && google.maps && typeof google.maps.Map === "function" && !window.mapaMensajero) {
     const contenedorExistente = document.getElementById("mapa-mensajero") || 
                                 document.getElementById("mapa-mensajero-view") || 

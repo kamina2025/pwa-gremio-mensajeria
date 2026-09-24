@@ -33,6 +33,16 @@ function normalizarTextoBusqueda(texto) {
 }
 
 /**
+ * Extrae un identificador único y consistente de una parada.
+ * @param {Object} p
+ * @returns {string}
+ */
+function obtenerIdUnicoParada(p) {
+    if (!p) return "";
+    return String(p.id || p.ssc || p.idParada || p.id_parada || p.secuencia || p.orden || "").trim();
+}
+
+/**
  * Identifica la intención de búsqueda (STOP, CLIENTE o DIRECCION)
  * @param {string} query 
  * @returns {Object}
@@ -169,7 +179,6 @@ export const mapaEventos = {
      * @returns {Promise<Array<Object>>}
      */
     async obtenerColeccionParadas() {
-        // Prioridad 1: Objetos globales en memoria activa
         if (Array.isArray(window.paradasRutaActiva) && window.paradasRutaActiva.length > 0) {
             return window.paradasRutaActiva;
         }
@@ -178,7 +187,6 @@ export const mapaEventos = {
             return window.paradasRutaActiva;
         }
 
-        // Prioridad 2: Base de Datos Local IndexedDB
         try {
             let paradasLocal = [];
             if (typeof dbStore.obtenerParadas === 'function') {
@@ -229,7 +237,6 @@ export const mapaEventos = {
             }).map(p => ({ ...p, _categoriaBusqueda: 'DIRECCION' }));
         }
 
-        // Búsqueda amplia si el filtro estricto por categoría no produce coincidencia
         if (resultados.length === 0 && intencion.tipo !== 'STOP') {
             resultados = paradas.filter((p, index) => {
                 const sec = (p.secuencia || p.orden || index + 1).toString();
@@ -255,6 +262,7 @@ export const mapaEventos = {
         if (coincidencias.length > 0) {
             html += coincidencias.map((p, idx) => {
                 const sec = p.secuencia || p.orden || idx + 1;
+                const uid = obtenerIdUnicoParada(p);
                 const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente N/A";
                 const direccionTexto = p.direccion || p.dir || "Sin dirección";
 
@@ -270,7 +278,7 @@ export const mapaEventos = {
                 }
 
                 return `
-                    <li class="cyber-sugerencia-item" data-type="parada" data-id="${p.id || sec}">
+                    <li class="cyber-sugerencia-item" data-type="parada" data-id="${uid}">
                         ${badgeHTML}
                         <div class="cyber-sug-info">
                             <strong>#Stop ${sec} - ${nombreCliente}</strong>
@@ -299,9 +307,11 @@ export const mapaEventos = {
                 const type = item.getAttribute("data-type");
                 if (type === "parada") {
                     const id = item.getAttribute("data-id");
-                    const seleccionada = coincidencias.find(p => (p.id || (p.secuencia || p.orden)).toString() === id.toString());
+                    const seleccionada = coincidencias.find(p => obtenerIdUnicoParada(p) === id);
                     if (seleccionada) {
                         this.seleccionarParadaBuscada(seleccionada);
+                    } else {
+                        console.warn("⚠️ [MAPA_EVENTOS]: No se localizó la parada seleccionada en el set de datos:", id);
                     }
                 } else if (type === "geocode") {
                     this.ejecutarGeocodificacionDireccion(queryOriginal);
@@ -312,10 +322,12 @@ export const mapaEventos = {
     },
 
     seleccionarParadaBuscada(parada) {
-        console.log("⚡ [MAPA_EVENTOS]: Parada seleccionada:", parada);
+        console.log("⚡ [MAPA_EVENTOS]: Parada seleccionada en búsqueda:", parada);
 
         if (typeof enfocarParadaEnMapa === "function") {
             enfocarParadaEnMapa(parada);
+        } else if (typeof window.enfocarParadaEnMapa === "function") {
+            window.enfocarParadaEnMapa(parada);
         }
 
         this.mostrarTarjetaDetalle(parada);
@@ -396,11 +408,17 @@ export const mapaEventos = {
         const sec = parada.secuencia || parada.orden || 1;
         const nombreCliente = parada.destinatario || parada.cliente || parada.nombre_cliente || parada.nombre || "Cliente N/A";
 
-        document.getElementById("card-stop-secuencia").textContent = `#STOP ${sec}`;
-        document.getElementById("card-stop-estado").textContent = (parada.estado || "ASIGNADO").toUpperCase();
-        document.getElementById("card-stop-destinatario").textContent = nombreCliente;
-        document.getElementById("card-stop-direccion").textContent = `📍 ${parada.direccion || parada.dir || 'N/A'}`;
-        document.getElementById("card-stop-telefono").textContent = `📞 ${parada.telefono || parada.tel || 'N/A'}`;
+        const elemSec = document.getElementById("card-stop-secuencia");
+        const elemEst = document.getElementById("card-stop-estado");
+        const elemDest = document.getElementById("card-stop-destinatario");
+        const elemDir = document.getElementById("card-stop-direccion");
+        const elemTel = document.getElementById("card-stop-telefono");
+
+        if (elemSec) elemSec.textContent = `#STOP ${sec}`;
+        if (elemEst) elemEst.textContent = (parada.estado || "ASIGNADO").toUpperCase();
+        if (elemDest) elemDest.textContent = nombreCliente;
+        if (elemDir) elemDir.textContent = `📍 ${parada.direccion || parada.dir || 'N/A'}`;
+        if (elemTel) elemTel.textContent = `📞 ${parada.telefono || parada.tel || 'N/A'}`;
 
         card.style.display = "block";
     },
@@ -410,23 +428,25 @@ export const mapaEventos = {
         if (!contenedor) return;
 
         const paradas = await this.obtenerColeccionParadas();
-        const latO = parseFloat(paradaOrigen.lat || paradaOrigen.latitud);
-        const lngO = parseFloat(paradaOrigen.lng || paradaOrigen.longitud);
+        const latO = parseFloat(paradaOrigen.lat || paradaOrigen.latitud || paradaOrigen.latitud_num);
+        const lngO = parseFloat(paradaOrigen.lng || paradaOrigen.longitud || paradaOrigen.longitud_num);
 
         if (isNaN(latO) || isNaN(lngO)) {
             contenedor.innerHTML = `<span class="cyber-cercana-empty">Coordenadas no válidas</span>`;
             return;
         }
 
+        const idOrigen = obtenerIdUnicoParada(paradaOrigen);
+
         const conDistancias = paradas
-            .filter(p => (p.id || p.secuencia) !== (paradaOrigen.id || paradaOrigen.secuencia))
+            .filter(p => obtenerIdUnicoParada(p) !== idOrigen)
             .map(p => {
-                const latD = parseFloat(p.lat || p.latitud);
-                const lngD = parseFloat(p.lng || p.longitud);
+                const latD = parseFloat(p.lat || p.latitud || p.latitud_num);
+                const lngD = parseFloat(p.lng || p.longitud || p.longitud_num);
                 const distM = calcularDistanciaHaversine(latO, lngO, latD, lngD);
                 return { ...p, distanciaMetros: distM };
             })
-            .filter(p => p.distanciaMetros !== Infinity)
+            .filter(p => p.distanciaMetros !== Infinity && !isNaN(p.distanciaMetros))
             .sort((a, b) => a.distanciaMetros - b.distanciaMetros)
             .slice(0, 3);
 
@@ -440,10 +460,11 @@ export const mapaEventos = {
                 ? `${(p.distanciaMetros / 1000).toFixed(2)} km` 
                 : `${Math.round(p.distanciaMetros)} m`;
             const sec = p.secuencia || p.orden || "?";
+            const uid = obtenerIdUnicoParada(p);
             const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente";
 
             return `
-                <button type="button" class="btn-parada-cercana" data-id="${p.id || sec}">
+                <button type="button" class="btn-parada-cercana" data-id="${uid}">
                     <span>#Stop ${sec} (${distTexto})</span>
                     <small>${nombreCliente}</small>
                 </button>
@@ -453,7 +474,7 @@ export const mapaEventos = {
         contenedor.querySelectorAll(".btn-parada-cercana").forEach(btn => {
             btn.addEventListener("click", () => {
                 const id = btn.getAttribute("data-id");
-                const destino = paradas.find(p => (p.id || (p.secuencia || p.orden)).toString() === id.toString());
+                const destino = paradas.find(p => obtenerIdUnicoParada(p) === id);
                 if (destino) {
                     this.seleccionarParadaBuscada(destino);
                 }
@@ -496,14 +517,12 @@ export const mapaEventos = {
             iconLockState.textContent = nuevoEstado ? '🔒' : '🔓';
         }
 
-        if (this.mapaInstancia) {
-            if (typeof this.mapaInstancia.setOptions === 'function') {
-                this.mapaInstancia.setOptions({
-                    draggable: !nuevoEstado,
-                    scrollwheel: !nuevoEstado,
-                    disableDoubleClickZoom: nuevoEstado
-                });
-            }
+        if (this.mapaInstancia && typeof this.mapaInstancia.setOptions === 'function') {
+            this.mapaInstancia.setOptions({
+                draggable: !nuevoEstado,
+                scrollwheel: !nuevoEstado,
+                disableDoubleClickZoom: nuevoEstado
+            });
         }
 
         try {

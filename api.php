@@ -1,6 +1,6 @@
 <?php
 /**
- * PROTOCOLO MACONDO - BACKEND DE RELEVO CIEGO & NODO API REST (GEMINI VISION FIX)
+ * PROTOCOLO MACONDO - BACKEND DE RELEVO CIEGO & NODO API REST
  * Ubicación: api.php
  */
 
@@ -11,8 +11,8 @@ error_reporting(0);
 ini_set('display_errors', '0');
 
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -48,14 +48,12 @@ function cargarVariablesEntornoEnv($rutaEnv) {
 cargarVariablesEntornoEnv(__DIR__ . '/.env');
 
 /**
- * Consulta a la API REST de Google Gemini con fallback secuencial y parsing defensivo.
+ * Consulta a la API REST de Google Gemini con fallback secuencial.
  */
 function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
     $keyLimpia = trim($apiKey);
     
-    // Lista priorizada de modelos
     $candidatos = [
-        "gemini-3.6-flash",
         "gemini-2.5-flash",
         "gemini-1.5-flash",
         "gemini-1.5-pro"
@@ -97,7 +95,6 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
         if ($response !== false) {
             $resData = json_decode($response, true);
             
-            // Extracción robusta navegando sobre todas las partes del contenido generado
             if ($httpCode === 200 && is_array($resData) && isset($resData['candidates'][0]['content']['parts'])) {
                 $textoResultado = '';
                 foreach ($resData['candidates'][0]['content']['parts'] as $part) {
@@ -116,14 +113,12 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
                 }
             }
 
-            // Registrar detalle específico de cuotas o límites
             $ultimoErrorData = [
                 'modelo_probado' => $modelo,
                 'http_code' => $httpCode,
                 'response' => $resData ?? $response
             ];
 
-            // Si es un error de cuota/crédito (402), abortamos el bucle para informar a la PWA inmediatamente
             if ($httpCode === 402) {
                 break;
             }
@@ -136,15 +131,52 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
     ];
 }
 
+/**
+ * Carga un archivo JSON de la raíz de manera segura.
+ */
+function cargarJSONFile($filename) {
+    $path = __DIR__ . '/' . $filename;
+    if (!file_exists($path)) return [];
+    $content = file_get_contents($path);
+    return json_decode($content, true) ?? [];
+}
+
+/**
+ * Guarda datos en un archivo JSON de la raíz.
+ */
+function guardarJSONFile($filename, $data) {
+    $path = __DIR__ . '/' . $filename;
+    return file_put_contents($path, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+}
+
+// DETERMINACIÓN DE MÉTODO Y ACCIÓN GLOBAL
 $method = $_SERVER['REQUEST_METHOD'];
-$action = $_GET['action'] ?? '';
+$inputJSON = file_get_contents('php://input');
+$payload = json_decode($inputJSON, true) ?? [];
+
+// Soporte para túnel _method en POST
+if ($method === 'POST' && isset($payload['_method'])) {
+    $method = strtoupper($payload['_method']);
+}
+
+// Extracción flexible del parámetro 'action' o 'accion'
+$action = $_GET['action'] ?? ($_GET['accion'] ?? ($payload['action'] ?? ($payload['accion'] ?? ($_POST['action'] ?? ''))));
 
 switch ($method) {
-    case 'POST':
-        $inputJSON = file_get_contents('php://input');
-        $payload = json_decode($inputJSON, true) ?? [];
+    case 'GET':
+        if ($action === 'obtener_paradas' || $action === 'obtener_pedidos') {
+            $paradas = cargarJSONFile('transito_pedidos.json');
+            if (empty($paradas)) {
+                $paradas = cargarJSONFile('pool_pedidos.json');
+            }
+            responderJSON(['status' => 'success', 'data' => $paradas, 'total' => count($paradas)]);
+        }
+        responderJSON(['status' => 'error', 'message' => 'Acción GET no válida'], 400);
+        break;
 
-        // --- EXTRACCIÓN MULTIMODAL DE TIRILLAS MÉDICAS ---
+    case 'POST':
+    case 'PUT':
+        // --- EXTRAER PUNTOS VÍA GEMINI VISION ---
         if ($action === 'extraer_puntos_documento') {
             if (!isset($payload['file_data']) || !isset($payload['mime_type'])) {
                 responderJSON(['status' => 'error', 'message' => 'Estructura de archivo no válida.'], 400);
@@ -190,7 +222,6 @@ switch ($method) {
 
             $rawText = $resultado['text'];
             
-            // Extracción limpia de la estructura JSON
             if (preg_match('/\[.*\]/s', $rawText, $matches)) {
                 $cleanJsonText = $matches[0];
             } else {
@@ -200,7 +231,6 @@ switch ($method) {
             $parsedPuntos = json_decode($cleanJsonText, true);
 
             if (json_last_error() === JSON_ERROR_NONE && is_array($parsedPuntos)) {
-                // Si el modelo devolvió un solo objeto en lugar de una lista, se envuelve en un arreglo
                 if (isset($parsedPuntos['destinatario']) || isset($parsedPuntos['ssc'])) {
                     $parsedPuntos = [$parsedPuntos];
                 }
@@ -219,7 +249,85 @@ switch ($method) {
             }
         }
 
+        // --- ACTUALIZAR / MUTAR ESTADO DE UNA PARADA ---
+        if ($action === 'actualizar_parada' || $action === 'mutar_estado') {
+            $idTarget = trim($payload['id'] ?? ($payload['ssc'] ?? ''));
+            if (empty($idTarget)) {
+                responderJSON(['status' => 'error', 'message' => 'ID o SSC de la parada es requerido'], 400);
+            }
+
+            $paradas = cargarJSONFile('transito_pedidos.json');
+            $encontrado = false;
+
+            foreach ($paradas as &$p) {
+                $idCur = trim($p['id'] ?? ($p['ssc'] ?? ''));
+                if ($idCur === $idTarget) {
+                    $p = array_merge($p, $payload);
+                    $p['updated_at'] = date('Y-m-d H:i:s');
+                    $encontrado = true;
+                    break;
+                }
+            }
+
+            if (!$encontrado) {
+                // Agregar como nueva parada si no existía previamente
+                $payload['id'] = $idTarget;
+                $payload['updated_at'] = date('Y-m-d H:i:s');
+                $paradas[] = $payload;
+            }
+
+            guardarJSONFile('transito_pedidos.json', $paradas);
+
+            responderJSON([
+                'status' => 'success',
+                'message' => 'Parada actualizada correctamente en el servidor',
+                'parada' => $payload
+            ]);
+        }
+
+        // --- GUARDAR LISTA COMPLETA DE PARADAS ---
+        if ($action === 'guardar_paradas') {
+            $lista = $payload['paradas'] ?? ($payload['puntos'] ?? $payload);
+            if (!is_array($lista)) {
+                responderJSON(['status' => 'error', 'message' => 'Formato de paradas no válido'], 400);
+            }
+
+            guardarJSONFile('transito_pedidos.json', $lista);
+
+            responderJSON([
+                'status' => 'success',
+                'message' => 'Lista de paradas persistida exitosamente',
+                'count' => count($lista)
+            ]);
+        }
+
+        responderJSON(["error" => "ACCION_NO_RECONOCIDA", "action_recibida" => $action], 400);
+        break;
+
+    case 'DELETE':
+        if ($action === 'eliminar_parada') {
+            $idTarget = trim($_GET['id'] ?? ($payload['id'] ?? ''));
+            if (empty($idTarget)) {
+                responderJSON(['status' => 'error', 'message' => 'ID de la parada es requerido'], 400);
+            }
+
+            $paradas = cargarJSONFile('transito_pedidos.json');
+            $paradasFiltradas = array_values(array_filter($paradas, function($p) use ($idTarget) {
+                $idCur = trim($p['id'] ?? ($p['ssc'] ?? ''));
+                return $idCur !== $idTarget;
+            }));
+
+            guardarJSONFile('transito_pedidos.json', $paradasFiltradas);
+
+            responderJSON([
+                'status' => 'success',
+                'message' => "Parada #{$idTarget} eliminada correctamente",
+                'id' => $idTarget
+            ]);
+        }
+
         responderJSON(["error" => "ACCION_NO_RECONOCIDA"], 400);
+        break;
 
     default:
         responderJSON(["error" => "METODO_NO_PERMITIDO"], 405);

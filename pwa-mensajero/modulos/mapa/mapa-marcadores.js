@@ -1,16 +1,32 @@
 /**
  * PROTOCOLO MACONDO - GESTOR DE MARCADORES, INFOWINDOWS Y MENÚ RADIAL CYBERPUNK
- * Ubicación: modulos/mapa/mapa-marcadores.js
+ * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
  */
 
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
 import { IndexedStore } from "../db/indexed-store.js";
 
+// Instancia de persistencia Local-First para operaciones de IndexedDB
+const dbStore = new IndexedStore();
+
 // Garantizar arreglos globales y estado overlay
 window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
 window.overlayMenuActivo = null;
 
-const dbStore = new IndexedStore();
+/**
+ * Obtiene dinámicamente la URL base de la API backend PHP.
+ * @returns {string} URL Endpoint de la API
+ */
+function obtenerEndpointAPI() {
+    if (typeof window !== "undefined" && window.API_ENDPOINT) {
+        return window.API_ENDPOINT;
+    }
+    const origin = window.location.origin;
+    if (window.location.pathname.includes("/pwa-gremio-mensajeria/")) {
+        return `${origin}/pwa-gremio-mensajeria/api.php`;
+    }
+    return `${origin}/api.php`;
+}
 
 /**
  * Cierra de manera segura cualquier overlay activo de menú radial en pantalla.
@@ -36,7 +52,7 @@ function sanitizarDireccionContexto(direccion) {
 }
 
 /**
- * Invoca el marcador telefónico nativo en dispositivos móviles Android.
+ * Invoca el marcador telefónico nativo en dispositivos móviles.
  * @param {string} numeroTelefono 
  */
 window.iniciarLlamadaAndroid = function(numeroTelefono) {
@@ -296,30 +312,59 @@ export function abrirModalGestionParada(pedido, indice) {
         pedido.telefono = nuevoTel;
         pedido.tel = nuevoTel;
         pedido.estado = nuevoEstado;
+        pedido.updated_at = new Date().toISOString();
 
         try {
-            await dbStore.actualizarParada(pedido);
+            if (typeof dbStore.actualizarParada === "function") {
+                await dbStore.actualizarParada(pedido);
+            } else if (typeof dbStore.guardarRegistro === "function") {
+                await dbStore.guardarRegistro("paradas", pedido);
+            }
             console.log("💾 [MAPA_MARCADORES]: Parada actualizada en IndexedDB desde Modal:", pedido);
 
-            const idUnico = pedido.id || `#PNT-${indice}`;
+            const idUnico = String(pedido.id || pedido.ssc || `#PNT-${indice}`).trim();
             mutarMarcadorPorId(idUnico, nuevoEstado);
             cerrarModal();
 
-            if (navigator.onLine) {
-                fetch('/api/paradas.php', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(pedido)
-                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Sync diferido a backend PHP:", err));
-            }
+            // Sincronización Remota Saneada
+            const baseUrl = obtenerEndpointAPI();
+            const urlApi = `${baseUrl}?action=actualizar_parada`;
+            
+            const payload = {
+                action: "actualizar_parada",
+                accion: "actualizar_parada",
+                id: pedido.id || idUnico,
+                ssc: pedido.ssc || idUnico,
+                estado: nuevoEstado,
+                destinatario: nuevoDest,
+                direccion: nuevaDir,
+                telefono: nuevoTel,
+                lat: pedido.lat,
+                lng: pedido.lng,
+                updated_at: pedido.updated_at
+            };
+
+            fetch(urlApi, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(async res => {
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.error) {
+                    console.warn("⚠️ [MAPA_MARCADORES_SYNC]: Respuesta con advertencia del servidor:", data);
+                } else {
+                    console.log("🌐 [MAPA_MARCADORES_SYNC]: Sincronizado exitosamente con API Backend:", data);
+                }
+            }).catch(err => console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido guardado en almacenamiento local.", err));
+
         } catch (err) {
-            console.error("❌ [MAPA_MARCADORES]: Error guardando parada en IndexedDB:", err);
+            console.error("❌ [MAPA_MARCADORES]: Error guardando parada localmente:", err);
         }
     });
 }
 
 /**
- * Renderiza la colección de marcadores interactivos usando el constructor funcional clásico google.maps.Marker.
+ * Renderiza la colección de marcadores interactivos en el visor de Google Maps.
  * @param {Array<Object>} listaPedidos 
  * @param {number} indiceActivo 
  * @param {Function} callbackActualizacion 
@@ -334,7 +379,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 
     if (!listaPedidos || listaPedidos.length === 0) return;
 
-    const mapa = window.mapaMensajero || window.mapaInstancia;
+    const mapa = window.mapaMensajero || window.mapaInstanciaGlobal || window.mapaInstancia;
     if (!mapa || typeof google === "undefined" || !google.maps) return;
 
     const bounds = new google.maps.LatLngBounds();
@@ -347,7 +392,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             estadoCalculado = 'en-camino';
         }
 
-        const idUnicoParada = pedido.id || `#PNT-${idx + 1}`;
+        const idUnicoParada = String(pedido.id || pedido.ssc || `#PNT-${idx + 1}`).trim();
         const nombreCliente = pedido.destinatario || pedido.cliente || pedido.nombre_cliente || "Cliente";
 
         const crearMarcadorEnPosicion = (latLngPos) => {
@@ -429,7 +474,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 }
 
 /**
- * Habilita el arrastre del pin en el lienzo (Acción Este - Mover).
+ * Habilita el arrastre del pin en el lienzo para reubicación (Acción Este - Mover).
  */
 function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion) {
     marker.setDraggable(true);
@@ -442,6 +487,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 
         pedido.lat = nuevaLat;
         pedido.lng = nuevaLng;
+        pedido.updated_at = new Date().toISOString();
 
         geocoder.geocode({ location: { lat: nuevaLat, lng: nuevaLng } }, async (results, status) => {
             if (status === "OK" && results[0]) {
@@ -450,19 +496,39 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
             }
 
             try {
-                await dbStore.actualizarParada(pedido);
+                if (typeof dbStore.actualizarParada === "function") {
+                    await dbStore.actualizarParada(pedido);
+                } else if (typeof dbStore.guardarRegistro === "function") {
+                    await dbStore.guardarRegistro("paradas", pedido);
+                }
                 console.log("💾 [MAPA_MARCADORES]: Parada reubicada y guardada en IndexedDB:", pedido);
             } catch (err) {
-                console.error("❌ [MAPA_MARCADORES]: Error al guardar geocodificación en IndexedDB:", err);
+                console.error("❌ [MAPA_MARCADORES]: Error al guardar reubicación en IndexedDB:", err);
             }
 
-            if (navigator.onLine) {
-                fetch('/api/paradas.php', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(pedido)
-                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Falló sincronización con backend PHP:", err));
-            }
+            // Sincronización Remota Saneada
+            const baseUrl = obtenerEndpointAPI();
+            const urlApi = `${baseUrl}?action=actualizar_parada`;
+
+            const payload = {
+                action: "actualizar_parada",
+                accion: "actualizar_parada",
+                id: pedido.id || idParada,
+                ssc: pedido.ssc || idParada,
+                lat: nuevaLat,
+                lng: nuevaLng,
+                direccion: pedido.direccion,
+                updated_at: pedido.updated_at
+            };
+
+            fetch(urlApi, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(async res => {
+                const data = await res.json().catch(() => ({}));
+                console.log("🌐 [MAPA_MARCADORES_MOVE_SYNC]: Coordenadas sincronizadas con servidor:", data);
+            }).catch(err => console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido a backend PHP:", err));
 
             if (typeof callbackActualizacion === "function") {
                 callbackActualizacion(pedido);
@@ -475,22 +541,44 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 }
 
 /**
- * Elimina la parada localmente (Acción Sur - Eliminar).
+ * Elimina la parada local y remotamente (Acción Sur - Eliminar).
  */
 async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
     if (!confirm(`¿Eliminar la parada ${idParada} del mapa y registro local?`)) return;
 
     try {
-        await dbStore.eliminarParada(idParada);
+        if (typeof dbStore.eliminarParada === "function") {
+            await dbStore.eliminarParada(idParada);
+        } else if (typeof dbStore.eliminarRegistro === "function") {
+            await dbStore.eliminarRegistro("paradas", idParada);
+        }
         console.log("💾 [MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
 
         marker.setMap(null);
         window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter(m => m !== marker);
 
-        if (navigator.onLine) {
-            fetch(`/api/paradas.php?id=${encodeURIComponent(idParada)}`, { method: 'DELETE' })
-                .catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Error eliminando en backend PHP:", err));
+        // Actualizar variables de estado RAM globales
+        if (Array.isArray(window.__CACHE_PARADAS_MACONDO__)) {
+            window.__CACHE_PARADAS_MACONDO__ = window.__CACHE_PARADAS_MACONDO__.filter(p => String(p.id || p.ssc) !== String(idParada));
         }
+
+        const baseUrl = obtenerEndpointAPI();
+        const urlApi = `${baseUrl}?action=eliminar_parada`;
+
+        const payload = {
+            action: "eliminar_parada",
+            accion: "eliminar_parada",
+            id: idParada
+        };
+
+        fetch(urlApi, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(async res => {
+            const data = await res.json().catch(() => ({}));
+            console.log("🌐 [MAPA_MARCADORES_DEL_SYNC]: Parada eliminada del servidor remoto:", data);
+        }).catch(err => console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Error eliminando en backend PHP (Offline):", err));
 
         if (typeof callbackActualizacion === "function") {
             callbackActualizacion();
@@ -509,7 +597,7 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
 export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
     if (!window.marcadoresRutaMensajero) return;
 
-    const marker = window.marcadoresRutaMensajero.find(m => m.get('idParada') === idParada);
+    const marker = window.marcadoresRutaMensajero.find(m => String(m.get('idParada')).trim() === String(idParada).trim());
 
     if (marker) {
         const sec = marker.get('secuencia') || 1;
@@ -544,3 +632,11 @@ window.cargarEdicionDesdePin = function(idParada) {
         }
     }, 120);
 };
+
+// BINDINGS GLOBALES EN WINDOW
+if (typeof window !== "undefined") {
+    window.renderizarMarcadoresInteractivos = renderizarMarcadoresInteractivos;
+    window.mutarMarcadorPorId = mutarMarcadorPorId;
+    window.abrirModalGestionParada = abrirModalGestionParada;
+    window.cerrarOverlayActivo = cerrarOverlayActivo;
+}

@@ -1,1 +1,41 @@
-{}
+[
+    {
+        "action": "actualizar_parada",
+        "accion": "actualizar_parada",
+        "id": "#PNT-3466",
+        "ssc": "226303",
+        "estado": "entregado",
+        "destinatario": "MAGDA RONDON CEDENO",
+        "direccion": "CL 44 B 10- 46 casa p piso el troncal",
+        "telefono": "3182139829",
+        "lat": 3.451191,
+        "lng": -76.5041339,
+        "updated_at": "2026-09-24 09:26:45"
+    },
+    {
+        "action": "actualizar_parada",
+        "accion": "actualizar_parada",
+        "id": "#PNT-7290",
+        "ssc": "201540",
+        "estado": "no-entregado",
+        "destinatario": "ANA LEONIRA VARGAS DE JIMENEZ",
+        "direccion": "CRA 16 40-40 2DO PISO ATANASIO GIRARDOT",
+        "telefono": "3115848789",
+        "lat": 3.44343,
+        "lng": -76.505535,
+        "updated_at": "2026-09-24 09:26:57"
+    },
+    {
+        "action": "actualizar_parada",
+        "accion": "actualizar_parada",
+        "id": "#PNT-2625",
+        "ssc": "257046",
+        "estado": "no-entregado",
+        "destinatario": "MANUEL EFREN RAMIREZ LOZANO",
+        "direccion": "cra 8 -50-30 apt 201 b\/ la bace",
+        "telefono": "3188612020",
+        "lat": 3.4525152,
+        "lng": -76.4996916,
+        "updated_at": "2026-09-24 09:27:06"
+    }
+]

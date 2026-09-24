@@ -19,6 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
+/**
+ * Responde un Payload JSON garantizando un buffer limpio.
+ */
 function responderJSON($data, $httpCode = 200) {
     http_response_code($httpCode);
     $bufferLength = ob_get_length();
@@ -29,6 +32,9 @@ function responderJSON($data, $httpCode = 200) {
     exit;
 }
 
+/**
+ * Carga variables del archivo .env local si existe.
+ */
 function cargarVariablesEntornoEnv($rutaEnv) {
     if (!file_exists($rutaEnv)) return;
     $lineas = file($rutaEnv, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -49,12 +55,15 @@ cargarVariablesEntornoEnv(__DIR__ . '/.env');
 
 /**
  * Consulta a la API REST de Google Gemini con fallback secuencial.
+ * Prioriza el modelo gemini-3.6-flash validado.
  */
 function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
     $keyLimpia = trim($apiKey);
     
+    // Jerarquía de modelos actualizada: 3.6-flash como estándar principal
     $candidatos = [
-        "gemini-2.5-flash",
+        "gemini-3.6-flash",
+        "gemini-2.0-flash",
         "gemini-1.5-flash",
         "gemini-1.5-pro"
     ];
@@ -88,6 +97,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
         curl_close($ch);
 
         if ($curlError) {
+            error_log("[API_GEMINI_ERROR] Error cURL con modelo {$modelo}: {$curlError}");
             $ultimoErrorData = ["curl_error" => $curlError, "modelo_probado" => $modelo];
             continue;
         }
@@ -104,6 +114,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
                 }
 
                 if (!empty($textoResultado)) {
+                    error_log("[API_GEMINI_SUCCESS] Extracción exitosa utilizando modelo: {$modelo}");
                     return [
                         'exito' => true,
                         'modelo' => $modelo,
@@ -113,6 +124,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
                 }
             }
 
+            error_log("[API_GEMINI_WARN] Fallo HTTP {$httpCode} con modelo {$modelo}. Intentando siguiente candidato.");
             $ultimoErrorData = [
                 'modelo_probado' => $modelo,
                 'http_code' => $httpCode,
@@ -120,6 +132,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
             ];
 
             if ($httpCode === 402) {
+                // Pago requerido / Cuota agotada de cuenta
                 break;
             }
         }
@@ -222,6 +235,7 @@ switch ($method) {
 
             $rawText = $resultado['text'];
             
+            // Limpieza de marcadores markdown si el modelo responde dentro de bloque de código
             if (preg_match('/\[.*\]/s', $rawText, $matches)) {
                 $cleanJsonText = $matches[0];
             } else {
@@ -270,7 +284,6 @@ switch ($method) {
             }
 
             if (!$encontrado) {
-                // Agregar como nueva parada si no existía previamente
                 $payload['id'] = $idTarget;
                 $payload['updated_at'] = date('Y-m-d H:i:s');
                 $paradas[] = $payload;

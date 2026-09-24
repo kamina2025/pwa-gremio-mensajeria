@@ -41,7 +41,7 @@ function determinarConfiguracionEntorno() {
         console.log(`🖥️ [ENTORNO_LOCAL_XAMPP]: PWA operando en local. Apuntando API local -> [${endpointPhp}]`);
         return {
             endpoint: endpointPhp,
-            timeoutMs: 30000, // Timeout extendido para pruebas locales en XAMPP
+            timeoutMs: 30000, // Timeout extendido para servidor local en XAMPP
             modoLocal: true
         };
     }

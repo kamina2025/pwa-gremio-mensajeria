@@ -59,24 +59,49 @@ export async function cargarRutaDesdeTextoOEnlace(textoEntrada, callbackRefresco
  */
 export class ImportadorMasivoMensajero {
     constructor() {
+        this.isProcessing = false; // Flag de control para evitar ejecuciones duplicadas
+        this._onProcesarIAClick = null;
+        this._onProcesarLocalClick = null;
+        this._onFotoChange = null;
         console.log(">>> [IMPORTADOR_MENSAJERO_INIT]: Instanciando subsistema de ingestión masiva Acumulativa...");
+    }
+
+    /**
+     * Alterna la disponibilidad visual y lógica de los botones de importación
+     */
+    toggleEstadoBotonesUI(bloquear) {
+        const btnIaCloud = document.getElementById("btn-procesar-archivo-masivo");
+        const btnLocal = document.getElementById("btn-procesar-archivo-masivo-local");
+
+        if (btnIaCloud) btnIaCloud.disabled = bloquear;
+        if (btnLocal) btnLocal.disabled = bloquear;
     }
 
     vincularEscuchas() {
         const btnProcesarIA = document.getElementById("btn-procesar-archivo-masivo");
         if (btnProcesarIA) {
-            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo (IA Cloud) enlazado.");
-            btnProcesarIA.removeEventListener("click", this._onProcesarIAClick);
-            this._onProcesarIAClick = () => this.ejecutarImportacionArchivo(null, true);
+            if (this._onProcesarIAClick) {
+                btnProcesarIA.removeEventListener("click", this._onProcesarIAClick);
+            }
+            this._onProcesarIAClick = (e) => {
+                if (e) e.preventDefault();
+                this.ejecutarImportacionArchivo(null, true);
+            };
             btnProcesarIA.addEventListener("click", this._onProcesarIAClick);
+            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo (IA Cloud) enlazado de forma segura.");
         }
 
         const btnProcesarLocal = document.getElementById("btn-procesar-archivo-masivo-local");
         if (btnProcesarLocal) {
-            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo-local (Sin IA) enlazado.");
-            btnProcesarLocal.removeEventListener("click", this._onProcesarLocalClick);
-            this._onProcesarLocalClick = () => this.ejecutarImportacionArchivoLocal();
+            if (this._onProcesarLocalClick) {
+                btnProcesarLocal.removeEventListener("click", this._onProcesarLocalClick);
+            }
+            this._onProcesarLocalClick = (e) => {
+                if (e) e.preventDefault();
+                this.ejecutarImportacionArchivoLocal();
+            };
             btnProcesarLocal.addEventListener("click", this._onProcesarLocalClick);
+            console.log(">>> [IMPORTADOR_LISTENERS]: Botón #btn-procesar-archivo-masivo-local (Sin IA) enlazado de forma segura.");
         }
 
         // Vincular el acumulador multifoto
@@ -90,7 +115,10 @@ export class ImportadorMasivoMensajero {
         const inputFoto = document.getElementById("archivo-base-datos");
         if (!inputFoto) return;
 
-        inputFoto.removeEventListener("change", this._onFotoChange);
+        if (this._onFotoChange) {
+            inputFoto.removeEventListener("change", this._onFotoChange);
+        }
+
         this._onFotoChange = (e) => {
             const archivosNuevos = Array.from(e.target.files || []);
             if (archivosNuevos.length === 0) return;
@@ -170,6 +198,11 @@ export class ImportadorMasivoMensajero {
      * MODO 3: Extracción heurística local sin IA (CSV, Excel, TXT)
      */
     async ejecutarImportacionArchivoLocal(callbackRefresco) {
+        if (this.isProcessing) {
+            console.warn("⚠️ [IMPORTADOR_LOCAL]: Procesamiento en curso. Solicitud omitida para prevenir duplicación.");
+            return;
+        }
+
         console.log(">>> [IMPORTADOR_EXEC_LOCAL]: Disparando extracción local MODO 3...");
         emitirHaptico(30);
 
@@ -186,6 +219,9 @@ export class ImportadorMasivoMensajero {
             notificarResultadoImportacion("ALERTA MENSAJERO", "Seleccione uno o varios archivos para la extracción local.", true);
             return;
         }
+
+        this.isProcessing = true;
+        this.toggleEstadoBotonesUI(true);
 
         const todasLasParadasNuevas = [];
 
@@ -234,6 +270,8 @@ export class ImportadorMasivoMensajero {
             console.error(">>> [IMPORTADOR_LOCAL_FAIL]:", error);
             notificarResultadoImportacion("ERROR PROCESANDO ARCHIVOS LOCALES", error.message, true);
         } finally {
+            this.isProcessing = false;
+            this.toggleEstadoBotonesUI(false);
             if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
                 window.visorAnimaciones.ocultarModal();
             }
@@ -244,6 +282,11 @@ export class ImportadorMasivoMensajero {
      * MODO 1: Procesamiento por Lote Acumulado con IA Cloud (Gemini)
      */
     async ejecutarImportacionArchivo(callbackRefresco, forzarIA = true) {
+        if (this.isProcessing) {
+            console.warn("⚠️ [IMPORTADOR_IA]: Procesamiento en curso. Solicitud omitida para prevenir duplicación.");
+            return;
+        }
+
         console.log(">>> [IMPORTADOR_EXEC_IA]: Disparando proceso acumulativo MODO 1 (IA Cloud)...");
         emitirHaptico(30);
 
@@ -261,6 +304,9 @@ export class ImportadorMasivoMensajero {
             notificarResultadoImportacion("ALERTA MENSAJERO", "Seleccione o tome al menos una fotografía de la tirilla.", true);
             return;
         }
+
+        this.isProcessing = true;
+        this.toggleEstadoBotonesUI(true);
 
         const paradasNuevasLote = [];
 
@@ -322,6 +368,8 @@ export class ImportadorMasivoMensajero {
             actualizarEstadoIngestionUI(`>>> ERROR: ${error.message}`, "#ff3366");
             notificarResultadoImportacion("ERROR AGREGANDO PARADAS", error.message, true);
         } finally {
+            this.isProcessing = false;
+            this.toggleEstadoBotonesUI(false);
             if (window.visorAnimaciones && typeof window.visorAnimaciones.ocultarModal === "function") {
                 window.visorAnimaciones.ocultarModal();
             }

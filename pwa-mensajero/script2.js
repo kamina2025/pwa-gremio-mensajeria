@@ -8,7 +8,9 @@ import {
     guardarRutaZonificada, 
     obtenerParadasGuardadas,
     sincronizarYRenderizarPool,
-    sincronizarYRenderizarTransito
+    sincronizarYRenderizarTransito,
+    eliminarParadaLocal,
+    borrarRutaCompletaLocal
 } from "./modulos/mensajero-persistencia.js";
 
 import { inicializarMapaMensajero, refrescarLienzoMapa } from "./modulos/mapa/mapa-visor.js";

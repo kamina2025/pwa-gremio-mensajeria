@@ -25,18 +25,26 @@
     margin-top: 8px;
 }
 
+/* pwa-mensajero/style/ruta-activa.css */
+
+/* ==========================================================================
+   ACORDEONES Y ZONIFICACIÓN POR COLORES CYBERPUNK
+   ========================================================================== */
+
 .cyber-accordion {
     background: #0d1117;
     border: 1px solid #30363d;
     border-radius: 6px;
     overflow: hidden;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease;
     position: relative;
 }
 
+/* Modificado: Solo aplicar resplandor, preservar el border-color asignado por la zona */
 .cyber-accordion[open] {
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
-    border-color: rgba(0, 229, 255, 0.4);
 }
 
 .cyber-summary {
@@ -121,7 +129,11 @@
     cursor: grab;
     user-select: none;
     touch-action: manipulation;
-    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    transition:
+        transform 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        opacity 0.15s ease;
     position: relative;
 }
 

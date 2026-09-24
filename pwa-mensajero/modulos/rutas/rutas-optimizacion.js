@@ -1,6 +1,7 @@
 /**
  * PROTOCOLO MACONDO - OPTIMIZADOR DE RUTAS Y PROXIMIDAD GOOGLE MAPS
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-optimizacion.js
+ * Arquitectura: Local-First / Fallback Geodésico Offline
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
@@ -33,7 +34,7 @@ function obtenerCoordenadasValidas(p) {
 
 /**
  * Optimiza la secuencia de visitas de paradas dentro de una zona específica
- * utilizando la Directions/Routes API de Google Maps con fallback geodésico Haversine.
+ * utilizando la API clásica DirectionsService de Google Maps con fallback geodésico Haversine.
  * 
  * @param {string} zonaKeyInput - Clave o nombre de la zona a optimizar
  * @param {Object|null} [paradaInicioFix=null] - Parada fijada como origen
@@ -43,10 +44,10 @@ function obtenerCoordenadasValidas(p) {
 export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioFix = null, paradaFinFix = null) {
   if (!zonaKeyInput) return [];
 
-  const targetCanónico = estandarizarZonaCanonica(zonaKeyInput);
-  const targetLimpio = normalizarClaveZona(targetCanónico);
+  const targetCanonico = estandarizarZonaCanonica(zonaKeyInput);
+  const targetLimpio = normalizarClaveZona(targetCanonico);
 
-  console.group(`⚡ [OPTIMIZADOR_GOOGLE]: Optimizando vía Google Maps API para: '${targetCanónico}'`);
+  console.group(`⚡ [OPTIMIZADOR_GOOGLE]: Optimizando vía Google Maps API para: '${targetCanonico}'`);
 
   // 1. Obtener la colección global de paradas (Memoria / Persistencia)
   let todasLasParadas = await obtenerParadasGuardadas();
@@ -55,7 +56,7 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
   }
 
   // 2. Filtrar las paradas correspondientes a la zona solicitada
-  let paradasZona = todasLasParadas.filter((p) => p && obtenerZonaParadaCanonica(p) === targetCanónico);
+  let paradasZona = todasLasParadas.filter((p) => p && obtenerZonaParadaCanonica(p) === targetCanonico);
 
   if (paradasZona.length <= 1) {
     console.warn("ℹ️ [OPTIMIZADOR_GOOGLE]: Insuficientes paradas en la zona para realizar optimización.");
@@ -63,7 +64,7 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
     return paradasZona;
   }
 
-  // 3. Comprobar disponibilidad de SDK de Google Maps
+  // 3. Comprobar disponibilidad del SDK clásico de Google Maps
   const gMapsListo = typeof google !== "undefined" && google && google.maps && google.maps.DirectionsService;
   if (!gMapsListo) {
     console.warn("⚠️ [OPTIMIZADOR_GOOGLE]: SDK de Google Maps no disponible. Ejecutando fallback Haversine offline...");
@@ -120,7 +121,7 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
     let ordenOptimizadoIndices = [];
     let directionsResult = null;
 
-    // Ejecutar servicio DirectionsService
+    // Ejecutar servicio DirectionsService clásico
     const directionsService = new google.maps.DirectionsService();
     const request = {
       origin: origenLatLng,
@@ -187,13 +188,13 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
     window.paradasRutaActiva = [...listaGlobalActualizada];
     window.pedidosGlobales = [...listaGlobalActualizada];
 
-    // 9. Trazado vial oficial sobre el visor de Google Maps
+    // 9. Trazado vial oficial sobre el visor con DirectionsRenderer
     const mapaInstancia = window.mapaInstanciaGlobal || window.mapaMensajero || window.mapaInstancia;
     if (mapaInstancia && directionsResult) {
       if (!window.__DIRECTIONS_RENDERER__) {
         window.__DIRECTIONS_RENDERER__ = new google.maps.DirectionsRenderer({
           map: mapaInstancia,
-          suppressMarkers: true, // Mantener los pines Cyberpunk personalizados
+          suppressMarkers: true,
           polylineOptions: { strokeColor: "#00e5ff", strokeWeight: 5, strokeOpacity: 0.9 }
         });
       } else {
@@ -202,7 +203,7 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
       window.__DIRECTIONS_RENDERER__.setDirections(directionsResult);
     }
 
-    // 10. Refrescar marcadores interactivas y UI de acordeones
+    // 10. Refrescar marcadores interactivos y UI de acordeones
     if (typeof window.actualizarPuntosEnMapa === "function") {
       window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
     }
@@ -242,7 +243,6 @@ async function optimizarFallbackHaversine(paradasZona, puntoInicio, todasLasPara
   while (pendientes.length > 0) {
     const coordsA = obtenerCoordenadasValidas(actual);
     if (!coordsA) {
-      // Si el punto actual no tiene coordenadas, extraer el siguiente
       actual = pendientes.shift();
       if (actual) resultado.push(actual);
       continue;
@@ -289,7 +289,7 @@ async function optimizarFallbackHaversine(paradasZona, puntoInicio, todasLasPara
     return seqA - seqB;
   });
 
-  // Guardar en persistencia y RAMs
+  // Guardar en persistencia y memoria RAM
   await guardarRutaZonificada(listaGlobalActualizada);
   window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
   window.paradasMemoriaLocal = [...listaGlobalActualizada];
@@ -308,6 +308,6 @@ async function optimizarFallbackHaversine(paradasZona, puntoInicio, todasLasPara
   return resultado;
 }
 
-// BINDINGS GLOBALES DE LEGACY / WINDOW
+// BINDINGS GLOBALES LEGACY
 window.optimizarRutaPorProximidadZona = optimizarRutaPorProximidadZona;
 window.optimizarRutaPorProximidad = optimizarRutaPorProximidadZona;

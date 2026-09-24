@@ -1,8 +1,10 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA RENDERIZADOR DE INTERFAZ OPERACIONAL (TIRILLAS & ZONAS)
  * Ubicación: pwa-mensajero/modulos/mensajero-ui.js
- * Fachada principal modularizada con acordeones exclusivos y scroll por zona
+ * Fachada principal modularizada y desacoplada para la consola operacional
  */
+
+import { renderizarParadasZonificadasUI } from "./rutas/rutas-ui-acordeon.js";
 
 let actualizarPuntosEnMapaFn = null;
 let enfocarZonaEnMapaFn = null;
@@ -87,19 +89,18 @@ function emitirHaptico(pattern = 30) {
 }
 
 /**
- * Renderiza la consola de operaciones táctica desplegando los campos clave de la tirilla y acordeones zonificados.
+ * Renderiza la consola de operaciones delegando acordeones a rutas-ui-acordeon.js.
  * @param {Array<Object>} listaPedidos 
  * @param {number} [indiceActivo=0] 
  * @param {number} [llamadasRealizadas=0] 
  */
 export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 0, llamadasRealizadas = 0) {
-    console.group("🖥️ [MENSAJERO_UI]: Renderizando Consola de Operaciones y Acordeones Independientes");
+    console.group("🖥️ [MENSAJERO_UI]: Renderizando Consola de Operaciones");
     
     paradasMemoriaLocal = Array.isArray(listaPedidos) ? [...listaPedidos] : [];
     console.log(`📊 Paradas totales recibidas: ${paradasMemoriaLocal.length} | Ítem Activo: Índice ${indiceActivo}`);
 
     const contenedorActivo = document.getElementById("contenedor-tarjeta-activa");
-    const contenedorAcordeones = document.getElementById("contenedor-acordeones-zonas") || document.getElementById("lista-paradas-zonificadas");
     const txtTotal = document.getElementById("txt-total-paradas");
 
     if (txtTotal) txtTotal.innerText = `${paradasMemoriaLocal.length} PARADAS`;
@@ -116,14 +117,16 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
         if (contenedorActivo && typeof renderizarTarjetaActivaUIFn === "function") {
             renderizarTarjetaActivaUIFn(contenedorActivo, null, 0, 0);
         }
-        if (contenedorAcordeones) contenedorAcordeones.innerHTML = "";
+        if (typeof renderizarParadasZonificadasUI === "function") {
+            await renderizarParadasZonificadasUI([]);
+        }
         console.groupEnd();
         return;
     }
 
     const pedido = paradasMemoriaLocal[indiceActivo] || paradasMemoriaLocal[0];
 
-    // 1. TARJETA ACTIVA EN FOCO (Evaluación limpia de visibilidad)
+    // 1. TARJETA ACTIVA EN FOCO (si el contenedor existe en la vista actual)
     const renderFn = renderizarTarjetaActivaUIFn || window.renderizarTarjetaActivaUI;
     if (contenedorActivo && typeof renderFn === "function") {
         console.log(`🎯 [MENSAJERO_UI]: Renderizando Tarjeta Activa -> ID: ${pedido.id || pedido.ssc || 'N/A'}`);
@@ -132,170 +135,19 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
         console.log("ℹ️ [MENSAJERO_UI]: Vista Activa sin `#contenedor-tarjeta-activa`. Omitiendo renderizado de tarjeta estática.");
     }
 
-    // 2. CONSTRUCCIÓN DE ACORDEONES AGRUPADOS POR ZONA (Optimizado con DocumentFragment)
-    if (contenedorAcordeones) {
-        console.log("📋 [MENSAJERO_UI]: Construyendo acordeones de paradas por zona...");
-        contenedorAcordeones.innerHTML = "";
-        const fragmentoAcordeones = document.createDocumentFragment();
-
-        const grupos = {};
-        paradasMemoriaLocal.forEach((item, index) => {
-            if (!item.secuencia) item.secuencia = index + 1;
-            const zKey = item.zonaKey || item.zona || "GENERAL";
-            if (!grupos[zKey]) grupos[zKey] = [];
-            grupos[zKey].push({ ...item, origIndex: index });
-        });
-
-        const keysZona = Object.keys(grupos);
-        console.log(`🎨 [MENSAJERO_UI]: Grupos de zonas identificados (${keysZona.length}):`, keysZona);
-
-        keysZona.forEach((zonaKey, indexZona) => {
-            const infoZona = PALETA_ZONAS_REF[zonaKey] || { color: "#00e5ff", label: zonaKey };
-            const itemsGrupo = grupos[zonaKey];
-
-            itemsGrupo.sort((a, b) => (a.secuenciaZona || a.secuencia || 0) - (b.secuenciaZona || b.secuencia || 0));
-
-            const details = document.createElement("details");
-            details.className = "cyber-accordion acordeon-zona-item";
-            details.style.cssText = `background:#0d1117; border:1px solid ${infoZona.color}; margin-bottom:10px; border-radius:6px; overflow:hidden; position:relative;`;
-            
-            // Abrir únicamente la primera zona por defecto
-            details.open = (indexZona === 0);
-
-            // Cierre automático exclusivo de otros acordeones al abrir uno nuevo
-            details.addEventListener("toggle", () => {
-                if (details.open) {
-                    console.log(`📂 [MENSAJERO_UI]: Acordeón desplegado -> Zona '${infoZona.label}' (${itemsGrupo.length} envíos)`);
-                    
-                    const enfocarFn = enfocarZonaEnMapaFn || window.enfocarZonaEnMapa;
-                    if (typeof enfocarFn === "function") {
-                        enfocarFn(itemsGrupo);
-                    }
-
-                    // Cerrar automáticamente todos los demás acordeones del contenedor
-                    const todosLosAcordeones = contenedorAcordeones.querySelectorAll(".acordeon-zona-item");
-                    todosLosAcordeones.forEach((otroAcc) => {
-                        if (otroAcc !== details && otroAcc.open) {
-                            otroAcc.open = false;
-                        }
-                    });
-                } else {
-                    console.log(`📁 [MENSAJERO_UI]: Acordeón plegado -> Zona '${infoZona.label}'`);
-                }
-            });
-
-            // Cabecera Summary
-            const summary = document.createElement("summary");
-            summary.className = "cyber-summary";
-            summary.style.cssText = `padding:10px 14px; background:#161b22; color:${infoZona.color}; font-weight:bold; font-size:0.85rem; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; border-bottom:1px solid rgba(255,255,255,0.05);`;
-            summary.innerHTML = `
-                <span>▼ ${infoZona.label} (${itemsGrupo.length} Envíos)</span>
-                <span class="badge-zone" style="background:${infoZona.color}22; border:1px solid ${infoZona.color}; font-size:0.7rem; padding:2px 8px; border-radius:3px; color:${infoZona.color}; font-family:monospace;">
-                    ${infoZona.color}
-                </span>
-            `;
-
-            // Barra de Botones de Acción por Zona
-            const accionesBar = document.createElement("div");
-            accionesBar.className = "zona-acciones-bar";
-            accionesBar.style.cssText = "display: flex; gap: 6px; padding: 8px; background: #080b10; border-bottom: 1px solid #30363d; overflow-x: auto;";
-            accionesBar.innerHTML = `
-                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#00e5ff; border-color:#00e5ff; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.iniciarRutaZona('${infoZona.label}')">
-                    ► _INICIAR_RUTA
-                </button>
-                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#ffb300; border-color:#ffb300; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.optimizarProximidadZona('${infoZona.label}')">
-                    ⚡ OPTIMIZAR
-                </button>
-                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#39ff14; border-color:#39ff14; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.planillarRutaZona('${infoZona.label}')">
-                    📝 _PLANILLAR
-                </button>
-                <button type="button" class="btn-zona-action cyber-btn-touch danger" style="color:#ff3366; border-color:#ff3366; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.verMapaZona('${infoZona.label}')">
-                    🗺️ VER MAPA
-                </button>
-            `;
-
-            // Lista con Drag & Drop y scroll dedicado
-            const listContainer = document.createElement("div");
-            listContainer.className = "paradas-drag-list zona-scroll-dedicado";
-            listContainer.style.cssText = `
-                max-height: clamp(200px, 38dvh, 400px);
-                overflow-y: auto !important;
-                touch-action: pan-y !important;
-                -webkit-overflow-scrolling: touch;
-                padding: 8px 6px 30px 6px;
-                background: #05070f;
-                display: flex;
-                flex-direction: column;
-                gap: 6px;
-                position: relative;
-            `;
-
-            itemsGrupo.forEach((p, idx) => {
-                const idParadaLimpio = String(p.id || p.ssc || `p_${idx}`).replace(/'/g, "\\'");
-                const numSecuencia = p.secuenciaZona || p.secuencia || (idx + 1);
-                const card = document.createElement("div");
-                card.className = `item-parada-lista parada-card ${p.origIndex === indiceActivo ? 'activa' : ''}`;
-                card.setAttribute("draggable", "true");
-                card.setAttribute("data-id", p.id || p.ssc);
-                card.setAttribute("data-orig-index", p.origIndex);
-                card.style.cssText = `background:#0c080f; border:1px solid ${p.origIndex === indiceActivo ? 'var(--neon-cyan, #00e5ff)' : '#291f33'}; padding:8px 10px; font-size:0.75rem; border-radius:4px; cursor:grab; margin-bottom:2px;`;
-
-                card.innerHTML = `
-                    <div id="vista-lectura-${p.origIndex}" style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <div><strong style="color:${infoZona.color}">[#${numSecuencia}]</strong> ${p.destinatario || p.cliente || "Cliente"} - ${p.direccion || p.dir || ''}</div>
-                            <div style="color:#888; font-size:0.7rem;">
-                                SSC: ${p.ssc || 'N/A'} | Tel: ${p.telefono || p.tel || 'N/A'} | Cuota: <span style="color:var(--neon-yellow, #ffb300);">${p.cuotaModeradora || '$0'}</span>
-                            </div>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:4px;">
-                            <button type="button" class="cyber-btn-touch" style="min-height:36px; min-width:36px; padding:2px; border:1px solid #30363d; background:#161b22; color:#fff; border-radius:4px;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', -1)">▲</button>
-                            <button type="button" class="cyber-btn-touch" style="min-height:36px; min-width:36px; padding:2px; border:1px solid #30363d; background:#161b22; color:#fff; border-radius:4px;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', 1)">▼</button>
-                            <button type="button" class="cyber-btn-touch" style="min-height:36px; min-width:36px; padding:2px; color:#ffb300; border:1px solid #ffb300; background:#161b22; border-radius:4px;" onclick="activarEdicionParadaUI(event, ${p.origIndex})">✏️</button>
-                            <button type="button" class="cyber-btn-touch danger" style="min-height:36px; min-width:36px; padding:2px; color:#ff3366; border:1px solid #ff3366; background:#161b22; border-radius:4px;" onclick="eliminarParadaUI(event, ${p.origIndex})">🗑️</button>
-                        </div>
-                    </div>
-
-                    <div id="vista-edicion-${p.origIndex}" style="display:none; flex-direction:column; gap:6px; margin-top:6px; background:#140e1a; padding:8px; border:1px dashed var(--neon-cyan, #00e5ff); border-radius:4px;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                            <input type="text" id="input-edit-destinatario-${p.origIndex}" value="${p.destinatario || p.cliente || ''}" placeholder="Destinatario" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
-                            <input type="text" id="input-edit-telefono-${p.origIndex}" value="${p.telefono || p.tel || ''}" placeholder="Teléfono" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
-                        </div>
-                        <input type="text" id="input-edit-direccion-${p.origIndex}" value="${p.direccion || p.dir || ''}" placeholder="Dirección" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
-                            <input type="text" id="input-edit-ssc-${p.origIndex}" value="${p.ssc || ''}" placeholder="SSC" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
-                            <input type="text" id="input-edit-cuota-${p.origIndex}" value="${p.cuotaModeradora || ''}" placeholder="Cuota" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
-                        </div>
-                        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
-                            <button type="button" class="cyber-btn-touch" style="min-height:44px; padding:0 12px; border:1px solid #888; color:#888; background:transparent; border-radius:4px; font-weight:bold;" onclick="cancelarEdicionParadaUI(event, ${p.origIndex})">[CANCELAR]</button>
-                            <button type="button" class="cyber-btn-touch" style="min-height:44px; padding:0 12px; border:none; background:#00e5ff; color:#05070f; border-radius:4px; font-weight:bold;" onclick="guardarEdicionParadaUI(event, ${p.origIndex})">[GUARDAR]</button>
-                        </div>
-                    </div>
-                `;
-
-                const dndFn = vincularDragDropUIFn || window.vincularDragDropUI;
-                if (typeof dndFn === "function") {
-                    dndFn(card, infoZona.label, paradasMemoriaLocal, () => renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0));
-                }
-                listContainer.appendChild(card);
-            });
-
-            details.appendChild(summary);
-            details.appendChild(accionesBar);
-            details.appendChild(listContainer);
-            fragmentoAcordeones.appendChild(details);
-        });
-
-        contenedorAcordeones.appendChild(fragmentoAcordeones);
-    } else {
-        console.warn("⚠️ [MENSAJERO_UI]: No se encontró contenedor de acordeones (#contenedor-acordeones-zonas / #lista-paradas-zonificadas).");
+    // 2. DELEGACIÓN DE ACORDEONES ZONIFICADOS (Evita doble renderizado y colisión de bordes)
+    console.log("📋 [MENSAJERO_UI]: Delegando construcción de acordeones a 'rutas-ui-acordeon.js'...");
+    if (typeof renderizarParadasZonificadasUI === "function") {
+        await renderizarParadasZonificadasUI(paradasMemoriaLocal);
+    } else if (typeof window.renderizarParadasZonificadasUI === "function") {
+        await window.renderizarParadasZonificadasUI(paradasMemoriaLocal);
     }
 
-    console.log("✅ [MENSAJERO_UI]: Consola de operaciones y acordeones renderizados exitosamente.");
+    console.log("✅ [MENSAJERO_UI]: Consola de operaciones renderizada exitosamente.");
     console.groupEnd();
 }
 
-// Escuchas del Bus de Eventos de Sincronización Local-First
+// --- BUS DE EVENTOS DE SINCRONIZACIÓN LOCAL-FIRST ---
 window.addEventListener('sincronizacion:inicio', (e) => {
     const { taskId, totalItems } = e.detail || { taskId: 'sync-queue', totalItems: 1 };
     console.log(`🔄 [MENSAJERO_UI_EVENT]: Evento 'sincronizacion:inicio' capturado -> TaskID: ${taskId} | Total: ${totalItems}`);
@@ -364,37 +216,6 @@ window.addEventListener('sincronizacion:error', (e) => {
     }
 });
 
-// Bindings de acciones por Zona
-window.iniciarRutaZona = function(labelZona) {
-    console.log(`🚀 [MENSAJERO_UI]: Iniciando ruta para la zona: ${labelZona}`);
-    emitirHaptico(30);
-    const paradasZona = paradasMemoriaLocal.filter(p => (p.zonaKey || p.zona || "GENERAL") === labelZona);
-    const enfocarFn = enfocarZonaEnMapaFn || window.enfocarZonaEnMapa;
-    if (paradasZona.length > 0 && typeof enfocarFn === "function") {
-        enfocarFn(paradasZona);
-    }
-};
-
-window.optimizarProximidadZona = function(labelZona) {
-    console.log(`⚡ [MENSAJERO_UI]: Optimizando proximidad para zona: ${labelZona}`);
-    emitirHaptico(40);
-};
-
-window.planillarRutaZona = function(labelZona) {
-    console.log(`📝 [MENSAJERO_UI]: Generando planilla para zona: ${labelZona}`);
-    emitirHaptico(30);
-};
-
-window.verMapaZona = function(labelZona) {
-    console.log(`🗺️ [MENSAJERO_UI]: Ver mapa completo de zona: ${labelZona}`);
-    emitirHaptico(20);
-    const paradasZona = paradasMemoriaLocal.filter(p => (p.zonaKey || p.zona || "GENERAL") === labelZona);
-    const enfocarFn = enfocarZonaEnMapaFn || window.enfocarZonaEnMapa;
-    if (typeof enfocarFn === "function") {
-        enfocarFn(paradasZona);
-    }
-};
-
 // Bindings globales en Window con monitoreo completo
 window.renderizarConsolaOperaciones = renderizarConsolaOperaciones;
 window.refrescarConsolaOperaciones = function() { 
@@ -450,14 +271,14 @@ window.guardarEdicionParadaUI = async function (e, idx) {
     console.log(`💾 [MENSAJERO_UI]: Guardando edición realizada en índice -> ${idx}`);
     emitirHaptico(40);
     if (paradasMemoriaLocal[idx]) {
-        paradasMemoriaLocal[idx].destinatario = document.getElementById(`input-edit-destinatario-${idx}`).value;
-        paradasMemoriaLocal[idx].cliente = document.getElementById(`input-edit-destinatario-${idx}`).value;
-        paradasMemoriaLocal[idx].telefono = document.getElementById(`input-edit-telefono-${idx}`).value;
-        paradasMemoriaLocal[idx].tel = document.getElementById(`input-edit-telefono-${idx}`).value;
-        paradasMemoriaLocal[idx].direccion = document.getElementById(`input-edit-direccion-${idx}`).value;
-        paradasMemoriaLocal[idx].dir = document.getElementById(`input-edit-direccion-${idx}`).value;
-        paradasMemoriaLocal[idx].ssc = document.getElementById(`input-edit-ssc-${idx}`).value;
-        paradasMemoriaLocal[idx].cuotaModeradora = document.getElementById(`input-edit-cuota-${idx}`).value;
+        paradasMemoriaLocal[idx].destinatario = document.getElementById(`input-edit-destinatario-${idx}`)?.value || paradasMemoriaLocal[idx].destinatario;
+        paradasMemoriaLocal[idx].cliente = paradasMemoriaLocal[idx].destinatario;
+        paradasMemoriaLocal[idx].telefono = document.getElementById(`input-edit-telefono-${idx}`)?.value || paradasMemoriaLocal[idx].telefono;
+        paradasMemoriaLocal[idx].tel = paradasMemoriaLocal[idx].telefono;
+        paradasMemoriaLocal[idx].direccion = document.getElementById(`input-edit-direccion-${idx}`)?.value || paradasMemoriaLocal[idx].direccion;
+        paradasMemoriaLocal[idx].dir = paradasMemoriaLocal[idx].direccion;
+        paradasMemoriaLocal[idx].ssc = document.getElementById(`input-edit-ssc-${idx}`)?.value || paradasMemoriaLocal[idx].ssc;
+        paradasMemoriaLocal[idx].cuotaModeradora = document.getElementById(`input-edit-cuota-${idx}`)?.value || paradasMemoriaLocal[idx].cuotaModeradora;
 
         console.log(`📝 [MENSAJERO_UI]: Datos actualizados -> ${paradasMemoriaLocal[idx].destinatario} | ${paradasMemoriaLocal[idx].direccion}`);
 

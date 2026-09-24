@@ -1,18 +1,8 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL Y ORQUESTADOR PWA TÁCTICO
- * Ubicación: script2.js
+ * Ubicación: pwa-mensajero/script2.js
  * Arquitectura: Async Local-First (IndexedDB / LocalStorage) con Invocación Cloud Multimodal
  */
-
-// --- CONFIGURACIÓN DE ENDPOINT API (FALLBACK LOCAL) ---
-if (typeof window !== "undefined") {
-    const origin = window.location.origin;
-    const pathname = window.location.pathname;
-    window.ENDPOINT_API_PHP = pathname.includes("/pwa-gremio-mensajeria/")
-        ? `${origin}/pwa-gremio-mensajeria/api.php`
-        : `${origin}/api.php`;
-    console.log(`>>> [CONFIG_ENDPOINT]: API local apuntada a -> ${window.ENDPOINT_API_PHP}`);
-}
 
 import { 
     guardarRutaZonificada, 
@@ -44,8 +34,6 @@ import {
 } from "./modulos/rutas/rutas-orquestador-flujo.js";
 
 import { procesarCargaManualEnlace } from "./modulos/importer/carga-manual-handler.js";
-
-// Importación de módulos auxiliares
 import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar } from "./modulos/mensajero-sidebar.js";
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
 
@@ -60,10 +48,20 @@ import { guardarPlanillaReportada } from "./modulos/planilla/planillas-db.js";
 // Importaciones Módulo Perfil del Conductor
 import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil/perfil-ui.js";
 
-console.log("🟢 [script2.js] Orquestador PWA modularizado cargado.");
+// --- CONFIGURACIÓN DE ENDPOINT API (FALLBACK LOCAL) ---
+if (typeof window !== "undefined") {
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    window.ENDPOINT_API_PHP = pathname.includes("/pwa-gremio-mensajeria/")
+        ? `${origin}/pwa-gremio-mensajeria/api.php`
+        : `${origin}/api.php`;
+    console.log(`🌐 [CONFIG_ENDPOINT]: API local configurada -> ${window.ENDPOINT_API_PHP}`);
+}
+
+console.log("🟢 [script2.js]: Orquestador PWA modularizado cargado.");
 
 // --- EXPOSICIÓN GLOBAL EN WINDOW ---
-window.manejarNavegacionSidebar = function(btnNav) {
+window.manejarNavegacionSidebar = (btnNav) => {
     manejarNavegacionSidebar(btnNav, (targetId) => {
         console.log(`📍 [SIDEBAR_NAV]: Cambiando vista objetivo -> ${targetId}`);
         if (typeof window.alternarVistaPestaña === "function") {
@@ -72,15 +70,11 @@ window.manejarNavegacionSidebar = function(btnNav) {
     });
 };
 
-window.manejarClicSubmenu = function(btnSubmenu, event) {
-    manejarClicSubmenu(btnSubmenu, event);
-};
-
+window.manejarClicSubmenu = manejarClicSubmenu;
 window.cargarPerfilUI = cargarPerfilUI;
 window.manejarGuardarPerfil = manejarGuardarPerfil;
 window.cambiarPestanaPlanillas = cambiarPestanaPlanillas;
 window.cargarPlanillasReportadasUI = cargarPlanillasReportadasUI;
-
 window.ejecutarPasoAceptarPedido = ejecutarPasoAceptarPedido;
 window.ejecutarPasoNotificarLlegada = ejecutarPasoNotificarLlegada;
 window.ejecutarPasoFinalizarPedido = ejecutarPasoFinalizarPedido;
@@ -88,61 +82,75 @@ window.borrarParadaLocalUI = borrarParadaLocalUI;
 window.purgarTodaLaRutaUI = purgarTodaLaRutaUI;
 window.iniciarRutaCompleta = iniciarRutaCompleta;
 window.procesarCargaManualEnlace = procesarCargaManualEnlace;
+window.refrescarLienzoMapa = refrescarLienzoMapa;
 
 // Inicialización PWA
 inicializarEventosPWA();
 
-// Inicializador de Consola y Componentes
-async function inicializarConsolaYMenu() {
-    console.log("🔄 [PWA_INIT]: Inicializando menú, visor y componentes...");
-    
-    inicializarControlSidebar();
+// Banderas de control
+let aplicacionInicializada = false;
 
-    if (window.ImportadorMasivoMensajero && typeof window.ImportadorMasivoMensajero.vincularEscuchas === "function") {
-        console.log("📥 [PWA_INIT]: Vinculando escuchas del importador masivo...");
-        window.ImportadorMasivoMensajero.vincularEscuchas();
+// --- INICIALIZADOR DE CONSOLA Y COMPONENTES ---
+async function inicializarConsolaYMenu() {
+    if (aplicacionInicializada) {
+        console.log("ℹ️ [PWA_INIT]: Inicialización ya ejecutada previamente. Omitiendo duplicados.");
+        return;
     }
+    aplicacionInicializada = true;
+
+    console.group("🔄 [PWA_INIT]: Inicializando componentes y orquestador...");
 
     try {
-        console.log("🗺️ [PWA_INIT]: Invocando inicialización del visor del mapa...");
+        inicializarControlSidebar();
+
+        if (window.ImportadorMasivoMensajero?.vincularEscuchas) {
+            console.log("📥 [PWA_INIT]: Vinculando escuchas del importador masivo...");
+            window.ImportadorMasivoMensajero.vincularEscuchas();
+        }
+
+        console.log("🗺️ [PWA_INIT]: Inicializando visor de mapa...");
         const mapa = inicializarMapaMensajero();
         if (!mapa) {
-            console.log("⏳ [PWA_INIT]: Mapa no disponible inmediatamente. Reintentando tras carga de payload...");
+            console.log("⏳ [PWA_INIT]: Mapa en estado de espera por carga de elementos DOM.");
         }
+
+        await inicializarRutaPayload();
+
+        configurarEventosFormularioNovedad(
+            () => obtenerListaPedidosGlobal()[obtenerIndicePedidoActivo()],
+            () => obtenerLlamadasRealizadas(),
+            avanzarAlSiguientePedido
+        );
+
+        if (typeof sincronizarYRenderizarPool === "function") await sincronizarYRenderizarPool();
+        if (typeof sincronizarYRenderizarTransito === "function") await sincronizarYRenderizarTransito();
+
+        console.log("✅ [PWA_INIT]: Inicialización de componentes completada.");
     } catch (err) {
-        console.warn("⚠️ [MAPA]: Error inicializando el mapa visor:", err);
+        console.error("❌ [PWA_INIT_ERROR]: Fallo crítico durante la inicialización:", err);
+    } finally {
+        console.groupEnd();
     }
-
-    await inicializarRutaPayload();
-
-    configurarEventosFormularioNovedad(
-        () => obtenerListaPedidosGlobal()[obtenerIndicePedidoActivo()],
-        () => obtenerLlamadasRealizadas(),
-        avanzarAlSiguientePedido
-    );
-
-    if (typeof sincronizarYRenderizarPool === "function") sincronizarYRenderizarPool();
-    if (typeof sincronizarYRenderizarTransito === "function") sincronizarYRenderizarTransito();
 }
 
+// Escuchadores de Inicialización
 document.addEventListener("modulosCargados", () => {
-    console.log("🔔 [EVENT]: Evento 'modulosCargados' capturado en script2.js.");
+    console.log("🔔 [EVENT]: Evento 'modulosCargados' capturado.");
     inicializarConsolaYMenu();
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("📄 [EVENT]: DOMContentLoaded disparado.");
+    console.log("📄 [EVENT]: DOMContentLoaded detectado.");
     if (!document.querySelector("[data-include]")) {
-        console.log("⚡ [EVENT]: Carga estática detectada (sin data-include). Ejecutando inicializarConsolaYMenu.");
+        console.log("⚡ [EVENT]: Estructura estática. Inicializando componentes...");
         inicializarConsolaYMenu();
     }
 });
 
-// --- DELEGACIÓN GLOBAL DE EVENTOS ---
+// --- DELEGACIÓN GLOBAL DE EVENTOS DE CLIC ---
 document.addEventListener("click", (e) => {
     const btnSubmenu = e.target.closest(".btn-submenu-toggle");
     if (btnSubmenu) {
-        console.log("📂 [DELEGACIÓN]: Clic en submenú toggle.");
         e.stopPropagation();
         manejarClicSubmenu(btnSubmenu, e);
         return;
@@ -150,22 +158,14 @@ document.addEventListener("click", (e) => {
 
     const btnNav = e.target.closest(".sidebar .nav-btn:not(.btn-submenu-toggle)");
     if (btnNav) {
-        console.log("🚀 [DELEGACIÓN]: Clic en botón de navegación de Sidebar:", btnNav);
-        manejarNavegacionSidebar(btnNav, (targetId) => {
-            console.log(`📍 [SIDEBAR_NAV]: Cambiando vista objetivo -> ${targetId}`);
-            if (typeof window.alternarVistaPestaña === "function") {
-                window.alternarVistaPestaña(targetId);
-            }
-        });
+        window.manejarNavegacionSidebar(btnNav);
         return;
     }
 
-    if (e.target.classList.contains("cerrar-modal")) {
-        const modal = e.target.closest(".modal-overlay");
-        if (modal) modal.classList.remove("activo");
-    }
-    if (e.target.classList.contains("modal-overlay")) {
-        e.target.classList.remove("activo");
+    if (e.target.classList.contains("cerrar-modal") || e.target.classList.contains("modal-overlay")) {
+        const modal = e.target.closest(".modal-overlay") || e.target;
+        modal.classList.remove("activo");
+        return;
     }
 
     const cardBtn = e.target.closest(".card-btn");
@@ -174,6 +174,7 @@ document.addEventListener("click", (e) => {
         if (targetId && typeof window.alternarVistaPestaña === "function") {
             window.alternarVistaPestaña(targetId);
         }
+        return;
     }
 
     const btnTabPlanilla = e.target.closest(".tab-btn[data-tab]");
@@ -192,6 +193,7 @@ document.addEventListener("click", (e) => {
     if (btnExportarPdf) {
         const planillaId = btnExportarPdf.getAttribute("data-id");
         const toastId = `pdf-${planillaId}`;
+        
         if (typeof window.mostrarAvisoProceso === 'function') {
             window.mostrarAvisoProceso({
                 id: toastId,
@@ -202,33 +204,35 @@ document.addEventListener("click", (e) => {
             });
         }
 
-        exportarYRespaldarPlanillaPDF(planillaId).then(() => {
-            if (typeof window.actualizarProgresoProceso === 'function') {
-                window.actualizarProgresoProceso(toastId, 100, '¡PDF generado exitosamente!', 'exito');
-            }
-            if (typeof window.cerrarAvisoProceso === 'function') {
-                window.cerrarAvisoProceso(toastId, 1800);
-            }
-        }).catch((err) => {
-            console.error("❌ [PLANILLAS]: Error al exportar PDF:", err);
-            if (typeof window.mostrarAvisoProceso === 'function') {
-                window.mostrarAvisoProceso({
-                    id: toastId,
-                    titulo: 'Error de Exportación',
-                    mensaje: 'No se pudo generar el documento PDF.',
-                    estado: 'error',
-                    progreso: 100,
-                    acciones: [{ texto: 'Cerrar', clase: 'danger', accion: (id) => window.cerrarAvisoProceso(id) }]
-                });
-            }
-        });
+        exportarYRespaldarPlanillaPDF(planillaId)
+            .then(() => {
+                if (typeof window.actualizarProgresoProceso === 'function') {
+                    window.actualizarProgresoProceso(toastId, 100, '¡PDF generado exitosamente!', 'exito');
+                }
+                if (typeof window.cerrarAvisoProceso === 'function') {
+                    window.cerrarAvisoProceso(toastId, 1800);
+                }
+            })
+            .catch((err) => {
+                console.error("❌ [PLANILLAS]: Error al exportar PDF:", err);
+                if (typeof window.mostrarAvisoProceso === 'function') {
+                    window.mostrarAvisoProceso({
+                        id: toastId,
+                        titulo: 'Error de Exportación',
+                        mensaje: 'No se pudo generar el documento PDF.',
+                        estado: 'error',
+                        progreso: 100,
+                        acciones: [{ texto: 'Cerrar', clase: 'danger', accion: (id) => window.cerrarAvisoProceso(id) }]
+                    });
+                }
+            });
         return;
     }
 });
 
-// --- NAVEGACIÓN SPA Y CONMUTACIÓN ---
+// --- NAVEGACIÓN SPA Y CONMUTACIÓN DE VISTAS ---
 export function alternarVistaPestaña(targetId) {
-    console.log(`🔄 [ALTERNAR_VISTA]: Iniciando transición a -> #${targetId}`);
+    console.log(`🔄 [ALTERNAR_VISTA]: Transición a -> #${targetId}`);
     
     document.querySelectorAll(".contenedor-pestana").forEach((c) => c.classList.remove("activa"));
 
@@ -250,11 +254,13 @@ export function alternarVistaPestaña(targetId) {
         if (typeof window.cargarBarraInferior === "function") {
             window.cargarBarraInferior("componentes/barra-inferior/mapa-barra-infe.html");
         }
-        setTimeout(() => {
-            if (typeof window.refrescarLienzoMapa === "function") {
-                window.refrescarLienzoMapa();
-            }
-        }, 150);
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                if (typeof window.refrescarLienzoMapa === "function") {
+                    window.refrescarLienzoMapa();
+                }
+            }, 150);
+        });
     } else {
         if (typeof window.cargarBarraInferior === "function") {
             window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
@@ -263,7 +269,8 @@ export function alternarVistaPestaña(targetId) {
 }
 
 window.alternarVistaPestaña = alternarVistaPestaña;
-window.navegarA = function(rutaVista) {
+
+window.navegarA = (rutaVista) => {
     if (rutaVista.includes("mapa-activa")) {
         alternarVistaPestaña("mapa-fullscreen-container");
     } else if (rutaVista.includes("ruta-activa")) {
@@ -285,7 +292,7 @@ window.navegarA = function(rutaVista) {
 
 window.refrescarUI = refrescarUI;
 
-window.registrarIntentoLlamada = function() {
+window.registrarIntentoLlamada = () => {
     console.log("📞 [OPERACION]: Registrando intento de llamada...");
     registrarLlamadaFlujo(
         () => obtenerLlamadasRealizadas(), 
@@ -294,7 +301,7 @@ window.registrarIntentoLlamada = function() {
     );
 };
 
-window.refrescarConsolaOperacionesUI = async function(paradasOpcionales) {
+window.refrescarConsolaOperacionesUI = async (paradasOpcionales) => {
     const paradas = paradasOpcionales || await obtenerParadasGuardadas();
     let lista = obtenerListaPedidosGlobal();
     lista.length = 0;
@@ -303,35 +310,40 @@ window.refrescarConsolaOperacionesUI = async function(paradasOpcionales) {
     refrescarUI();
 };
 
-window.prepararEdicionParadaUI = function(idParada) {
+window.prepararEdicionParadaUI = (idParada) => {
     const parada = obtenerListaPedidosGlobal().find((p) => p.id === idParada);
     if (!parada) return;
 
-    if (document.getElementById("edit-parada-id")) document.getElementById("edit-parada-id").value = parada.id;
-    if (document.getElementById("edit-parada-destinatario")) document.getElementById("edit-parada-destinatario").value = parada.destinatario || "";
-    if (document.getElementById("edit-parada-direccion")) document.getElementById("edit-parada-direccion").value = parada.direccion || "";
-    if (document.getElementById("edit-parada-telefono")) document.getElementById("edit-parada-telefono").value = parada.telefono || "";
-    if (document.getElementById("edit-parada-ssc")) document.getElementById("edit-parada-ssc").value = parada.ssc || "";
-    if (document.getElementById("edit-parada-cuota")) document.getElementById("edit-parada-cuota").value = parada.cuotaModeradora || "";
+    const elId = document.getElementById("edit-parada-id");
+    const elDest = document.getElementById("edit-parada-destinatario");
+    const elDir = document.getElementById("edit-parada-direccion");
+    const elTel = document.getElementById("edit-parada-telefono");
+    const elSsc = document.getElementById("edit-parada-ssc");
+    const elCuota = document.getElementById("edit-parada-cuota");
+
+    if (elId) elId.value = parada.id;
+    if (elDest) elDest.value = parada.destinatario || "";
+    if (elDir) elDir.value = parada.direccion || "";
+    if (elTel) elTel.value = parada.telefono || "";
+    if (elSsc) elSsc.value = parada.ssc || "";
+    if (elCuota) elCuota.value = parada.cuotaModeradora || "";
 
     const detailsForm = document.getElementById("details-formulario-parada");
     if (detailsForm) detailsForm.open = true;
 };
 
-window.limpiarFormularioParadaUI = function() {
-    if (document.getElementById("edit-parada-id")) document.getElementById("edit-parada-id").value = "";
-    if (document.getElementById("edit-parada-destinatario")) document.getElementById("edit-parada-destinatario").value = "";
-    if (document.getElementById("edit-parada-direccion")) document.getElementById("edit-parada-direccion").value = "";
-    if (document.getElementById("edit-parada-telefono")) document.getElementById("edit-parada-telefono").value = "";
-    if (document.getElementById("edit-parada-ssc")) document.getElementById("edit-parada-ssc").value = "";
-    if (document.getElementById("edit-parada-cuota")) document.getElementById("edit-parada-cuota").value = "";
+window.limpiarFormularioParadaUI = () => {
+    ["edit-parada-id", "edit-parada-destinatario", "edit-parada-direccion", "edit-parada-telefono", "edit-parada-ssc", "edit-parada-cuota"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+    });
 
     const detailsForm = document.getElementById("details-formulario-parada");
     if (detailsForm) detailsForm.open = false;
 };
 
-window.agregarParadaLocal = async function (nuevaParadaDatos) {
-    if (!nuevaParadaDatos || !nuevaParadaDatos.direccion) return;
+window.agregarParadaLocal = async (nuevaParadaDatos) => {
+    if (!nuevaParadaDatos?.direccion) return;
 
     let rutaActual = (await obtenerParadasGuardadas()) || [];
     const nuevaParada = {
@@ -360,7 +372,7 @@ window.agregarParadaLocal = async function (nuevaParadaDatos) {
     refrescarUI();
 };
 
-window.guardarParadaManualUI = async function () {
+window.guardarParadaManualUI = async () => {
     const id = document.getElementById("edit-parada-id")?.value;
     const destinatario = document.getElementById("edit-parada-destinatario")?.value.trim();
     const direccion = document.getElementById("edit-parada-direccion")?.value.trim();
@@ -421,11 +433,11 @@ window.guardarParadaManualUI = async function () {
 
     if (typeof window.actualizarProgresoProceso === 'function') {
         window.actualizarProgresoProceso(toastId, 100, '¡Parada guardada con éxito!', 'exito');
-        window.cerrarAvisoProceso(toastId, 1500);
+        if (typeof window.cerrarAvisoProceso === 'function') window.cerrarAvisoProceso(toastId, 1500);
     }
 };
 
-window.generarPlanillaDesdeRuta = async function() {
+window.generarPlanillaDesdeRuta = async () => {
     const paradasActuales = (await obtenerParadasGuardadas()) || [];
     if (!paradasActuales || paradasActuales.length === 0) {
         alert("⚠️ [ALERTA]: No hay datos de paradas para planillar.");
@@ -471,7 +483,7 @@ window.generarPlanillaDesdeRuta = async function() {
 
         if (typeof window.actualizarProgresoProceso === 'function') {
             window.actualizarProgresoProceso(toastId, 100, '¡Planilla guardada exitosamente!', 'exito');
-            window.cerrarAvisoProceso(toastId, 1500);
+            if (typeof window.cerrarAvisoProceso === 'function') window.cerrarAvisoProceso(toastId, 1500);
         }
 
         if (typeof window.navegarA === "function") {

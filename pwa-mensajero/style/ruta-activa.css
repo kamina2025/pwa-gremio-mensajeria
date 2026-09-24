@@ -1,55 +1,33 @@
 /* ==========================================================================
-   PROTOCOLO MACONDO - RUTA ACTIVA & ZONIFICACIÓN CYBERPUNK
-   Ubicación: pwa-mensajero/style/ruta-activa.css
+   RUTA ACTIVA & ZONIFICACIÓN DE PARADAS
+   Ruta: style/ruta-activa.css
    ========================================================================== */
-
-/* Contenedor principal con espacio de seguridad amplio para la barra flotante */
 .modulo-ruta-container {
     display: flex;
     flex-direction: column;
     height: 100%;
     padding: 8px;
-    padding-bottom: 140px !important; /* Espacio extendido para no colisionar con la barra flotante */
+    padding-bottom: 140px !important;
     overflow: hidden;
-    background-color: var(--bg-color, #030308);
+    background-color: var(--bg-color);
 }
-
-/* ==========================================================================
-   ACORDEONES Y ZONIFICACIÓN POR COLORES CYBERPUNK
-   ========================================================================== */
-
-.zonas-accordion-container {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 8px;
-}
-
-/* pwa-mensajero/style/ruta-activa.css */
-
-/* ==========================================================================
-   ACORDEONES Y ZONIFICACIÓN POR COLORES CYBERPUNK
-   ========================================================================== */
 
 .cyber-accordion {
     background: #0d1117;
     border: 1px solid #30363d;
     border-radius: 6px;
     overflow: hidden;
-    transition:
-        border-color 0.3s ease,
-        box-shadow 0.3s ease;
     position: relative;
+    margin-bottom: 8px;
 }
 
-/* Modificado: Solo aplicar resplandor, preservar el border-color asignado por la zona */
 .cyber-accordion[open] {
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
 }
 
 .cyber-summary {
     padding: 10px 14px;
-    font-family: var(--cyber-font, monospace);
+    font-family: var(--cyber-font);
     font-size: 0.85rem;
     font-weight: bold;
     cursor: pointer;
@@ -57,133 +35,47 @@
     justify-content: space-between;
     align-items: center;
     background: #161b22;
-    user-select: none;
-    transition: background 0.2s ease;
 }
-
-.cyber-summary:hover {
-    background: #21262d;
-}
-
-/* ==========================================================================
-   CONTENEDOR DE PARADAS Y LIMITADOR DE VISTA (UNICO SCROLLMASTER)
-   ========================================================================== */
 
 .cyber-scroll-container,
 #contenedor-acordeones-zonas {
     max-height: clamp(300px, 52dvh, 600px);
-    overflow-y: scroll !important; /* Forzado constante para evitar desaparición */
+    overflow-y: auto !important;
     touch-action: pan-y !important;
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     padding-right: 6px;
-    padding-bottom: 120px !important; /* Colchón para despejar última parada y barra flotante */
+    padding-bottom: 120px !important;
     scrollbar-width: thin;
-    scrollbar-color: #00e5ff #080b10;
+    scrollbar-color: var(--neon-cyan) #080b10;
     position: relative;
 }
 
-#lista-paradas-zonificadas {
-    overflow: visible !important; /* Desactivar scroll secundario */
-}
-
-/* Lista interna con colchón de aire en la base para ver la última parada completa */
 .paradas-drag-list {
-    max-height: none !important; /* Removido límite previo de 380px para eliminar scroll doble */
+    max-height: none !important;
     overflow: visible !important;
-    touch-action: pan-y !important;
     padding: 8px 6px 30px 6px !important;
     background: #05070f;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    border-bottom: 2px solid #00e5ff; /* TOPE VISUAL NEÓN EN EL FONDO DE LA CAJA */
-    position: relative;
+    border-bottom: 2px solid var(--neon-cyan);
 }
 
-/* Marca de fin / Triángulo delimitador en la esquina inferior de la lista */
-.paradas-drag-list::after {
-    content: "▼ FIN DE PARADAS";
-    display: block;
-    text-align: center;
-    font-family: var(--cyber-font, monospace);
-    font-size: 0.65rem;
-    font-weight: bold;
-    color: #00e5ff;
-    letter-spacing: 1px;
-    padding: 8px 0;
-    margin-top: 8px;
-    border-top: 1px dashed rgba(0, 229, 255, 0.3);
-    opacity: 0.9;
-}
-
-/* Tarjeta de Parada Arrastrable */
 .parada-card,
 .item-parada-lista {
     background: #0c080f;
     border: 1px solid #291f33;
     padding: 10px 12px;
-    margin-bottom: 4px;
-    font-size: 0.78rem;
     border-radius: 4px;
     cursor: grab;
     user-select: none;
     touch-action: manipulation;
-    transition:
-        transform 0.15s ease,
-        border-color 0.15s ease,
-        box-shadow 0.15s ease,
-        opacity 0.15s ease;
-    position: relative;
 }
 
 .parada-card.activa,
 .item-parada-lista.activa {
-    border-color: var(--neon-cyan, #00e5ff) !important;
+    border-color: var(--neon-cyan) !important;
     background: rgba(0, 229, 255, 0.05);
     box-shadow: inset 0 0 8px rgba(0, 229, 255, 0.15);
-}
-
-/* ==========================================================================
-   BARRA DESLIZANTE CON TOPE VISUAL NEÓN PERMANENTE
-   ========================================================================== */
-
-.cyber-scroll-container::-webkit-scrollbar,
-#contenedor-acordeones-zonas::-webkit-scrollbar {
-    width: 8px !important;
-    display: block !important;
-}
-
-/* Pista de la barra con tope y caja delimitada */
-.cyber-scroll-container::-webkit-scrollbar-track,
-#contenedor-acordeones-zonas::-webkit-scrollbar-track {
-    background: #080b10;
-    border-radius: 4px;
-    border: 1px solid #1a2333;
-    border-bottom: 4px solid #00e5ff; /* TOPE INFERIOR VISIBLE DE LA PISTA */
-    box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.8);
-}
-
-/* Botón deslizante (Thumb) Neón con bordes definidos */
-.cyber-scroll-container::-webkit-scrollbar-thumb,
-#contenedor-acordeones-zonas::-webkit-scrollbar-thumb {
-    background: #00e5ff;
-    border-radius: 4px;
-    border: 1px solid #005f73;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.8);
-    min-height: 40px;
-}
-
-.cyber-scroll-container::-webkit-scrollbar-thumb:active,
-#contenedor-acordeones-zonas::-webkit-scrollbar-thumb:active {
-    background: #39ff14;
-    box-shadow: 0 0 10px rgba(57, 255, 20, 1);
-}
-
-/* Adaptabilidad en pantallas cortas Android */
-@media (max-height: 680px) {
-    .cyber-scroll-container,
-    #contenedor-acordeones-zonas {
-        max-height: 42dvh;
-    }
 }

@@ -8,7 +8,7 @@ import { guardarRutaZonificada } from "../mensajero-persistencia.js";
 let itemArrastradoUI = null;
 
 /**
- * Registra los eventos Drag & Drop Nativo sobre una tarjeta de parada
+ * Registra los eventos Drag & Drop Nativo sobre una tarjeta de parada.
  * 
  * @param {HTMLElement} cardElement - Elemento HTML de la tarjeta
  * @param {string} zonaNombre - Nombre de la zona correspondiente
@@ -43,7 +43,7 @@ export function vincularDragDropUI(cardElement, zonaNombre, paradasMemoriaLocal,
 
         if (itemArrastradoUI && itemArrastradoUI !== cardElement) {
             const contenedorPadre = cardElement.parentNode;
-            const tarjetas = Array.from(contenedorPadre.querySelectorAll(".item-parada-lista"));
+            const tarjetas = Array.from(contenedorPadre.querySelectorAll(".item-parada-lista, .parada-card"));
             const origenIndex = tarjetas.indexOf(itemArrastradoUI);
             const destinoIndex = tarjetas.indexOf(cardElement);
 
@@ -53,7 +53,7 @@ export function vincularDragDropUI(cardElement, zonaNombre, paradasMemoriaLocal,
                 contenedorPadre.insertBefore(itemArrastradoUI, cardElement);
             }
 
-            // Recalcular el orden físico en memoria, persistir y refrescar el mapa
+            // Recalcular orden en memoria, persistir y refrescar mapa
             await recalcularYPersistirDragDrop(contenedorPadre, zonaNombre, paradasMemoriaLocal);
             
             if (typeof renderCallback === "function") {
@@ -65,62 +65,63 @@ export function vincularDragDropUI(cardElement, zonaNombre, paradasMemoriaLocal,
     cardElement.addEventListener("dragend", () => {
         cardElement.classList.remove("dragging");
         itemArrastradoUI = null;
-        document.querySelectorAll(".item-parada-lista").forEach((c) => c.classList.remove("drag-over"));
+        document.querySelectorAll(".item-parada-lista, .parada-card").forEach((c) => c.classList.remove("drag-over"));
     });
 }
 
 /**
- * Recalcula las secuencias reordenando físicamente los arreglos en RAM, 
- * persiste en IndexedDB/localStorage e invoca la actualización del mapa.
+ * Recalcula las secuencias según el DOM actual, actualiza cachés globales y persiste en IndexedDB.
  * 
- * @param {HTMLElement} contenedorPadre - Elemento contenedor de los acordeones
+ * @param {HTMLElement} contenedorPadre - Elemento contenedor de las tarjetas
  * @param {string} zonaNombre - Nombre de la zona actual
- * @param {Array<Object>} paradasMemoriaLocal - Arreglo actual de paradas
+ * @param {Array<Object>} paradasMemoriaLocal - Arreglo local de paradas
  */
 export async function recalcularYPersistirDragDrop(contenedorPadre, zonaNombre, paradasMemoriaLocal) {
     if (!contenedorPadre) return;
 
-    const cards = Array.from(contenedorPadre.querySelectorAll(".item-parada-lista"));
+    const cards = Array.from(contenedorPadre.querySelectorAll(".item-parada-lista, .parada-card"));
     const mapaIdAParada = new Map();
 
-    // Mapear todas las paradas en memoria por su ID único o SSC
-    const listaOriginal = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || paradasMemoriaLocal || [];
+    // Colección global unificada
+    const listaOriginal = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || paradasMemoriaLocal || [];
+    
     listaOriginal.forEach((p) => {
-        const idUnico = p.id || p.ssc || p.idParada || p.id_parada;
+        const idUnico = String(p.id || p.ssc || p.idParada || p.id_parada || "").trim();
         if (idUnico) {
-            mapaIdAParada.set(String(idUnico), p);
+            mapaIdAParada.set(idUnico, p);
         }
     });
 
     const subListaZonaReordenada = [];
 
-    // Reconstruir la lista reordenada de esta zona según la secuencia del DOM
+    // Reconstruir la secuencia de la zona según el orden del DOM
     cards.forEach((card, nuevoIndex) => {
-        const cardId = String(card.getAttribute("data-id") || "");
+        const cardId = String(card.getAttribute("data-id") || "").trim();
         const paradaObj = mapaIdAParada.get(cardId);
 
         if (paradaObj) {
-            paradaObj.secuencia = nuevoIndex + 1;
-            paradaObj.secuenciaZona = nuevoIndex + 1;
-            paradaObj.orden = nuevoIndex + 1;
+            const nuevaSec = nuevoIndex + 1;
+            paradaObj.secuencia = nuevaSec;
+            paradaObj.secuenciaZona = nuevaSec;
+            paradaObj.orden = nuevaSec;
             paradaObj.updated_at = new Date().toISOString();
             subListaZonaReordenada.push(paradaObj);
         }
 
-        // Actualizar el número ordinal `#1, #2, #3` en el encabezado de la tarjeta visual
+        // Refrescar el número de secuencia en el encabezado visible
         const strongEl = card.querySelector("strong");
         if (strongEl) {
             strongEl.textContent = strongEl.textContent.replace(/\[#\d+\]/, `[#${nuevoIndex + 1}]`);
         }
     });
 
-    // Re-ensamblar la lista global insertando físicamente la secuencia reordenada de la zona
-    const idsZonaSet = new Set(subListaZonaReordenada.map(p => String(p.id || p.ssc || p.idParada || p.id_parada)));
+    // Re-ensamblar la lista global respetando paradas de otras zonas
+    const idsZonaSet = new Set(subListaZonaReordenada.map(p => String(p.id || p.ssc || p.idParada || p.id_parada).trim()));
     const listaGlobalActualizada = [];
     let idxInsert = 0;
 
     listaOriginal.forEach((p) => {
-        const idUnico = String(p.id || p.ssc || p.idParada || p.id_parada);
+        const idUnico = String(p.id || p.ssc || p.idParada || p.id_parada).trim();
         if (idsZonaSet.has(idUnico)) {
             listaGlobalActualizada.push(subListaZonaReordenada[idxInsert]);
             idxInsert++;
@@ -129,30 +130,35 @@ export async function recalcularYPersistirDragDrop(contenedorPadre, zonaNombre, 
         }
     });
 
-    // Actualizar estados locales y globales en memoria RAM
+    // Sincronizar todas las referencias RAM globales
     window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
     window.paradasMemoriaLocal = [...listaGlobalActualizada];
+    window.paradasRutaActiva = [...listaGlobalActualizada];
 
-    // Persistir en IndexedDB / localStorage
+    // Persistir en IndexedDB / LocalStorage
     try {
         await guardarRutaZonificada(listaGlobalActualizada);
-        console.log(`💾 [UI_DND]: Secuencia reordenada para ZONA '${zonaNombre}' guardada y sincronizada exitosamente.`);
+        localStorage.setItem("ruta_zonificada", JSON.stringify(listaGlobalActualizada));
+        console.log(`💾 [UI_DND]: Secuencia reordenada para '${zonaNombre}' sincronizada exitosamente.`);
     } catch (err) {
-        console.error("❌ [UI_DND_ERROR]: Fallo al persistir secuencia reordenada en IndexedDB:", err);
+        console.error("❌ [UI_DND_ERROR]: Fallo al persistir secuencia reordenada:", err);
     }
 
-    // REFRESCO DIRECTO DEL MAPA (Marcadores e indicadores)
+    // Refrescar marcadores en el mapa interactivo
     if (typeof window.actualizarPuntosEnMapa === "function") {
-        console.log("🗺️ [UI_DND]: Refrescando marcadores en el lienzo del mapa con la nueva secuencia...");
         window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
     }
 
-    // Emitir evento custom para integración con otros oyentes desacoplados
-    window.dispatchEvent(new CustomEvent("rutasReordenadas", {
-        detail: { zonaId: zonaNombre, nuevaSecuencia: listaGlobalActualizada }
-    }));
+    // Emitir evento para componentes desacoplados
+    if (typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("rutasReordenadas", {
+            detail: { zonaId: zonaNombre, nuevaSecuencia: listaGlobalActualizada }
+        }));
+    }
 }
 
 // Bindings globales inmediatos
-window.vincularDragDropUI = vincularDragDropUI;
-window.recalcularYPersistirDragDrop = recalcularYPersistirDragDrop;
+if (typeof window !== "undefined") {
+    window.vincularDragDropUI = vincularDragDropUI;
+    window.recalcularYPersistirDragDrop = recalcularYPersistirDragDrop;
+}

@@ -1,3 +1,7 @@
+/* ==========================================================================
+   SIDEBAR & MENÚS LATERALES
+   Ruta: style/sidebar.css
+   ========================================================================== */
 .sidebar {
     grid-area: sidebar;
     background: var(--panel-bg);
@@ -6,9 +10,7 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    transition:
-        opacity 0.2s ease,
-        padding 0.3s ease;
+    transition: opacity 0.2s ease, padding 0.3s ease;
     will-change: opacity, padding;
 }
 
@@ -36,7 +38,7 @@
     white-space: nowrap;
     display: flex;
     align-items: center;
-    justify-content: space-between; /* Alinea texto a la izq y flecha a la der */
+    justify-content: space-between;
     gap: 10px;
     width: 100%;
 }
@@ -45,9 +47,7 @@
     font-size: 1.1rem;
     width: 20px;
     text-align: center;
-    transition:
-        transform 0.2s ease,
-        color 0.2s ease;
+    transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .nav-btn:hover,
@@ -58,7 +58,6 @@
     font-weight: bold;
 }
 
-/* --- SUBMENÚ CIBERPUNK --- */
 .submenu {
     max-height: 0;
     overflow: hidden;
@@ -66,13 +65,10 @@
     flex-direction: column;
     gap: 5px;
     padding-left: 15px;
-    transition:
-        max-height 0.3s ease-in-out,
-        opacity 0.3s ease;
+    transition: max-height 0.3s ease-in-out, opacity 0.3s ease;
     opacity: 0;
 }
 
-/* Selector ajustado con > para afectar solo al subménú hijo directo */
 .menu-item-has-submenu.open > .submenu {
     max-height: 300px;
     opacity: 1;

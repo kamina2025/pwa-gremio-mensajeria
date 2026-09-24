@@ -1,12 +1,14 @@
-/* pwa-mensajero/style/formularios.css */
-
-/* Reglas principales para los inputs tipo terminal */
-.input-terminal {
+/* ==========================================================================
+   ESTILOS DE FORMULARIOS Y CAMPOS DE ENTRADA TERMINAL
+   Ruta: style/formularios.css
+   ========================================================================== */
+.input-terminal,
+.input-cyber {
     width: 100%;
-    background-color: #12131a; /* Fondo oscuro */
+    background-color: #12131a;
     border: 1px solid var(--border-rigid, #2d3748);
-    color: #00f0ff; /* Texto cyan neón */
-    font-family: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+    color: var(--neon-cyan);
+    font-family: var(--cyber-font);
     padding: 10px 12px;
     font-size: 0.85rem;
     resize: none;
@@ -15,115 +17,18 @@
     transition: all 0.2s ease-in-out;
 }
 
-/* Texto del Placeholder */
-.input-terminal::placeholder {
+.input-terminal::placeholder,
+.input-cyber::placeholder {
     color: rgba(0, 240, 255, 0.4);
 }
 
-/* Efecto al hacer clic / enfocar el input */
-.input-terminal:focus {
-    border-color: #00f0ff;
+.input-terminal:focus,
+.input-cyber:focus {
+    border-color: var(--neon-cyan);
     box-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
     color: #ffffff;
 }
-/* Asegura el contenedor y sombras para elementos dinámicos sobre Google Maps */
-#mapa-mensajero {
-    width: 100%;
-    height: 100%;
-    min-height: 100vh;
-    background-color: #0a0c10;
-}
 
-/* Ajuste del infowindow predeterminado de Google Maps para coincidir con la terminal */
-.gm-style .gm-style-iw-c {
-    background-color: #0d1117 !important;
-    border: 1px solid var(--neon-blue, #00e5ff) !important;
-    border-radius: 4px !important;
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.4) !important;
-    color: #ffffff !important;
-    font-family: 'Fira Code', monospace !important;
-}
-
-.gm-style .gm-style-iw-tc::after {
-    background-color: #0d1117 !important;
-}
-/* ==========================================================================
-   LAYOUT MAPA FULLSCREEN CYBERPUNK
-   ========================================================================== */
-
-.mapa-fullscreen-wrapper {
-    position: relative;
-    width: 100%;
-    height: calc(100vh - 65px);
-    background-color: var(--bg-terminal, #0a0c10); /*[cite: 1] */
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-#mapa-mensajero {
-    width: 100%;
-    height: 100%;
-    flex: 1;
-    z-index: 1;
-    background-color: #0d1117; /*[cite: 1, 2] */
-}
-
-/* Buscador Flotante */
-.contenedor-busqueda-mapa {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 85%;
-}
-
-#input-mapa-buscar-dir {
-    display: none;
-    width: 220px;
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
-    background-color: rgba(13, 17, 23, 0.92);
-    backdrop-filter: blur(8px);
-    margin-bottom: 0;
-}
-
-#input-mapa-buscar-dir.activo {
-    display: block;
-    animation: cyber-slide-in 0.2s cubic-bezier(0, 0, 0.2, 1);
-}
-
-/* Panel de Acciones Inferior */
-.panel-inferior-mapa {
-    position: absolute;
-    bottom: 12px;
-    left: 12px;
-    right: 12px;
-    z-index: 10;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    background: rgba(13, 17, 23, 0.88);
-    backdrop-filter: blur(10px);
-    padding: 8px;
-    border: 1px solid var(--border-rigid, #2d3748); /*[cite: 1] */
-    border-radius: 8px;
-    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.5);
-}
-
-.panel-inferior-mapa .btn-terminal {
-    font-size: 0.72rem;
-    padding: 10px 4px;
-    white-space: nowrap;
-}
-
-@keyframes cyber-slide-in {
-    from { opacity: 0; transform: translateX(10px); }
-    to { opacity: 1; transform: translateX(0); }
-}
-/* --- ESTILOS FORMULARIO PERFIL CONDUCTOR --- */
 .cyber-fieldset {
     border: 1px solid var(--neon-cyan);
     padding: 15px;
@@ -136,23 +41,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 12px;
-}
-
-.input-cyber {
-    width: 100%;
-    background: rgba(3, 3, 8, 0.9);
-    border: 1px solid var(--neon-cyan);
-    color: var(--text-color);
-    font-family: var(--cyber-font);
-    padding: 10px;
-    margin-top: 4px;
-    margin-bottom: 10px;
-}
-
-.input-cyber:focus {
-    outline: none;
-    border-color: var(--neon-yellow);
-    box-shadow: 0 0 8px var(--neon-yellow);
 }
 
 .input-file-cyber {
@@ -172,12 +60,6 @@
     margin-bottom: 12px;
 }
 
-.preview-box {
-    margin-top: 5px;
-    max-height: 120px;
-    overflow: hidden;
-}
-
 .img-preview-cyber {
     max-width: 100%;
     max-height: 100px;
@@ -188,10 +70,11 @@
 .btn-guardar-perfil {
     width: 100%;
     background: rgba(0, 243, 255, 0.15);
-    border-color: var(--neon-cyan);
+    border: 1px solid var(--neon-cyan);
     color: var(--neon-cyan);
     font-size: 1.1rem;
     padding: 12px;
+    cursor: pointer;
 }
 
 .btn-guardar-perfil:hover {

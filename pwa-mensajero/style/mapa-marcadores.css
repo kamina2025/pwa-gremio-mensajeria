@@ -1,150 +1,114 @@
 /* ==========================================================================
-   CYBERPUNK MAP PIN MARKER - MUTABLE STATES
-   Ubicación: style/mapa-marcadores.css
+   CYBERPUNK MAP PIN MARKER - MARCADORES DE MAPA UNIFICADOS
+   Ruta: style/mapa-marcadores.css
    ========================================================================== */
-
-:root {
-  --pin-bg: #0d1117;
-  --pin-border-width: 1.5px;
-  --neon-blue: #00e5ff;
-  --neon-purple: #b359ff;
-  --neon-green: #00ff66;
-  --amber-alert: #ffb300;
-  --alert-fail: #ff3333;
-}
-
-/* Contenedor Principal del Pin */
 .cyber-pin-marker {
   position: relative;
-  width: 42px;
-  height: 54px;
+  width: 52px;
+  height: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
   cursor: pointer;
-  font-family: var(--cyber-font, 'Fira Code', monospace);
+  font-family: var(--cyber-font);
   user-select: none;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transform-origin: 50% 100%;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), z-index 0.1s ease;
+  will-change: transform;
+  box-sizing: border-box;
+  padding-top: 2px;
 }
 
-.cyber-pin-marker:hover {
-  transform: translateY(-4px) scale(1.08);
-  z-index: 999;
+.cyber-pin-marker:hover,
+.cyber-pin-marker:active,
+.cyber-pin-marker.activa {
+  transform: scale(1.22) translateY(-4px);
+  z-index: 9999 !important;
 }
 
-/* Cuerpo Hexagonal/Trapezoidal del Pin */
 .pin-body {
   position: relative;
-  width: 100%;
-  height: 40px;
-  background-color: var(--pin-bg);
-  border: var(--pin-border-width) solid var(--state-color, var(--neon-blue));
+  width: 48px;
+  height: 38px;
+  background-color: var(--bg-color);
+  border: 2px solid var(--state-color, var(--neon-cyan));
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 6px;
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-  filter: drop-shadow(0 0 6px var(--state-glow, rgba(0, 229, 255, 0.4)));
+  justify-content: space-around;
+  padding: 0 4px;
   box-sizing: border-box;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  filter: drop-shadow(0 0 6px var(--state-glow, rgba(0, 229, 255, 0.6)));
+  z-index: 2;
 }
 
-/* Punta del marcador apuntando a la coordenada GPS */
 .pin-pointer {
-  width: 10px;
-  height: 10px;
-  background-color: var(--state-color, var(--neon-blue));
-  margin-top: -2px;
+  width: 12px;
+  height: 14px;
+  background-color: var(--state-color, var(--neon-cyan));
+  margin-top: -1px;
   clip-path: polygon(50% 100%, 0 0, 100% 0);
-  filter: drop-shadow(0 0 4px var(--state-color, var(--neon-blue)));
+  filter: drop-shadow(0 0 4px var(--state-color, var(--neon-cyan)));
+  z-index: 2;
 }
 
-/* Tipografía de la secuencia (ej: Parada 01, 02) */
 .pin-index {
-  font-size: 0.8rem;
-  font-weight: bold;
+  font-size: 0.95rem;
+  font-weight: 900;
   color: #ffffff;
-  text-shadow: 0 0 4px var(--state-color, var(--neon-blue));
+  text-shadow: 0 0 3px #000000, 0 0 6px var(--state-color, var(--neon-cyan));
+  line-height: 1;
 }
 
 .pin-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--state-color, var(--neon-blue));
+  color: var(--state-color, var(--neon-cyan));
+  filter: drop-shadow(0 0 2px var(--state-color, var(--neon-cyan)));
 }
 
-/* Animación de Onda de Radar / Pulse */
+.pin-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 .pin-pulse {
   display: none;
   position: absolute;
-  top: 15px;
+  top: 20px;
   left: 50%;
-  width: 30px;
-  height: 30px;
-  background: var(--state-color, var(--neon-blue));
+  width: 32px;
+  height: 32px;
+  background: var(--state-color, var(--neon-cyan));
   border-radius: 50%;
   transform: translate(-50%, -50%);
   opacity: 0.5;
-  z-index: -1;
+  z-index: 1;
+  pointer-events: none;
+  will-change: transform, opacity;
 }
 
 @keyframes cyber-radar {
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
-  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(0.4); opacity: 0.9; }
+  70% { opacity: 0.3; }
+  100% { transform: translate(-50%, -50%) scale(2.3); opacity: 0; }
 }
 
-@keyframes parpadeo {
-  0% { opacity: 1; }
-  100% { opacity: 0.4; }
+@keyframes parpadeo-neon {
+  0% { filter: drop-shadow(0 0 4px var(--state-glow)); }
+  100% { filter: drop-shadow(0 0 12px var(--state-glow)); }
 }
 
-/* ==========================================================================
-   MUTACIONES SEGÚN EL ESTADO (data-state)
-   ========================================================================== */
-
-/* 1. CREACIÓN / DRAFT */
-.cyber-pin-marker[data-state="creacion"] {
-  --state-color: var(--neon-purple, #b359ff);
-  --state-glow: rgba(179, 89, 255, 0.5);
-}
-
-/* 2. ASIGNACIÓN */
-.cyber-pin-marker[data-state="asignado"] {
-  --state-color: var(--neon-blue, #00e5ff);
-  --state-glow: rgba(0, 229, 255, 0.5);
-}
-
-/* 3. EN CAMINO (Activo con animación de radar) */
-.cyber-pin-marker[data-state="en-camino"] {
-  --state-color: var(--amber-alert, #ffb300);
-  --state-glow: rgba(255, 179, 0, 0.6);
-}
-
-.cyber-pin-marker[data-state="en-camino"] .pin-pulse {
-  display: block;
-  animation: cyber-radar 1.6s infinite ease-out;
-}
-
-/* 4. EN EL PUNTO DE LLEGADA */
-.cyber-pin-marker[data-state="en-punto"] {
-  --state-color: var(--neon-green, #00ff66);
-  --state-glow: rgba(0, 255, 102, 0.8);
-}
-
-.cyber-pin-marker[data-state="en-punto"] .pin-body {
-  animation: parpadeo 1.2s infinite alternate;
-}
-
-/* 5. ENTREGADO / COMPLETADO */
-.cyber-pin-marker[data-state="entregado"] {
-  --state-color: #00ffcc;
-  --state-glow: rgba(0, 255, 204, 0.3);
-  opacity: 0.8;
-}
-
-/* 6. NO ENTREGADO / FALLIDO CON CAUSAL */
-.cyber-pin-marker[data-state="no-entregado"] {
-  --state-color: var(--alert-fail, #ff3333);
-  --state-glow: rgba(255, 51, 51, 0.8);
-}
+.cyber-pin-marker[data-state="creacion"] { --state-color: var(--neon-purple); --state-glow: rgba(179, 89, 255, 0.6); }
+.cyber-pin-marker[data-state="asignado"] { --state-color: var(--neon-cyan); --state-glow: rgba(0, 229, 255, 0.6); }
+.cyber-pin-marker[data-state="en-camino"] { --state-color: var(--amber-alert); --state-glow: rgba(255, 179, 0, 0.6); }
+.cyber-pin-marker[data-state="en-camino"] .pin-pulse { display: block; animation: cyber-radar 1.5s infinite cubic-bezier(0.215, 0.61, 0.355, 1); }
+.cyber-pin-marker[data-state="en-punto"] { --state-color: var(--neon-green); --state-glow: rgba(0, 255, 102, 0.8); }
+.cyber-pin-marker[data-state="en-punto"] .pin-body { animation: parpadeo-neon 1s infinite alternate cubic-bezier(0.4, 0, 0.6, 1); }
+.cyber-pin-marker[data-state="entregado"] { --state-color: #00ffcc; --state-glow: rgba(0, 255, 204, 0.4); opacity: 0.82; }
+.cyber-pin-marker[data-state="no-entregado"] { --state-color: var(--alert-fail); --state-glow: rgba(255, 51, 51, 0.8); }

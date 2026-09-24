@@ -1,19 +1,32 @@
 /* ==========================================================================
-   CYBERPUNK MAP PIN MARKER - AJUSTE DE SOLAPAMIENTO Y ANCLAJE
-   Ubicación: style/cyber-pin.css
+   PROTOCOLO MACONDO - CYBERPUNK MAP PIN MARKER (UI HOMOLOGADO)
+   Ubicación: pwa-mensajero/style/cyber-pin.css
+   Coherencia total con pwa-mensajero/modulos/ui/ y layout.css
    ========================================================================== */
 
 :root {
-  --pin-bg: #0d1117;
-  --pin-border-width: 1.5px;
-  --cyber-font: 'Fira Code', monospace;
+  /* Fondo y bordes sincronizados con el panel de la UI */
+  --pin-bg: var(--bg-color, #030308);
+  --pin-border-width: 2px;
+  --cyber-font: "Share Tech Mono", "Fira Code", monospace;
+
+  /* Sincronización con la paleta de color global de la PWA */
+  --neon-cyan: #00e5ff;
+  --neon-magenta: #ff3366;
+  --neon-yellow: #ffb300;
+  --neon-green: #39ff14;
+  --neon-purple: #b359ff;
+  --amber-alert: #ffaa00;
+  --alert-fail: #ff3333;
 }
 
-/* Contenedor Principal del Pin con Anclaje Basal */
+/* --------------------------------------------------------------------------
+   1. CONTENEDOR PRINCIPAL DEL PIN (Touch Target Apto Android: 52x64px)
+   -------------------------------------------------------------------------- */
 .cyber-pin-marker {
   position: relative;
-  width: 36px;
-  height: 46px;
+  width: 52px;
+  height: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -23,93 +36,168 @@
   user-select: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  /* Fijar el origen de la transformación en la punta inferior para evitar saltos al escalar */
-  transform-origin: bottom center;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), z-index 0.1s ease;
+  
+  /* Fijar el origen exacto de transformación en la punta inferior (GPS Anchor) */
+  transform-origin: 50% 100%;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), z-index 0.1s ease;
   will-change: transform;
+  box-sizing: border-box;
+  padding-top: 2px;
 }
 
-/* Elevación de Z-Index cuando el usuario toca o sobrevuela el pin */
+/* Escalado al interactuar o seleccionar parada en foco */
 .cyber-pin-marker:hover,
 .cyber-pin-marker:active,
 .cyber-pin-marker.activa {
-  transform: scale(1.25);
-  z-index: 9999 !important;
+  transform: scale(1.22) translateY(-4px);
+  z-index: 999 !important; /* Mantiene el marcador por debajo de modales y toasts UI */
 }
 
-/* Cuerpo Hexagonal del Pin */
+/* --------------------------------------------------------------------------
+   2. CUERPO HEXAGONA BISELADO Y ANCLAJE
+   -------------------------------------------------------------------------- */
 .pin-body {
   position: relative;
-  width: 100%;
-  height: 34px;
+  width: 48px;
+  height: 38px;
   background-color: var(--pin-bg);
-  border: var(--pin-border-width) solid var(--state-color, var(--neon-blue, #00e5ff));
+  border: var(--pin-border-width) solid var(--state-color, var(--neon-cyan));
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
+  justify-content: space-around;
   padding: 0 4px;
   box-sizing: border-box;
-  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
-  filter: drop-shadow(0 0 5px var(--state-glow, rgba(0, 229, 255, 0.4)));
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  filter: drop-shadow(0 0 6px var(--state-glow, rgba(0, 229, 255, 0.6)));
+  z-index: 2;
 }
 
-/* Punta del marcador apuntando exactamente a la coordenada GPS */
+/* Aguja/Punta de Anclaje a la coordenada geodésica */
 .pin-pointer {
-  width: 10px;
-  height: 10px;
-  background-color: var(--state-color, var(--neon-blue, #00e5ff));
-  margin-top: -2px;
+  width: 12px;
+  height: 14px;
+  background-color: var(--state-color, var(--neon-cyan));
+  margin-top: -1px;
   clip-path: polygon(50% 100%, 0 0, 100% 0);
-  filter: drop-shadow(0 0 3px var(--state-color, #00e5ff));
+  filter: drop-shadow(0 0 4px var(--state-color, var(--neon-cyan)));
+  z-index: 2;
 }
 
-/* Tipografía de la secuencia de parada */
+/* Tipografía de Secuencia Numérica (#01, #02, etc.) */
 .pin-index {
-  font-size: 0.8rem;
-  font-weight: bold;
+  font-size: 0.95rem;
+  font-weight: 900;
   color: #ffffff;
-  text-shadow: 0 0 4px var(--state-color, #00e5ff);
+  text-shadow: 0 0 3px #000000, 0 0 6px var(--state-color, var(--neon-cyan));
   line-height: 1;
+  letter-spacing: -0.5px;
 }
 
+/* Icono Vectorial SVG del Estado */
 .pin-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--state-color, #00e5ff);
+  color: var(--state-color, var(--neon-cyan));
+  filter: drop-shadow(0 0 2px var(--state-color, var(--neon-cyan)));
 }
 
-/* Animación de Radar Pulse */
+.pin-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+/* --------------------------------------------------------------------------
+   3. ANIMACIONES Y PULSO DE RADAR
+   -------------------------------------------------------------------------- */
 .pin-pulse {
   display: none;
   position: absolute;
-  top: 17px;
+  top: 20px;
   left: 50%;
-  width: 26px;
-  height: 26px;
-  background: var(--state-color, #00e5ff);
+  width: 32px;
+  height: 32px;
+  background: var(--state-color, var(--neon-cyan));
   border-radius: 50%;
   transform: translate(-50%, -50%);
   opacity: 0.5;
-  z-index: -1;
+  z-index: 1;
   pointer-events: none;
+  will-change: transform, opacity;
 }
 
 @keyframes cyber-radar {
-  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; }
-  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.3);
+    opacity: 0;
+  }
 }
 
-/* MUTACIONES SEGÚN EL ESTADO */
-.cyber-pin-marker[data-state="creacion"]    { --state-color: #b359ff; }
-.cyber-pin-marker[data-state="asignado"]    { --state-color: #00e5ff; }
-.cyber-pin-marker[data-state="en-camino"]   { --state-color: #ffb300; }
-.cyber-pin-marker[data-state="en-punto"]    { --state-color: #00ff66; }
-.cyber-pin-marker[data-state="entregado"]   { --state-color: #00ffcc; opacity: 0.7; }
-.cyber-pin-marker[data-state="no-entregado"]{ --state-color: #ff3333; }
+@keyframes parpadeo-glow {
+  0% {
+    filter: drop-shadow(0 0 4px var(--state-glow));
+  }
+  100% {
+    filter: drop-shadow(0 0 12px var(--state-glow));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   4. MUTACIONES DE ESTADO COMPATIBLES CON LA CONSOLA UI (data-state)
+   -------------------------------------------------------------------------- */
+
+/* Creación / Borrador */
+.cyber-pin-marker[data-state="creacion"] {
+  --state-color: var(--neon-purple);
+  --state-glow: rgba(179, 89, 255, 0.6);
+}
+
+/* Asignado */
+.cyber-pin-marker[data-state="asignado"] {
+  --state-color: var(--neon-cyan);
+  --state-glow: rgba(0, 229, 255, 0.6);
+}
+
+/* En Camino (Activo con animación de radar) */
+.cyber-pin-marker[data-state="en-camino"] {
+  --state-color: var(--amber-alert);
+  --state-glow: rgba(255, 170, 0, 0.6);
+}
 
 .cyber-pin-marker[data-state="en-camino"] .pin-pulse {
   display: block;
-  animation: cyber-radar 1.6s infinite ease-out;
+  animation: cyber-radar 1.5s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+/* En Punto de Llegada (Parpadeo Neón) */
+.cyber-pin-marker[data-state="en-punto"],
+.cyber-pin-marker[data-state="llegado"] {
+  --state-color: var(--neon-green);
+  --state-glow: rgba(57, 255, 20, 0.8);
+}
+
+.cyber-pin-marker[data-state="en-punto"] .pin-body,
+.cyber-pin-marker[data-state="llegado"] .pin-body {
+  animation: parpadeo-glow 1s infinite alternate ease-in-out;
+}
+
+/* Entregado / Completado */
+.cyber-pin-marker[data-state="entregado"] {
+  --state-color: #00ffcc;
+  --state-glow: rgba(0, 255, 204, 0.4);
+  opacity: 0.82;
+}
+
+/* Error / No Entregado con Novedad */
+.cyber-pin-marker[data-state="no-entregado"] {
+  --state-color: var(--alert-fail);
+  --state-glow: rgba(255, 51, 51, 0.8);
 }

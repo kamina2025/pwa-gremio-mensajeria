@@ -1,189 +1,40 @@
 /* ==========================================================================
-   PROTOCOLO MACONDO - ESTILOS CIBERPUNK Y SCROLLMASTER UNIFICADO (PLANILLAS)
-   Ubicación: pwa-mensajero/style/planillas.css
+   ESTILOS DE PLANILLAS Y TABLAS DE HISTORIAL
+   Ruta: style/planillas.css
    ========================================================================== */
-
-/* --- NAVEGACIÓN POR PESTAÑAS INTERNAS --- */
 .tabs-header-cyber {
     display: flex;
     gap: 10px;
     margin-bottom: 15px;
     border-bottom: 1px solid rgba(0, 229, 255, 0.2);
     padding-bottom: 8px;
-    flex-shrink: 0;
 }
 
 .tab-btn {
     background: rgba(10, 10, 20, 0.6);
-    border: 1px solid var(--neon-cyan-hover, #255a5c);
-    color: var(--text-color, #c3ccdb);
-    font-family: var(--cyber-font, monospace);
+    border: 1px solid var(--neon-cyan-hover);
+    color: var(--text-color);
+    font-family: var(--cyber-font);
     font-size: 0.85rem;
     padding: 8px 16px;
     cursor: pointer;
     text-transform: uppercase;
-    transition: all 0.25s ease-in-out;
     clip-path: polygon(0 0, 85% 0, 100% 35%, 100% 100%, 0 100%);
-    position: relative;
-    letter-spacing: 1px;
-}
-
-.tab-btn:hover {
-    border-color: var(--neon-cyan, #00e5ff);
-    color: var(--neon-cyan, #00e5ff);
-    box-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
-    background: rgba(0, 229, 255, 0.05);
 }
 
 .tab-btn.active {
-    background: var(--neon-cyan, #00e5ff);
-    color: var(--bg-color, #030308);
-    border-color: var(--neon-cyan, #00e5ff);
+    background: var(--neon-cyan);
+    color: var(--bg-color);
     font-weight: bold;
-    box-shadow: 0 0 12px var(--neon-cyan, #00e5ff);
-    text-shadow: none;
+    box-shadow: 0 0 12px var(--neon-cyan);
 }
 
-/* --- CONTROL DE VISIBILIDAD DE PESTAÑAS --- */
-.tab-content {
-    display: none;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-    height: 100%;
-}
-
-.tab-content.active {
-    display: flex;
-    flex-direction: column;
-    opacity: 1;
-}
-
-/* --- ENCABEZADOS Y PANELES CONTENEDORES --- */
-.cyber-header {
-    border-left: 3px solid var(--neon-yellow, #ffb300);
-    padding-left: 12px;
-    margin-bottom: 12px;
-    flex-shrink: 0;
-}
-
-.cyber-header h3 {
-    color: var(--neon-yellow, #ffb300);
-    font-size: 1rem;
-    letter-spacing: 1.5px;
-    text-shadow: 0 0 5px rgba(255, 179, 0, 0.4);
-}
-
-
-.flex-between {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.panel-contenido {
-    background: var(--panel-bg, rgba(10, 10, 20, 0.85));
-    border: 1px solid rgba(0, 229, 255, 0.2);
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden !important; /* IMPORTANTE: Sin clip-path para evitar cortar la barra de scroll */
-    border-radius: 4px;
-    position: relative;
-}
-
-.cyber-text {
-    color: var(--text-color, #c3ccdb);
-    font-size: 0.85rem;
-    margin-bottom: 10px;
-    flex-shrink: 0;
-}
-
-/* ==========================================================================
-   CONTENEDOR UNIFICADO DE SCROLLMASTER (UNICO CARREL ACTIVO Y FUNCIONAL)
-   ========================================================================== */
-
-#contenedor-planillado-zonas,
-#contenedor-planillado-zonas.cyber-scroll-container {
-    flex: 1;
-    max-height: clamp(280px, 52dvh, 580px);
-    overflow-y: auto !important;
-    touch-action: pan-y !important;
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-    padding-right: 6px;
-    padding-bottom: 100px !important; /* Espacio extendido de seguridad para despejar la barra inferior flotante */
-    margin-top: 8px;
-    position: relative;
-    scrollbar-width: thin;
-    scrollbar-color: #00e5ff #080b10;
-}
-
-/* Desactivar desplazamientos secundarios internos en acordeones de zona */
-#contenedor-planillado-zonas .cyber-accordion,
-#contenedor-planillado-zonas .paradas-drag-list,
-#contenedor-planillado-zonas .lista-paradas-planillado {
-    max-height: none !important;
-    overflow: visible !important;
-    touch-action: inherit !important;
-}
-
-/* Espaciador de cierre de lista al final del contenedor */
-#contenedor-planillado-zonas::after {
-    content: "▼ FIN DE PLANILLA DE ZONAS";
-    display: block;
-    text-align: center;
-    font-family: var(--cyber-font, monospace);
-    font-size: 0.65rem;
-    font-weight: bold;
-    color: #00e5ff;
-    letter-spacing: 1px;
-    padding: 10px 0;
-    margin-top: 10px;
-    border-top: 1px dashed rgba(0, 229, 255, 0.3);
-    opacity: 0.8;
-}
-
-/* ==========================================================================
-   BARRA DESLIZANTE CON TOPE VISUAL NEÓN INTEGRADO
-   ========================================================================== */
-
-#contenedor-planillado-zonas::-webkit-scrollbar {
-    width: 8px !important;
-    display: block !important;
-}
-
-/* Pista de la barra alineada exactamente al borde contenedor */
-#contenedor-planillado-zonas::-webkit-scrollbar-track {
-    background: #080b10;
-    border-radius: 4px;
-    border: 1px solid #1a2333;
-    border-bottom: 4px solid #00e5ff;
-    box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.8);
-}
-
-/* Botón deslizante (Thumb) Neón */
-#contenedor-planillado-zonas::-webkit-scrollbar-thumb {
-    background: #00e5ff;
-    border-radius: 4px;
-    border: 1px solid #005f73;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.8);
-    min-height: 40px;
-}
-
-#contenedor-planillado-zonas::-webkit-scrollbar-thumb:active {
-    background: #39ff14;
-    box-shadow: 0 0 10px rgba(57, 255, 20, 1);
-}
-
-/* --- TABLA HISTORIAL DE PLANILLAS REPORTADAS --- */
 .tabla-contenedor-cyber {
     width: 100%;
     overflow-x: auto;
     overflow-y: auto;
     max-height: 50dvh;
-    background: var(--panel-bg, rgba(10, 10, 20, 0.85));
+    background: var(--panel-bg);
     border: 1px solid rgba(0, 229, 255, 0.2);
     margin-top: 10px;
     border-radius: 4px;
@@ -192,87 +43,28 @@
 .tabla-cyber {
     width: 100%;
     border-collapse: collapse;
-    font-family: var(--cyber-font, monospace);
+    font-family: var(--cyber-font);
     font-size: 0.82rem;
     text-align: left;
 }
 
 .tabla-cyber th {
     background: rgba(0, 229, 255, 0.1);
-    color: var(--neon-cyan, #00e5ff);
+    color: var(--neon-cyan);
     padding: 10px;
-    border-bottom: 1px solid var(--neon-cyan, #00e5ff);
+    border-bottom: 1px solid var(--neon-cyan);
     text-transform: uppercase;
-    letter-spacing: 1px;
 }
 
 .tabla-cyber td {
     padding: 8px 10px;
     border-bottom: 1px solid rgba(195, 204, 219, 0.1);
-    color: var(--text-color, #c3ccdb);
-}
-
-.tabla-cyber tbody tr:hover {
-    background: rgba(0, 229, 255, 0.04);
-}
-
-.text-center {
-    text-align: center;
-}
-
-/* --- BADGES Y ETIQUETAS DE ESTADO --- */
-.badge-placa {
-    background: rgba(255, 179, 0, 0.15);
-    border: 1px solid var(--neon-yellow, #ffb300);
-    color: var(--neon-yellow, #ffb300);
-    padding: 2px 6px;
-    font-size: 0.75rem;
-    letter-spacing: 1px;
-}
-
-.badge {
-    padding: 3px 8px;
-    font-size: 0.75rem;
-    border-radius: 2px;
-    text-transform: uppercase;
-}
-
-.badge-success {
-    background: rgba(0, 229, 255, 0.15);
-    border: 1px solid var(--neon-cyan, #00e5ff);
-    color: var(--neon-cyan, #00e5ff);
-}
-
-.badge-danger {
-    background: rgba(255, 51, 102, 0.15);
-    border: 1px solid var(--neon-magenta, #ff3366);
-    color: var(--neon-magenta, #ff3366);
-}
-
-/* Adaptabilidad en pantallas cortas Android */
-@media (max-height: 680px) {
-    #contenedor-planillado-zonas {
-        max-height: 44dvh;
-    }
-}
-
-/* ==========================================================================
-   ESTILOS EXCLUSIVOS PARA LA HOJA DE IMPRESIÓN Y PDF DE PLANILLAS
-   ========================================================================== */
-.area-impresion-solo-pdf {
-    display: none;
 }
 
 @media print {
-    body * {
-        visibility: hidden !important;
-    }
-
+    body * { visibility: hidden !important; }
     #area-impresion-planilla-tmp,
-    #area-impresion-planilla-tmp * {
-        visibility: visible !important;
-    }
-
+    #area-impresion-planilla-tmp * { visibility: visible !important; }
     #area-impresion-planilla-tmp {
         display: block !important;
         position: absolute;
@@ -282,73 +74,5 @@
         padding: 15px;
         background: #ffffff !important;
         color: #000000 !important;
-        font-family: Arial, Helvetica, sans-serif;
-    }
-
-    .hoja-pdf-planilla {
-        width: 100%;
-        margin: 0 auto;
-    }
-
-    .encabezado-pdf {
-        text-align: center;
-        border-bottom: 2px solid #000;
-        padding-bottom: 8px;
-        margin-bottom: 15px;
-    }
-
-    .encabezado-pdf h2 {
-        margin: 0;
-        font-size: 1.3rem;
-        color: #000;
-        text-transform: uppercase;
-    }
-
-    .encabezado-pdf p {
-        margin: 3px 0 0 0;
-        font-size: 0.8rem;
-        color: #444;
-    }
-
-    .pdf-datos-mensajero {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        background-color: #f8f9fa;
-        border: 1px solid #ccc;
-        padding: 10px;
-        margin-bottom: 15px;
-        border-radius: 4px;
-    }
-
-    .tabla-pdf-export {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 15px;
-    }
-
-    .tabla-pdf-export th,
-    .tabla-pdf-export td {
-        border: 1px solid #666;
-        padding: 8px;
-        text-align: left;
-        vertical-align: top;
-    }
-
-    .tabla-pdf-export th {
-        background-color: #e5e7eb !important;
-        color: #000 !important;
-        font-size: 0.8rem;
-        font-weight: bold;
-        text-transform: uppercase;
-    }
-
-    .pie-pdf {
-        margin-top: 20px;
-        border-top: 1px solid #aaa;
-        padding-top: 8px;
-        text-align: center;
-        font-size: 0.7rem;
-        color: #555;
     }
 }

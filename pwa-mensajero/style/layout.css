@@ -1,11 +1,14 @@
-@import url("https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Fira+Code:wght@400;700;900&display=swap");
 
 /* ==========================================================================
-   SISTEMA DE DISEÑO CYBERPUNK - PALETA GLOBAL Y VARIABLES
+   SISTEMA DE DISEÑO CYBERPUNK - VARIABLES GLOBALES Y RESETEO
+   Ruta: style/layout.css
    ========================================================================== */
 :root {
     --bg-color: #030308;
     --panel-bg: rgba(10, 10, 20, 0.85);
+    --border-rigid: #2d3748;
+    --cyber-border: #30363d;
     
     /* Colores Neón Cyberpunk */
     --neon-cyan: #00e5ff;
@@ -13,10 +16,12 @@
     --neon-magenta: #ff3366;
     --neon-yellow: #ffb300;
     --neon-green: #39ff14;
-    --cyber-border: #30363d;
+    --neon-purple: #b359ff;
+    --amber-alert: #ffb300;
+    --alert-fail: #ff3333;
     
     --text-color: #c3ccdb;
-    --cyber-font: "Share Tech Mono", monospace;
+    --cyber-font: "Share Tech Mono", "Fira Code", monospace;
 }
 
 * {
@@ -32,20 +37,53 @@ body {
     width: 100vw;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* Elimina scrollbars globales no deseados */
+    overflow: hidden;
     touch-action: manipulation;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
-}
-
-body {
     background-color: var(--bg-color);
     color: var(--text-color);
     font-family: var(--cyber-font);
 }
 
 /* ==========================================================================
-   GRID DEL DASHBOARD Y CONTENEDORES
+   ESTILOS BASE REUTILIZABLES (BOTONES & INPUTS BISELADOS)
+   ========================================================================== */
+.btn-cyber-bevel,
+.btn-crypto,
+.nav-item,
+input[type="file"]::file-selector-button {
+    background: transparent;
+    border: 1px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    padding: 12px;
+    font-family: var(--cyber-font);
+    font-size: 0.95rem;
+    text-align: left;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    position: relative;
+    clip-path: polygon(0 0, 90% 0, 100% 30%, 100% 100%, 0 100%);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    touch-action: manipulation;
+}
+
+.btn-cyber-bevel:hover,
+.btn-crypto:hover,
+.nav-item:hover,
+input[type="file"]::file-selector-button:hover {
+    background: var(--neon-cyan-hover);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--neon-cyan);
+    font-weight: bold;
+}
+
+/* ==========================================================================
+   GRID DEL DASHBOARD
    ========================================================================== */
 .dashboard-container {
     display: grid;
@@ -64,7 +102,6 @@ body {
     grid-template-columns: 1px 1fr;
 }
 
-/* Unificación y anclaje de posición para el área principal */
 .main-container,
 .main-content {
     grid-area: main;
@@ -111,55 +148,12 @@ body {
     animation: fadeIn 0.3s ease-in-out;
 }
 
-.vista-header {
-    color: #83c2cb;
-}
-.card-info-ruta {
-    color: #19a7bd;
-    clip-path: polygon(0 0, 90% 0, 100% 30%, 100% 100%, 0 100%);
-}
-.card-header {
-    color: #4ab6c7;
-    clip-path: polygon(0 0, 90% 0, 100% 30%, 100% 100%, 0 100%);
-}
-.label {
-    color: var(--neon-cyan);
-}
-
 /* ==========================================================================
-   BARRA INFERIOR FLOTANTE A NIVEL RAÍZ
-   ========================================================================== */
-.barra-inferior-global {
-    position: fixed;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 92%;
-    max-width: 480px;
-    z-index: 9999;
-    box-sizing: border-box;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-}
-
-/* Sincronización en escritorio cuando el sidebar está desplegado */
-@media (min-width: 768px) {
-    .dashboard-container:not(.collapsed) ~ .barra-inferior-global {
-        left: calc(50% + 120px);
-    }
-}
-
-/* ==========================================================================
-   SISTEMA DE TOASTS Y AVISOS DE PROCESO (OPTIMIZADO PARA ANDROID)
+   SISTEMA DE TOASTS Y MODALES OVERLAYS
    ========================================================================== */
 .cyber-toast-container {
     position: fixed;
-    bottom: 75px; /* Evita superposición con la barra inferior flotante */
+    bottom: 85px;
     right: 16px;
     left: 16px;
     max-width: 480px;
@@ -175,109 +169,17 @@ body {
     pointer-events: auto;
     background: var(--bg-color);
     border: 1px solid var(--neon-cyan);
-    box-shadow: 0 0 12px rgba(0, 229, 255, 0.35), inset 0 0 6px rgba(0, 229, 255, 0.1);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
     border-radius: 4px;
     padding: 12px 16px;
     color: var(--text-color);
-    font-family: var(--cyber-font);
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     animation: slideInUp 0.3s ease-out forwards;
 }
 
-.cyber-toast.toast-exito {
-    border-color: var(--neon-green);
-    box-shadow: 0 0 12px rgba(57, 255, 20, 0.35);
-}
+.cyber-toast.toast-exito { border-color: var(--neon-green); box-shadow: 0 0 12px rgba(57, 255, 20, 0.35); }
+.cyber-toast.toast-error { border-color: var(--neon-magenta); box-shadow: 0 0 12px rgba(255, 51, 102, 0.45); }
+.cyber-toast.toast-advertencia { border-color: var(--neon-yellow); box-shadow: 0 0 12px rgba(255, 179, 0, 0.35); }
 
-.cyber-toast.toast-error {
-    border-color: var(--neon-magenta);
-    box-shadow: 0 0 12px rgba(255, 51, 102, 0.45);
-}
-
-.cyber-toast.toast-advertencia {
-    border-color: var(--neon-yellow);
-    box-shadow: 0 0 12px rgba(255, 179, 0, 0.35);
-}
-
-.cyber-toast-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: bold;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.cyber-toast-body {
-    margin-top: 6px;
-    font-size: 0.85rem;
-    color: #a3b1c2;
-}
-
-.cyber-progress-bar-bg {
-    width: 100%;
-    height: 6px;
-    background: var(--cyber-border);
-    border-radius: 3px;
-    margin-top: 10px;
-    overflow: hidden;
-}
-
-.cyber-progress-bar-fill {
-    height: 100%;
-    width: 0%;
-    background: var(--neon-cyan);
-    box-shadow: 0 0 8px var(--neon-cyan);
-    transition: width 0.25s ease-in-out;
-}
-
-.toast-exito .cyber-progress-bar-fill { background: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
-.toast-error .cyber-progress-bar-fill { background: var(--neon-magenta); box-shadow: 0 0 8px var(--neon-magenta); }
-
-.cyber-toast-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 10px;
-}
-
-/* Botones con zona de contacto apta para Android */
-.cyber-btn-touch {
-    min-height: 44px;
-    min-width: 80px;
-    background: transparent;
-    border: 1px solid var(--neon-cyan);
-    color: var(--neon-cyan);
-    font-family: var(--cyber-font);
-    font-size: 0.85rem;
-    font-weight: bold;
-    padding: 6px 14px;
-    text-transform: uppercase;
-    cursor: pointer;
-    touch-action: manipulation;
-    border-radius: 2px;
-    transition: background 0.2s, color 0.2s;
-}
-
-.cyber-btn-touch:active {
-    background: var(--neon-cyan);
-    color: var(--bg-color);
-}
-
-.cyber-btn-touch.danger {
-    border-color: var(--neon-magenta);
-    color: var(--neon-magenta);
-}
-
-.cyber-btn-touch.danger:active {
-    background: var(--neon-magenta);
-    color: #ffffff;
-}
-
-/* ==========================================================================
-   MODALES OVERLAYS INTERACTIVOS
-   ========================================================================== */
 .cyber-modal-overlay {
     position: fixed;
     inset: 0;
@@ -290,9 +192,7 @@ body {
     padding: 16px;
 }
 
-.cyber-modal-overlay.hidden {
-    display: none !important;
-}
+.cyber-modal-overlay.hidden { display: none !important; }
 
 .cyber-modal-card {
     background: #0d1117;
@@ -302,39 +202,8 @@ body {
     max-width: 420px;
     padding: 24px;
     border-radius: 6px;
-    animation: glitchGlow 0.3s ease-out;
 }
 
-/* ==========================================================================
-   ANIMACIONES KEYFRAMES
-   ========================================================================== */
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes slideInUp {
-    from {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
-@keyframes glitchGlow {
-    0% { transform: scale(0.95); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes spinCyber {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-@keyframes glitch {
-    0%, 100% { text-shadow: 0 0 8px rgba(255, 179, 0, 0.6); }
-    50% { text-shadow: -2px 0 var(--neon-magenta), 2px 0 var(--neon-cyan); }
-}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideInUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes glitch { 0%, 100% { text-shadow: 0 0 8px rgba(255, 179, 0, 0.6); } 50% { text-shadow: -2px 0 var(--neon-magenta), 2px 0 var(--neon-cyan); } }

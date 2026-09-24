@@ -1,18 +1,30 @@
 /**
  * PROTOCOLO MACONDO - GESTOR DE MARCADORES, INFOWINDOWS Y MENÚ RADIAL CYBERPUNK
- * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
+ * Ubicación: modulos/mapa/mapa-marcadores.js
  */
 
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
 import { IndexedStore } from "../db/indexed-store.js";
 
+// Garantizar arreglos globales y estado overlay
 window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
 window.overlayMenuActivo = null;
 
 const dbStore = new IndexedStore();
 
 /**
- * Normaliza y añade contexto a las direcciones si no vienen con ciudad
+ * Cierra de manera segura cualquier overlay activo de menú radial en pantalla.
+ */
+export function cerrarOverlayActivo() {
+    if (window.overlayMenuActivo && typeof window.overlayMenuActivo.cerrar === "function") {
+        window.overlayMenuActivo.cerrar();
+    }
+}
+
+/**
+ * Normaliza y añade contexto a las direcciones si no incluyen la ciudad base.
+ * @param {string} direccion 
+ * @returns {string}
  */
 function sanitizarDireccionContexto(direccion) {
     if (!direccion) return "Cali, Colombia";
@@ -24,7 +36,8 @@ function sanitizarDireccionContexto(direccion) {
 }
 
 /**
- * Invoca el marcador de llamadas nativo
+ * Invoca el marcador telefónico nativo en dispositivos móviles Android.
+ * @param {string} numeroTelefono 
  */
 window.iniciarLlamadaAndroid = function(numeroTelefono) {
     if (!numeroTelefono || numeroTelefono.trim() === "" || numeroTelefono === "N/A") {
@@ -37,7 +50,8 @@ window.iniciarLlamadaAndroid = function(numeroTelefono) {
 
 /**
  * Fabrica dinámicamente la clase MenuRadialOverlay garantizando
- * que google.maps.OverlayView esté definido al momento de la herencia.
+ * que google.maps.OverlayView esté definido al momento de instanciar.
+ * @returns {Function|null}
  */
 function obtenerClaseMenuRadialOverlay() {
     if (window.MenuRadialOverlayClass) {
@@ -65,16 +79,17 @@ function obtenerClaseMenuRadialOverlay() {
             style.textContent = `
                 .cyberpunk-cross-menu {
                     position: absolute;
-                    width: 140px;
-                    height: 140px;
+                    width: 150px;
+                    height: 150px;
                     transform: translate(-50%, -50%);
                     pointer-events: auto;
                     z-index: 10000;
+                    touch-action: manipulation;
                 }
                 .cyber-btn {
                     position: absolute;
-                    width: 38px;
-                    height: 38px;
+                    width: 44px;
+                    height: 44px;
                     background: #0d1117;
                     border: 2px solid #00e5ff;
                     color: #00e5ff;
@@ -83,32 +98,34 @@ function obtenerClaseMenuRadialOverlay() {
                     align-items: center;
                     justify-content: center;
                     font-family: 'Fira Code', monospace;
-                    font-size: 11px;
+                    font-size: 13px;
                     font-weight: bold;
                     cursor: pointer;
-                    box-shadow: 0 0 8px #00e5ff, inset 0 0 4px #00e5ff;
+                    box-shadow: 0 0 10px #00e5ff, inset 0 0 4px #00e5ff;
                     transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+                    touch-action: manipulation;
+                    -webkit-tap-highlight-color: transparent;
                 }
-                .cyber-btn:hover {
+                .cyber-btn:active, .cyber-btn:hover {
                     background: #00e5ff;
                     color: #0d1117;
-                    box-shadow: 0 0 15px #00e5ff;
+                    box-shadow: 0 0 18px #00e5ff;
                     transform: scale(1.15);
                 }
                 .cyber-btn.danger {
                     border-color: #ff3366;
                     color: #ff3366;
-                    box-shadow: 0 0 8px #ff3366, inset 0 0 4px #ff3366;
+                    box-shadow: 0 0 10px #ff3366, inset 0 0 4px #ff3366;
                 }
-                .cyber-btn.danger:hover {
+                .cyber-btn.danger:active, .cyber-btn.danger:hover {
                     background: #ff3366;
                     color: #0d1117;
-                    box-shadow: 0 0 15px #ff3366;
+                    box-shadow: 0 0 18px #ff3366;
                 }
-                .cyber-btn-norte { top: 0; left: 51px; }
-                .cyber-btn-este  { top: 51px; right: 0; }
-                .cyber-btn-sur   { bottom: 0; left: 51px; }
-                .cyber-btn-oeste { top: 51px; left: 0; }
+                .cyber-btn-norte { top: 0; left: 53px; }
+                .cyber-btn-este  { top: 53px; right: 0; }
+                .cyber-btn-sur   { bottom: 0; left: 53px; }
+                .cyber-btn-oeste { top: 53px; left: 0; }
             `;
             document.head.appendChild(style);
         }
@@ -117,10 +134,10 @@ function obtenerClaseMenuRadialOverlay() {
             this.container = document.createElement('div');
             this.container.className = 'cyberpunk-cross-menu';
             this.container.innerHTML = `
-                <button class="cyber-btn cyber-btn-norte" title="Editar Parada">N</button>
-                <button class="cyber-btn cyber-btn-este" title="Mover Punto">E</button>
-                <button class="cyber-btn cyber-btn-sur danger" title="Eliminar Parada">S</button>
-                <button class="cyber-btn cyber-btn-oeste" title="Reportar Novedad">O</button>
+                <button type="button" class="cyber-btn cyber-btn-norte" title="Editar Parada" aria-label="Editar">N</button>
+                <button type="button" class="cyber-btn cyber-btn-este" title="Mover Punto" aria-label="Mover">E</button>
+                <button type="button" class="cyber-btn cyber-btn-sur danger" title="Eliminar Parada" aria-label="Eliminar">S</button>
+                <button type="button" class="cyber-btn cyber-btn-oeste" title="Reportar Novedad" aria-label="Reportar">O</button>
             `;
             this.attachEvents();
             const panes = this.getPanes();
@@ -130,30 +147,25 @@ function obtenerClaseMenuRadialOverlay() {
         }
 
         attachEvents() {
-            this.container.querySelector('.cyber-btn-norte').onclick = (e) => {
-                e.stopPropagation();
-                console.log("📢 [MENU_RADIAL]: Acción NORTE - Editar");
-                if (this.handlers.onEdit) this.handlers.onEdit();
-                this.cerrar();
+            if (!this.container) return;
+
+            const bindAction = (selector, actionName, handler) => {
+                const btn = this.container.querySelector(selector);
+                if (btn) {
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log(`📢 [MENU_RADIAL]: Acción ${actionName} seleccionada`);
+                        if (typeof handler === 'function') handler();
+                        this.cerrar();
+                    });
+                }
             };
-            this.container.querySelector('.cyber-btn-este').onclick = (e) => {
-                e.stopPropagation();
-                console.log("📢 [MENU_RADIAL]: Acción ESTE - Mover");
-                if (this.handlers.onMove) this.handlers.onMove();
-                this.cerrar();
-            };
-            this.container.querySelector('.cyber-btn-sur').onclick = (e) => {
-                e.stopPropagation();
-                console.log("📢 [MENU_RADIAL]: Acción SUR - Eliminar");
-                if (this.handlers.onDelete) this.handlers.onDelete();
-                this.cerrar();
-            };
-            this.container.querySelector('.cyber-btn-oeste').onclick = (e) => {
-                e.stopPropagation();
-                console.log("📢 [MENU_RADIAL]: Acción OESTE - Reportar");
-                if (this.handlers.onReport) this.handlers.onReport();
-                this.cerrar();
-            };
+
+            bindAction('.cyber-btn-norte', 'NORTE (Editar)', this.handlers.onEdit);
+            bindAction('.cyber-btn-este', 'ESTE (Mover)', this.handlers.onMove);
+            bindAction('.cyber-btn-sur', 'SUR (Eliminar)', this.handlers.onDelete);
+            bindAction('.cyber-btn-oeste', 'OESTE (Reportar)', this.handlers.onReport);
         }
 
         draw() {
@@ -186,71 +198,75 @@ function obtenerClaseMenuRadialOverlay() {
 }
 
 /**
- * Despliega la ventana modal de gestión de parada y evidencias (Oeste)
+ * Despliega la ventana modal de gestión de parada y evidencias (Acción Oeste - Reportar/Gestionar).
+ * @param {Object} pedido 
+ * @param {number} indice 
  */
 export function abrirModalGestionParada(pedido, indice) {
     let modalExistente = document.getElementById("modal-gestion-parada-mapa");
     if (modalExistente) modalExistente.remove();
 
+    const nombreCliente = pedido.destinatario || pedido.cliente || pedido.nombre_cliente || "Cliente";
+
     const modalHTML = `
-        <div id="modal-gestion-parada-mapa" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 7, 15, 0.85); backdrop-filter: blur(5px); z-index: 99999; display: flex; align-items: center; justify-content: center; font-family: 'Fira Code', monospace;">
-            <div style="background: #0d1117; border: 2px solid #00e5ff; box-shadow: 0 0 20px rgba(0,229,255,0.3); border-radius: 8px; width: 90%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px; color: #e6edf3;">
+        <div id="modal-gestion-parada-mapa" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 7, 15, 0.88); backdrop-filter: blur(6px); z-index: 99999; display: flex; align-items: center; justify-content: center; font-family: 'Fira Code', monospace;">
+            <div style="background: #0d1117; border: 2px solid #00e5ff; box-shadow: 0 0 25px rgba(0,229,255,0.35); border-radius: 10px; width: 92%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 20px; color: #e6edf3;">
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px;">
-                    <h3 style="color: #00e5ff; margin: 0; font-size: 1.1rem; text-transform: uppercase;">⚡ [PARADA #${indice}] GESTIÓN & EVIDENCIAS</h3>
-                    <button type="button" onclick="document.getElementById('modal-gestion-parada-mapa').remove()" style="background: transparent; border: none; color: #ff3366; font-size: 1.5rem; cursor: pointer; font-weight: bold;">&times;</button>
+                    <h3 style="color: #00e5ff; margin: 0; font-size: 1.05rem; text-transform: uppercase;">⚡ [PARADA #${indice}] GESTIÓN & EVIDENCIAS</h3>
+                    <button type="button" id="btn-cerrar-modal-gestion" style="background: transparent; border: none; color: #ff3366; font-size: 1.6rem; cursor: pointer; font-weight: bold; min-width: 44px; min-height: 44px;">&times;</button>
                 </div>
 
-                <form id="form-gestion-pin-mapa" style="display: flex; flex-direction: column; gap: 12px;">
+                <form id="form-gestion-pin-mapa" style="display: flex; flex-direction: column; gap: 14px;">
                     <input type="hidden" name="id" value="${pedido.id || ''}">
 
                     <div>
-                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 3px;">DESTINATARIO:</label>
-                        <input type="text" id="modal-destinatario" value="${pedido.destinatario || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
+                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 4px;">DESTINATARIO:</label>
+                        <input type="text" id="modal-destinatario" value="${nombreCliente}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;" />
                     </div>
 
                     <div>
-                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 3px;">DIRECCIÓN:</label>
-                        <input type="text" id="modal-direccion" value="${pedido.direccion || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
+                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 4px;">DIRECCIÓN:</label>
+                        <input type="text" id="modal-direccion" value="${pedido.direccion || pedido.dir || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;" />
                     </div>
 
                     <div>
-                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 3px;">TELÉFONO:</label>
+                        <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 4px;">TELÉFONO:</label>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="text" id="modal-telefono" value="${pedido.telefono || ''}" style="flex: 1; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;" />
-                            <button type="button" onclick="window.iniciarLlamadaAndroid(document.getElementById('modal-telefono').value)" title="Llamar a cliente" style="background: #238636; border: 1px solid #2ea043; color: #fff; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                            <input type="text" id="modal-telefono" value="${pedido.telefono || pedido.tel || ''}" style="flex: 1; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;" />
+                            <button type="button" onclick="window.iniciarLlamadaAndroid(document.getElementById('modal-telefono').value)" title="Llamar a cliente" style="background: #238636; border: 1px solid #2ea043; color: #fff; padding: 0 14px; min-height: 44px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
                                 📞
                             </button>
                         </div>
                     </div>
 
                     <div>
-                        <label style="color: #ffb300; font-size: 0.8rem; display: block; margin-bottom: 3px;">ESTADO DE LA PARADA:</label>
-                        <select id="modal-estado" style="width: 100%; background: #161b22; border: 1px solid #ffb300; color: #fff; padding: 8px; border-radius: 4px; font-size: 0.85rem;">
-                            <option value="en-camino" ${pedido.estado === 'en-camino' ? 'selected' : ''}>EN CAMINO</option>
-                            <option value="entregado" ${pedido.estado === 'entregado' ? 'selected' : ''}>ENTREGADO</option>
-                            <option value="no-entregado" ${pedido.estado === 'no-entregado' ? 'selected' : ''}>NO ENTREGADO</option>
+                        <label style="color: #ffb300; font-size: 0.8rem; display: block; margin-bottom: 4px;">ESTADO DE LA PARADA:</label>
+                        <select id="modal-estado" style="width: 100%; background: #161b22; border: 1px solid #ffb300; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;">
+                            <option value="en-camino" ${(pedido.estado || '').toLowerCase() === 'en-camino' ? 'selected' : ''}>EN CAMINO</option>
+                            <option value="entregado" ${(pedido.estado || '').toLowerCase() === 'entregado' ? 'selected' : ''}>ENTREGADO</option>
+                            <option value="no-entregado" ${(pedido.estado || '').toLowerCase() === 'no-entregado' ? 'selected' : ''}>NO ENTREGADO</option>
                         </select>
                     </div>
 
-                    <fieldset style="border: 1px dashed #00e5ff; border-radius: 6px; padding: 10px; margin-top: 5px;">
-                        <legend style="color: #00e5ff; font-size: 0.8rem; padding: 0 5px;">📸 CARGA DE EVIDENCIAS</legend>
-                        <div style="margin-bottom: 8px;">
+                    <fieldset style="border: 1px dashed #00e5ff; border-radius: 6px; padding: 12px; margin-top: 5px;">
+                        <legend style="color: #00e5ff; font-size: 0.8rem; padding: 0 6px;">📸 CARGA DE EVIDENCIAS</legend>
+                        <div style="margin-bottom: 10px;">
                             <label style="font-size: 0.75rem; color: #d2a8ff; display: block;">📞 Registro / Evidencia de Llamada:</label>
-                            <input type="file" id="evidencia-llamada" accept="image/*,audio/*,.pdf" style="font-size: 0.75rem; color: #8b949e; margin-top: 2px;" />
+                            <input type="file" id="evidencia-llamada" accept="image/*,audio/*,.pdf" style="font-size: 0.78rem; color: #8b949e; margin-top: 4px;" />
                         </div>
-                        <div style="margin-bottom: 8px;">
+                        <div style="margin-bottom: 10px;">
                             <label style="font-size: 0.75rem; color: #d2a8ff; display: block;">🏠 Foto de Fachada:</label>
-                            <input type="file" id="evidencia-fachada" accept="image/*" capture="environment" style="font-size: 0.75rem; color: #8b949e; margin-top: 2px;" />
+                            <input type="file" id="evidencia-fachada" accept="image/*" capture="environment" style="font-size: 0.78rem; color: #8b949e; margin-top: 4px;" />
                         </div>
                         <div>
                             <label style="font-size: 0.75rem; color: #d2a8ff; display: block;">🧾 Foto de Tirilla / Comprobante:</label>
-                            <input type="file" id="evidencia-tirilla" accept="image/*" capture="environment" style="font-size: 0.75rem; color: #8b949e; margin-top: 2px;" />
+                            <input type="file" id="evidencia-tirilla" accept="image/*" capture="environment" style="font-size: 0.78rem; color: #8b949e; margin-top: 4px;" />
                         </div>
                     </fieldset>
 
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
-                        <button type="button" onclick="document.getElementById('modal-gestion-parada-mapa').remove()" style="flex: 1; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">CANCELAR</button>
-                        <button type="submit" style="flex: 1; background: #00e5ff; border: none; color: #05070f; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer;">GUARDAR CAMBIOS</button>
+                        <button type="button" id="btn-cancelar-modal-gestion" style="flex: 1; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; min-height: 44px;">CANCELAR</button>
+                        <button type="submit" style="flex: 1; background: #00e5ff; border: none; color: #05070f; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; min-height: 44px;">GUARDAR CAMBIOS</button>
                     </div>
                 </form>
             </div>
@@ -259,28 +275,42 @@ export function abrirModalGestionParada(pedido, indice) {
 
     document.body.insertAdjacentHTML("beforeend", modalHTML);
 
+    const modalElem = document.getElementById("modal-gestion-parada-mapa");
+    const cerrarModal = () => { if (modalElem) modalElem.remove(); };
+
+    document.getElementById("btn-cerrar-modal-gestion")?.addEventListener("click", cerrarModal);
+    document.getElementById("btn-cancelar-modal-gestion")?.addEventListener("click", cerrarModal);
+
     document.getElementById("form-gestion-pin-mapa").addEventListener("submit", async (e) => {
         e.preventDefault();
 
         const nuevoEstado = document.getElementById("modal-estado").value;
-        pedido.destinatario = document.getElementById("modal-destinatario").value;
-        pedido.direccion = document.getElementById("modal-direccion").value;
-        pedido.telefono = document.getElementById("modal-telefono").value;
+        const nuevoDest = document.getElementById("modal-destinatario").value;
+        const nuevaDir = document.getElementById("modal-direccion").value;
+        const nuevoTel = document.getElementById("modal-telefono").value;
+
+        pedido.destinatario = nuevoDest;
+        pedido.cliente = nuevoDest;
+        pedido.direccion = nuevaDir;
+        pedido.dir = nuevaDir;
+        pedido.telefono = nuevoTel;
+        pedido.tel = nuevoTel;
         pedido.estado = nuevoEstado;
 
         try {
             await dbStore.actualizarParada(pedido);
-            console.log("💾 [MAPA_MARCADORES]: Parada actualizada en IndexedDB desde Modal", pedido);
+            console.log("💾 [MAPA_MARCADORES]: Parada actualizada en IndexedDB desde Modal:", pedido);
 
-            mutarMarcadorPorId(pedido.id || `#PNT-${indice}`, nuevoEstado);
-            document.getElementById("modal-gestion-parada-mapa").remove();
+            const idUnico = pedido.id || `#PNT-${indice}`;
+            mutarMarcadorPorId(idUnico, nuevoEstado);
+            cerrarModal();
 
             if (navigator.onLine) {
                 fetch('/api/paradas.php', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(pedido)
-                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Sync diferido a PHP:", err));
+                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Sync diferido a backend PHP:", err));
             }
         } catch (err) {
             console.error("❌ [MAPA_MARCADORES]: Error guardando parada en IndexedDB:", err);
@@ -289,54 +319,64 @@ export function abrirModalGestionParada(pedido, indice) {
 }
 
 /**
- * Renderiza la colección de marcadores interactivos
+ * Renderiza la colección de marcadores interactivos usando el constructor funcional clásico google.maps.Marker.
+ * @param {Array<Object>} listaPedidos 
+ * @param {number} indiceActivo 
+ * @param {Function} callbackActualizacion 
  */
 export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, callbackActualizacion) {
     if (Array.isArray(window.marcadoresRutaMensajero)) {
-        window.marcadoresRutaMensajero.forEach((m) => m.setMap(null));
+        window.marcadoresRutaMensajero.forEach((m) => {
+            if (typeof m.setMap === 'function') m.setMap(null);
+        });
     }
     window.marcadoresRutaMensajero = [];
 
     if (!listaPedidos || listaPedidos.length === 0) return;
+
+    const mapa = window.mapaMensajero || window.mapaInstancia;
+    if (!mapa || typeof google === "undefined" || !google.maps) return;
 
     const bounds = new google.maps.LatLngBounds();
     const geocoder = new google.maps.Geocoder();
 
     listaPedidos.forEach((pedido, idx) => {
         let estadoCalculado = pedido.estado ? pedido.estado.toLowerCase() : 'asignado';
-        
+
         if (idx === indiceActivo && estadoCalculado !== 'entregado' && estadoCalculado !== 'no-entregado') {
             estadoCalculado = 'en-camino';
         }
 
-        const iconoCyberpunk = crearIconoParadaCyberpunkSVG({
-            estado: estadoCalculado,
-            secuencia: idx + 1,
-            causal: pedido.causal || ''
-        });
+        const idUnicoParada = pedido.id || `#PNT-${idx + 1}`;
+        const nombreCliente = pedido.destinatario || pedido.cliente || pedido.nombre_cliente || "Cliente";
 
         const crearMarcadorEnPosicion = (latLngPos) => {
             bounds.extend(latLngPos);
 
-            const marker = new google.maps.Marker({
-                position: latLngPos,
-                map: window.mapaMensajero,
-                draggable: false,
-                icon: iconoCyberpunk,
-                title: `[STOP #${idx + 1}] ${pedido.destinatario || "Cliente"}`
+            const iconoCyberpunk = crearIconoParadaCyberpunkSVG({
+                estado: estadoCalculado,
+                secuencia: idx + 1,
+                causal: pedido.causal || ''
             });
 
-            const idUnicoParada = pedido.id || `#PNT-${idx + 1}`;
+            const marker = new google.maps.Marker({
+                position: latLngPos,
+                map: mapa,
+                draggable: false,
+                icon: iconoCyberpunk,
+                title: `[STOP #${idx + 1}] ${nombreCliente}`
+            });
+
             marker.set('idParada', idUnicoParada);
             marker.set('secuencia', idx + 1);
 
             const templateInfo = `
-                <div style="background: #0d1117; color: #fff; padding: 10px; border: 1px solid #00e5ff; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 4px; min-width: 180px;">
+                <div style="background: #0d1117; color: #fff; padding: 10px; border: 1px solid #00e5ff; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 6px; min-width: 180px;">
                     <div style="color: #00e5ff; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #2d3748; padding-bottom: 2px;">
-                        [STOP #${idx + 1}] ${pedido.destinatario || "CLIENTE"}
+                        [STOP #${idx + 1}] ${nombreCliente}
                     </div>
-                    <div><span style="color: #8af7b3;">📍 DIR:</span> ${pedido.direccion}</div>
-                    <div><span style="color: #8af7b3;">📞 TEL:</span> ${pedido.telefono || "N/A"}</div>
+                    <div><span style="color: #8af7b3;">📍 DIR:</span> ${pedido.direccion || pedido.dir || 'N/A'}</div>
+                    <div><span style="color: #8af7b3;">📞 TEL:</span> ${pedido.telefono || pedido.tel || "N/A"}</div>
                     <div style="margin-top: 4px;">
                         <span style="color: #ffb300;">⚡ ESTADO:</span> 
                         <strong style="text-transform: uppercase;">${estadoCalculado}</strong>
@@ -346,7 +386,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             marker.addListener("mouseover", () => {
                 if (window.infoWindowMensajero) {
                     window.infoWindowMensajero.setContent(templateInfo);
-                    window.infoWindowMensajero.open(window.mapaMensajero, marker);
+                    window.infoWindowMensajero.open(mapa, marker);
                 }
             });
 
@@ -354,11 +394,8 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 if (window.infoWindowMensajero) window.infoWindowMensajero.close();
             });
 
-            // DESPLIEGUE DEL MENÚ RADIAL EN CRUZ
             marker.addListener("click", () => {
-                if (window.overlayMenuActivo) {
-                    window.overlayMenuActivo.cerrar();
-                }
+                cerrarOverlayActivo();
 
                 const MenuClass = obtenerClaseMenuRadialOverlay();
                 if (!MenuClass) return;
@@ -370,18 +407,18 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                     onReport: () => abrirModalGestionParada(pedido, idx + 1)
                 });
 
-                window.overlayMenuActivo.setMap(window.mapaMensajero);
+                window.overlayMenuActivo.setMap(mapa);
             });
 
             window.marcadoresRutaMensajero.push(marker);
-            window.mapaMensajero.fitBounds(bounds);
+            mapa.fitBounds(bounds);
         };
 
         if (pedido.lat && pedido.lng) {
             const pos = new google.maps.LatLng(parseFloat(pedido.lat), parseFloat(pedido.lng));
             crearMarcadorEnPosicion(pos);
         } else {
-            const dirCompleta = sanitizarDireccionContexto(pedido.direccion);
+            const dirCompleta = sanitizarDireccionContexto(pedido.direccion || pedido.dir);
             geocoder.geocode({ address: dirCompleta }, (results, status) => {
                 if (status === "OK" && results[0]) {
                     crearMarcadorEnPosicion(results[0].geometry.location);
@@ -392,11 +429,12 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 }
 
 /**
- * Habilita el arrastre del pin (Acción Este - Mover)
+ * Habilita el arrastre del pin en el lienzo (Acción Este - Mover).
  */
 function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion) {
     marker.setDraggable(true);
-    console.log("📍 [MAPA_MARCADORES]: Arrastre activado para:", marker.get('idParada'));
+    const idParada = marker.get('idParada');
+    console.log("📍 [MAPA_MARCADORES]: Arrastre activado para parada ID:", idParada);
 
     const listener = marker.addListener('dragend', async (event) => {
         const nuevaLat = event.latLng.lat();
@@ -408,6 +446,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
         geocoder.geocode({ location: { lat: nuevaLat, lng: nuevaLng } }, async (results, status) => {
             if (status === "OK" && results[0]) {
                 pedido.direccion = results[0].formatted_address;
+                pedido.dir = results[0].formatted_address;
             }
 
             try {
@@ -422,7 +461,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(pedido)
-                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Falló sync backend PHP:", err));
+                }).catch(err => console.warn("⚠️ [MAPA_MARCADORES]: Falló sincronización con backend PHP:", err));
             }
 
             if (typeof callbackActualizacion === "function") {
@@ -436,7 +475,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 }
 
 /**
- * Elimina la parada localmente (Acción Sur - Eliminar)
+ * Elimina la parada localmente (Acción Sur - Eliminar).
  */
 async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
     if (!confirm(`¿Eliminar la parada ${idParada} del mapa y registro local?`)) return;
@@ -462,12 +501,16 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
 }
 
 /**
- * Mutar marcador por estado en tiempo real
+ * Muta el icono de un marcador según su nuevo estado en tiempo real.
+ * @param {string} idParada 
+ * @param {string} nuevoEstado 
+ * @param {string} [causal=''] 
  */
 export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
     if (!window.marcadoresRutaMensajero) return;
 
     const marker = window.marcadoresRutaMensajero.find(m => m.get('idParada') === idParada);
+
     if (marker) {
         const sec = marker.get('secuencia') || 1;
         const nuevoIcono = crearIconoParadaCyberpunkSVG({
@@ -475,7 +518,9 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
             secuencia: sec,
             causal: causal
         });
+
         marker.setIcon(nuevoIcono);
+        console.log(`⚡ [MAPA_MARCADORES]: Icono del marcador #${idParada} mutado a estado: ${nuevoEstado}`);
     }
 }
 

@@ -1,150 +1,533 @@
 /**
- * PROTOCOLO MACONDO - EVENTOS Y SELECCIÓN SOBRE EL MAPA
- * Ubicación: pwa-mensajero/modulos/mapa/mapa-eventos.js
+ * PROTOCOLO MACONDO - EVENTOS, BUSCADOR MULTICRITERIO Y CONTROLES DEL MAPA
+ * Ubicación: modulos/mapa/mapa-eventos.js
  */
 
 import { crearIconoParadaRadarSVG } from "./mapa-iconos.js";
+import { calcularDistanciaHaversine } from "./zonificacion/mensajero-zonificacion.js";
+import { enfocarParadaEnMapa } from "./mapa-visor.js";
+import { IndexedStore } from "../db/indexed-store.js";
+
+const KEY_PERSISTENCIA_LOCK = 'map_interaction_locked';
 
 let modoCrearParadaActivo = false;
 let listenerClicMapa = null;
-let marcadorBusquedaTemp = null; // Guardará el marcador generado por la búsqueda
+let marcadorBusquedaTemp = null;
+
+const dbStore = new IndexedStore();
 
 /**
- * Alterna la visibilidad del campo de búsqueda e interactúa con la lupa.
+ * Normaliza cadenas eliminando diacríticos, tildes y caracteres especiales.
+ * @param {string} texto 
+ * @returns {string}
  */
-export function toggleBuscadorMapaUI() {
-    const input = document.getElementById("input-mapa-buscar-dir");
-    if (!input) return;
-
-    const texto = input.value.trim();
-
-    // Si ya está visible y contiene texto, al presionar la lupa ejecuta la búsqueda
-    if (input.style.display === "block" && texto.length > 0) {
-        ejecutarBusquedaDireccion(texto);
-        return;
-    }
-
-    const estaOculto = input.style.display === "none" || input.style.display === "";
-    input.style.display = estaOculto ? "block" : "none";
-
-    if (estaOculto) {
-        input.focus();
-        vincularEventoEnterBusqueda(input);
-    }
+function normalizarTextoBusqueda(texto) {
+    if (!texto) return "";
+    return texto
+        .toString()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, " ");
 }
 
 /**
- * Registra la pulsación de la tecla Enter dentro del input de búsqueda.
+ * Identifica la intención de búsqueda (STOP, CLIENTE o DIRECCION)
+ * @param {string} query 
+ * @returns {Object}
  */
-function vincularEventoEnterBusqueda(inputElement) {
-    if (inputElement.dataset.listenerCargado) return;
-    inputElement.dataset.listenerCargado = "true";
+function clasificarIntencionBusqueda(query) {
+    const qNorm = normalizarTextoBusqueda(query);
+    
+    // Búsqueda por número de parada (#stop 1, stop 1, #1, 1)
+    const patronStop = /^(?:#?\s*stop\s*|#\s*)?(\d+)$/i;
+    const matchStop = qNorm.match(patronStop);
+    if (matchStop) {
+        return {
+            tipo: 'STOP',
+            valorLimpio: qNorm,
+            numeroStop: parseInt(matchStop[1], 10)
+        };
+    }
 
-    inputElement.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            ejecutarBusquedaDireccion(inputElement.value.trim());
+    // Búsqueda por nomenclatura vial o dirección
+    const patronDireccion = /\b(cra|carrera|cll|calle|av|avenida|dg|diagonal|tv|transversal|cl|cr|kr)\b/i;
+    if (patronDireccion.test(qNorm) || /\d+[\s\w]*[-#]\s*\d+/.test(qNorm)) {
+        return {
+            tipo: 'DIRECCION',
+            valorLimpio: qNorm,
+            numeroStop: null
+        };
+    }
+
+    // Búsqueda por Nombre de Cliente / Destinatario
+    return {
+        tipo: 'CLIENTE',
+        valorLimpio: qNorm,
+        numeroStop: null
+    };
+}
+
+export const mapaEventos = {
+    mapaInstancia: null,
+
+    inicializarControles(mapa) {
+        this.mapaInstancia = mapa;
+        console.log('⚡ [MAPA_EVENTOS]: Asignando listeners a los controles del mapa.');
+
+        const btnZoomIn = document.getElementById('btn-zoom-in');
+        const btnZoomOut = document.getElementById('btn-zoom-out');
+        const btnToggleLock = document.getElementById('btn-toggle-lock');
+
+        if (btnZoomIn) {
+            btnZoomIn.onclick = (e) => {
+                e.preventDefault();
+                this.ejecutarZoom(1);
+            };
         }
-    });
-}
 
-/**
- * Geocodifica la dirección con Google Maps Geocoder, centra el visor,
- * coloca un PIN interactivo REUBICABLE (draggable) y permite ajustar su ubicación exacta.
- */
-export function ejecutarBusquedaDireccion(direccion) {
-    if (!direccion) return;
-    if (typeof google === "undefined" || !google.maps || !window.mapaMensajero) {
-        console.warn("[BUSQUEDA_MAPA_WARN]: El visor de Google Maps no está inicializado.");
-        return;
-    }
+        if (btnZoomOut) {
+            btnZoomOut.onclick = (e) => {
+                e.preventDefault();
+                this.ejecutarZoom(-1);
+            };
+        }
 
-    const geocoder = new google.maps.Geocoder();
-    const query = direccion.toLowerCase().includes("cali") ? direccion : `${direccion}, Cali, Colombia`;
+        if (btnToggleLock) {
+            btnToggleLock.onclick = (e) => {
+                e.preventDefault();
+                this.alternarBloqueoMapa();
+            };
+            this.restaurarEstadoBloqueo();
+        }
 
-    geocoder.geocode({ address: query }, (results, status) => {
-        if (status === "OK" && results[0]) {
-            let ubicacionActual = results[0].geometry.location;
-            let dirFormateada = results[0].formatted_address;
+        this.inicializarBuscadorMapa();
+    },
 
-            // Centrar el mapa en las coordenadas encontradas
-            window.mapaMensajero.setCenter(ubicacionActual);
-            window.mapaMensajero.setZoom(16);
+    inicializarBuscadorMapa() {
+        console.log("🔍 [MAPA_EVENTOS]: Inicializando Buscador con Identificador de Patrón.");
 
-            // Limpiar marcador de búsqueda anterior si existe
-            if (marcadorBusquedaTemp) {
-                marcadorBusquedaTemp.setMap(null);
+        const inputBuscador = document.getElementById("buscador-paradas-mapa");
+        const listaSugerencias = document.getElementById("sugerencias-paradas-mapa");
+        const btnLimpiar = document.getElementById("btn-limpiar-busqueda");
+        const btnCerrarCard = document.getElementById("btn-cerrar-tarjeta");
+
+        if (!inputBuscador) return;
+
+        inputBuscador.addEventListener("input", (e) => {
+            const query = e.target.value;
+            if (btnLimpiar) btnLimpiar.style.display = query.trim().length > 0 ? "block" : "none";
+
+            if (query.trim().length === 0) {
+                if (listaSugerencias) {
+                    listaSugerencias.style.display = "none";
+                    listaSugerencias.innerHTML = "";
+                }
+                return;
             }
 
-            // Crear el marcador (PIN) con propiedad Draggable activada
-            marcadorBusquedaTemp = new google.maps.Marker({
-                position: ubicacionActual,
-                map: window.mapaMensajero,
-                draggable: true, // 👈 PERMITE REUBICAR EL PIN SI NO CORRESPONDE
-                icon: crearIconoParadaRadarSVG("#ff007f", "#ffffff"), // Magenta neón
-                title: `📍 ${dirFormateada} (Arrastra para corregir ubicación)`
-            });
+            this.ejecutarFiltradoParadas(query);
+        });
 
-            // Función auxiliar para renderizar el contenido del Popup InfoWindow
-            const actualizarInfoWindow = (direccionTexto) => {
-                if (window.infoWindowMensajero) {
-                    const infoContent = `
-                        <div style="background: #0c080f; color: #fff; padding: 6px 10px; border: 1px solid #ff007f; font-family: monospace; font-size: 0.78rem; border-radius: 4px; text-align: center;">
-                            <strong style="color: #ff007f;">[📍 UBICACIÓN SELECCIONADA]</strong><br/>
-                            <span style="display:inline-block; margin: 3px 0; color: #e0e0e0;">${direccionTexto}</span><br/>
-                            <small style="color: #00ff66;">👉 Clic en el PIN o en el botón para agregar</small><br/>
-                            <small style="color: #aaa; font-size: 0.68rem;">🖐️ Puedes arrastrar el PIN si no es exacto</small><br/>
-                            <button type="button" onclick="window.confirmarParadaDesdePinBusqueda()" style="margin-top: 6px; background: #ff007f; color: #fff; border: none; padding: 4px 8px; font-weight: bold; font-size: 0.72rem; cursor: pointer; border-radius: 3px; width: 100%;">
-                                ➕ DESPLEGAR FORMULARIO
-                            </button>
-                        </div>`;
-                    window.infoWindowMensajero.setContent(infoContent);
-                    window.infoWindowMensajero.open(window.mapaMensajero, marcadorBusquedaTemp);
+        inputBuscador.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                const query = inputBuscador.value.trim();
+                if (query.length > 0) {
+                    if (listaSugerencias) listaSugerencias.style.display = "none";
+                    this.ejecutarGeocodificacionDireccion(query);
                 }
-            };
+            }
+        });
 
-            actualizarInfoWindow(dirFormateada);
-
-            // BINDING GLOBAL PARA EL BOTÓN DENTRO DEL POPUP
-            window.confirmarParadaDesdePinBusqueda = function() {
-                const pos = marcadorBusquedaTemp.getPosition();
-                desplegarFormularioConDireccion(dirFormateada, pos.lat(), pos.lng());
-            };
-
-            // 1. EVENTO REUBICACIÓN (DRAGEND): Actualiza coordenadas y dirección al soltar el pin
-            marcadorBusquedaTemp.addListener("dragend", (event) => {
-                const nuevaLat = event.latLng.lat();
-                const nuevaLng = event.latLng.lng();
-
-                // Reverse Geocoding para actualizar el texto de la dirección al mover el pin
-                geocoder.geocode({ location: { lat: nuevaLat, lng: nuevaLng } }, (revResults, revStatus) => {
-                    if (revStatus === "OK" && revResults[0]) {
-                        dirFormateada = revResults[0].formatted_address;
-                        actualizarInfoWindow(dirFormateada);
-                        console.log(`>>> [PIN_REUBICADO]: Nueva dirección: ${dirFormateada} [${nuevaLat}, ${nuevaLng}]`);
-                    } else {
-                        dirFormateada = `Coordenadas: ${nuevaLat.toFixed(5)}, ${nuevaLng.toFixed(5)}`;
-                        actualizarInfoWindow(dirFormateada);
-                    }
-                });
+        if (btnLimpiar) {
+            btnLimpiar.addEventListener("click", () => {
+                inputBuscador.value = "";
+                btnLimpiar.style.display = "none";
+                if (listaSugerencias) {
+                    listaSugerencias.style.display = "none";
+                    listaSugerencias.innerHTML = "";
+                }
+                if (marcadorBusquedaTemp) {
+                    marcadorBusquedaTemp.setMap(null);
+                }
+                inputBuscador.focus();
             });
-
-            // 2. EVENTO CLIC EN EL PIN: Despliega el formulario inmediatamente
-            marcadorBusquedaTemp.addListener("click", () => {
-                const pos = marcadorBusquedaTemp.getPosition();
-                desplegarFormularioConDireccion(dirFormateada, pos.lat(), pos.lng());
-            });
-
-            console.log(`>>> [BUSQUEDA_MAPA_OK]: PIN interactivo visualizado en ${dirFormateada}`);
-        } else {
-            alert(">>> [ALERTA]: No se logró ubicar la dirección ingresada en el mapa.");
         }
-    });
-}
 
-/**
- * Carga la dirección capturada en el formulario, conmuta la pestaña a la vista de edición y despliega el acordeón.
- */
+        if (btnCerrarCard) {
+            btnCerrarCard.addEventListener("click", () => {
+                const card = document.getElementById("tarjeta-detalle-parada");
+                if (card) card.style.display = "none";
+            });
+        }
+    },
+
+    /**
+     * Recupera la lista activa de paradas desde la memoria global o IndexedDB
+     * @returns {Promise<Array<Object>>}
+     */
+    async obtenerColeccionParadas() {
+        // Prioridad 1: Objetos globales en memoria activa
+        if (Array.isArray(window.paradasRutaActiva) && window.paradasRutaActiva.length > 0) {
+            return window.paradasRutaActiva;
+        }
+        if (Array.isArray(window.pedidosGlobales) && window.pedidosGlobales.length > 0) {
+            window.paradasRutaActiva = window.pedidosGlobales;
+            return window.paradasRutaActiva;
+        }
+
+        // Prioridad 2: Base de Datos Local IndexedDB
+        try {
+            let paradasLocal = [];
+            if (typeof dbStore.obtenerParadas === 'function') {
+                paradasLocal = await dbStore.obtenerParadas();
+            } else if (typeof dbStore.obtenerTodasParadas === 'function') {
+                paradasLocal = await dbStore.obtenerTodasParadas();
+            } else if (typeof dbStore.getAll === 'function') {
+                paradasLocal = await dbStore.getAll('paradas');
+            }
+
+            if (Array.isArray(paradasLocal) && paradasLocal.length > 0) {
+                window.paradasRutaActiva = paradasLocal;
+                return window.paradasRutaActiva;
+            }
+        } catch (err) {
+            console.warn("⚠️ [MAPA_EVENTOS]: No se pudo consultar IndexedDB. Usando fallback de memoria:", err);
+        }
+
+        return window.paradasRutaActiva || [];
+    },
+
+    /**
+     * Filtra la colección por cliente, dirección o secuencia (#STOP)
+     * @param {string} query 
+     */
+    async ejecutarFiltradoParadas(query) {
+        const paradas = await this.obtenerColeccionParadas();
+        const intencion = clasificarIntencionBusqueda(query);
+        
+        let resultados = [];
+
+        if (intencion.tipo === 'STOP') {
+            resultados = paradas.filter((p, index) => {
+                const sec = parseInt(p.secuencia || p.orden || index + 1, 10);
+                return sec === intencion.numeroStop;
+            }).map(p => ({ ...p, _categoriaBusqueda: 'STOP' }));
+        } 
+        else if (intencion.tipo === 'CLIENTE') {
+            resultados = paradas.filter((p) => {
+                const nombreCliente = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
+                return nombreCliente.includes(intencion.valorLimpio);
+            }).map(p => ({ ...p, _categoriaBusqueda: 'CLIENTE' }));
+        } 
+        else if (intencion.tipo === 'DIRECCION') {
+            resultados = paradas.filter((p) => {
+                const dir = normalizarTextoBusqueda(p.direccion || p.dir || "");
+                return dir.includes(intencion.valorLimpio);
+            }).map(p => ({ ...p, _categoriaBusqueda: 'DIRECCION' }));
+        }
+
+        // Búsqueda amplia si el filtro estricto por categoría no produce coincidencia
+        if (resultados.length === 0 && intencion.tipo !== 'STOP') {
+            resultados = paradas.filter((p, index) => {
+                const sec = (p.secuencia || p.orden || index + 1).toString();
+                const nombreCliente = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
+                const dir = normalizarTextoBusqueda(p.direccion || p.dir || "");
+
+                return sec.includes(intencion.valorLimpio) ||
+                       nombreCliente.includes(intencion.valorLimpio) ||
+                       dir.includes(intencion.valorLimpio);
+            }).map(p => ({ ...p, _categoriaBusqueda: 'GENERAL' }));
+        }
+
+        console.log(`🔍 [MAPA_EVENTOS]: Consulta [${intencion.tipo}] "${query}" -> ${resultados.length} resultado(s) local(es).`);
+        this.renderizarSugerencias(resultados, query, intencion);
+    },
+
+    renderizarSugerencias(coincidencias, queryOriginal, intencion) {
+        const listaSugerencias = document.getElementById("sugerencias-paradas-mapa");
+        if (!listaSugerencias) return;
+
+        let html = "";
+
+        if (coincidencias.length > 0) {
+            html += coincidencias.map((p, idx) => {
+                const sec = p.secuencia || p.orden || idx + 1;
+                const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente N/A";
+                const direccionTexto = p.direccion || p.dir || "Sin dirección";
+
+                let badgeHTML = "";
+                if (p._categoriaBusqueda === 'STOP') {
+                    badgeHTML = `<span class="cyber-sug-badge badge-stop">#STOP ${sec}</span>`;
+                } else if (p._categoriaBusqueda === 'CLIENTE') {
+                    badgeHTML = `<span class="cyber-sug-badge badge-cliente">👤 CLIENTE</span>`;
+                } else if (p._categoriaBusqueda === 'DIRECCION') {
+                    badgeHTML = `<span class="cyber-sug-badge badge-dir">📍 DIR LOCAL</span>`;
+                } else {
+                    badgeHTML = `<span class="cyber-sug-badge">#STOP ${sec}</span>`;
+                }
+
+                return `
+                    <li class="cyber-sugerencia-item" data-type="parada" data-id="${p.id || sec}">
+                        ${badgeHTML}
+                        <div class="cyber-sug-info">
+                            <strong>#Stop ${sec} - ${nombreCliente}</strong>
+                            <small>${direccionTexto}</small>
+                        </div>
+                    </li>
+                `;
+            }).join("");
+        }
+
+        html += `
+            <li class="cyber-sugerencia-item" data-type="geocode" data-query="${queryOriginal}">
+                <span class="cyber-sug-badge badge-geo">📍 GEO</span>
+                <div class="cyber-sug-info">
+                    <strong>Geocodificar: "${queryOriginal}"</strong>
+                    <small>Señalar punto exacto en el mapa</small>
+                </div>
+            </li>
+        `;
+
+        listaSugerencias.innerHTML = html;
+        listaSugerencias.style.display = "block";
+
+        listaSugerencias.querySelectorAll(".cyber-sugerencia-item").forEach((item) => {
+            item.addEventListener("click", () => {
+                const type = item.getAttribute("data-type");
+                if (type === "parada") {
+                    const id = item.getAttribute("data-id");
+                    const seleccionada = coincidencias.find(p => (p.id || (p.secuencia || p.orden)).toString() === id.toString());
+                    if (seleccionada) {
+                        this.seleccionarParadaBuscada(seleccionada);
+                    }
+                } else if (type === "geocode") {
+                    this.ejecutarGeocodificacionDireccion(queryOriginal);
+                }
+                listaSugerencias.style.display = "none";
+            });
+        });
+    },
+
+    seleccionarParadaBuscada(parada) {
+        console.log("⚡ [MAPA_EVENTOS]: Parada seleccionada:", parada);
+
+        if (typeof enfocarParadaEnMapa === "function") {
+            enfocarParadaEnMapa(parada);
+        }
+
+        this.mostrarTarjetaDetalle(parada);
+        this.calcularYRenderizarParadasCercanas(parada);
+    },
+
+    ejecutarGeocodificacionDireccion(direccion) {
+        if (!direccion) return;
+        const mapa = window.mapaMensajero || window.mapaInstancia;
+
+        if (typeof google === "undefined" || !google.maps || !mapa) {
+            console.warn("⚠️ [BUSQUEDA_MAPA_WARN]: Google Maps SDK no está inicializado.");
+            return;
+        }
+
+        const geocoder = new google.maps.Geocoder();
+        const query = direccion.toLowerCase().includes("cali") ? direccion : `${direccion}, Cali, Colombia`;
+
+        geocoder.geocode({ address: query }, (results, status) => {
+            if (status === "OK" && results[0]) {
+                let ubicacionActual = results[0].geometry.location;
+                let dirFormateada = results[0].formatted_address;
+
+                mapa.setCenter(ubicacionActual);
+                mapa.setZoom(16);
+
+                if (marcadorBusquedaTemp) {
+                    marcadorBusquedaTemp.setMap(null);
+                }
+
+                marcadorBusquedaTemp = new google.maps.Marker({
+                    position: ubicacionActual,
+                    map: mapa,
+                    draggable: true,
+                    icon: crearIconoParadaRadarSVG("#ff007f", "#ffffff"),
+                    title: `📍 ${dirFormateada}`
+                });
+
+                const actualizarInfoWindow = (direccionTexto) => {
+                    if (window.infoWindowMensajero) {
+                        const infoContent = `
+                            <div style="background: #0c080f; color: #fff; padding: 10px; border: 1px solid #ff007f; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 6px; text-align: center; max-width: 220px;">
+                                <strong style="color: #ff007f;">[📍 UBICACIÓN SELECCIONADA]</strong><br/>
+                                <span style="display:inline-block; margin: 4px 0; color: #e0e0e0;">${direccionTexto}</span><br/>
+                                <small style="color: #00ff66;">👉 Clic para agregar parada</small><br/>
+                                <button type="button" onclick="window.confirmarParadaDesdePinBusqueda()" style="margin-top: 8px; background: #ff007f; color: #fff; border: none; padding: 10px; font-weight: bold; font-size: 0.75rem; cursor: pointer; border-radius: 4px; width: 100%; min-height: 44px;">
+                                    ➕ DESPLEGAR FORMULARIO
+                                </button>
+                            </div>`;
+                        window.infoWindowMensajero.setContent(infoContent);
+                        window.infoWindowMensajero.open(mapa, marcadorBusquedaTemp);
+                    }
+                };
+
+                actualizarInfoWindow(dirFormateada);
+
+                window.confirmarParadaDesdePinBusqueda = function() {
+                    const pos = marcadorBusquedaTemp.getPosition();
+                    desplegarFormularioConDireccion(dirFormateada, pos.lat(), pos.lng());
+                };
+
+                marcadorBusquedaTemp.addListener("click", () => {
+                    const pos = marcadorBusquedaTemp.getPosition();
+                    desplegarFormularioConDireccion(dirFormateada, pos.lat(), pos.lng());
+                });
+
+                console.log(`✅ [GEOCODE_OK]: Punto marcado en ${dirFormateada}`);
+            } else {
+                alert("⚠️ No se logró ubicar la dirección ingresada en el mapa.");
+            }
+        });
+    },
+
+    mostrarTarjetaDetalle(parada) {
+        const card = document.getElementById("tarjeta-detalle-parada");
+        if (!card) return;
+
+        const sec = parada.secuencia || parada.orden || 1;
+        const nombreCliente = parada.destinatario || parada.cliente || parada.nombre_cliente || parada.nombre || "Cliente N/A";
+
+        document.getElementById("card-stop-secuencia").textContent = `#STOP ${sec}`;
+        document.getElementById("card-stop-estado").textContent = (parada.estado || "ASIGNADO").toUpperCase();
+        document.getElementById("card-stop-destinatario").textContent = nombreCliente;
+        document.getElementById("card-stop-direccion").textContent = `📍 ${parada.direccion || parada.dir || 'N/A'}`;
+        document.getElementById("card-stop-telefono").textContent = `📞 ${parada.telefono || parada.tel || 'N/A'}`;
+
+        card.style.display = "block";
+    },
+
+    async calcularYRenderizarParadasCercanas(paradaOrigen) {
+        const contenedor = document.getElementById("contenedor-paradas-cercanas");
+        if (!contenedor) return;
+
+        const paradas = await this.obtenerColeccionParadas();
+        const latO = parseFloat(paradaOrigen.lat || paradaOrigen.latitud);
+        const lngO = parseFloat(paradaOrigen.lng || paradaOrigen.longitud);
+
+        if (isNaN(latO) || isNaN(lngO)) {
+            contenedor.innerHTML = `<span class="cyber-cercana-empty">Coordenadas no válidas</span>`;
+            return;
+        }
+
+        const conDistancias = paradas
+            .filter(p => (p.id || p.secuencia) !== (paradaOrigen.id || paradaOrigen.secuencia))
+            .map(p => {
+                const latD = parseFloat(p.lat || p.latitud);
+                const lngD = parseFloat(p.lng || p.longitud);
+                const distM = calcularDistanciaHaversine(latO, lngO, latD, lngD);
+                return { ...p, distanciaMetros: distM };
+            })
+            .filter(p => p.distanciaMetros !== Infinity)
+            .sort((a, b) => a.distanciaMetros - b.distanciaMetros)
+            .slice(0, 3);
+
+        if (conDistancias.length === 0) {
+            contenedor.innerHTML = `<span class="cyber-cercana-empty">Sin paradas cercanas</span>`;
+            return;
+        }
+
+        contenedor.innerHTML = conDistancias.map(p => {
+            const distTexto = p.distanciaMetros >= 1000 
+                ? `${(p.distanciaMetros / 1000).toFixed(2)} km` 
+                : `${Math.round(p.distanciaMetros)} m`;
+            const sec = p.secuencia || p.orden || "?";
+            const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente";
+
+            return `
+                <button type="button" class="btn-parada-cercana" data-id="${p.id || sec}">
+                    <span>#Stop ${sec} (${distTexto})</span>
+                    <small>${nombreCliente}</small>
+                </button>
+            `;
+        }).join("");
+
+        contenedor.querySelectorAll(".btn-parada-cercana").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const id = btn.getAttribute("data-id");
+                const destino = paradas.find(p => (p.id || (p.secuencia || p.orden)).toString() === id.toString());
+                if (destino) {
+                    this.seleccionarParadaBuscada(destino);
+                }
+            });
+        });
+    },
+
+    ejecutarZoom(delta) {
+        if (!this.mapaInstancia) {
+            this.mapaInstancia = window.mapaMensajero || window.mapaInstancia;
+        }
+        if (!this.mapaInstancia) return;
+
+        if (typeof this.mapaInstancia.getZoom === 'function') {
+            const currentZoom = this.mapaInstancia.getZoom();
+            this.mapaInstancia.setZoom(currentZoom + delta);
+        }
+    },
+
+    alternarBloqueoMapa(estadoForzado = null) {
+        if (!this.mapaInstancia) {
+            this.mapaInstancia = window.mapaMensajero || window.mapaInstancia;
+        }
+
+        const btnToggleLock = document.getElementById('btn-toggle-lock');
+        const iconLockState = document.getElementById('icon-lock-state');
+
+        let estaBloqueado = btnToggleLock ? btnToggleLock.getAttribute('data-locked') === 'true' : false;
+        if (estadoForzado !== null) {
+            estaBloqueado = !estadoForzado;
+        }
+
+        const nuevoEstado = !estaBloqueado;
+
+        if (btnToggleLock) {
+            btnToggleLock.setAttribute('data-locked', nuevoEstado ? 'true' : 'false');
+        }
+
+        if (iconLockState) {
+            iconLockState.textContent = nuevoEstado ? '🔒' : '🔓';
+        }
+
+        if (this.mapaInstancia) {
+            if (typeof this.mapaInstancia.setOptions === 'function') {
+                this.mapaInstancia.setOptions({
+                    draggable: !nuevoEstado,
+                    scrollwheel: !nuevoEstado,
+                    disableDoubleClickZoom: nuevoEstado
+                });
+            }
+        }
+
+        try {
+            localStorage.setItem(KEY_PERSISTENCIA_LOCK, JSON.stringify(nuevoEstado));
+        } catch (err) {
+            console.warn("⚠️ Error en persistencia de bloqueo:", err);
+        }
+    },
+
+    restaurarEstadoBloqueo() {
+        try {
+            const estadoGuardado = localStorage.getItem(KEY_PERSISTENCIA_LOCK);
+            if (estadoGuardado !== null) {
+                const estaBloqueado = JSON.parse(estadoGuardado);
+                if (estaBloqueado) {
+                    this.alternarBloqueoMapa(true);
+                }
+            }
+        } catch (err) {
+            console.warn("⚠️ Error al recuperar estado de bloqueo:", err);
+        }
+    }
+};
+
 function desplegarFormularioConDireccion(direccion, lat, lng) {
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/ruta-activa.html");
@@ -159,69 +542,30 @@ function desplegarFormularioConDireccion(direccion, lat, lng) {
 
     setTimeout(() => {
         const inputDir = document.getElementById("edit-parada-direccion");
-        const detailsForm = document.getElementById("details-formulario-parada");
-
-        if (inputDir) {
-            inputDir.value = direccion;
-        }
-
-        if (detailsForm) {
-            detailsForm.open = true;
-            detailsForm.scrollIntoView({ behavior: "smooth" });
-        }
-
-        // Enfocar el campo del destinatario para agilizar la escritura
-        const inputDestinatario = document.getElementById("edit-parada-destinatario");
-        if (inputDestinatario) {
-            inputDestinatario.focus();
-        }
+        if (inputDir) inputDir.value = direccion;
     }, 120);
 }
 
-/**
- * Alterna el modo para añadir paradas haciendo clic sobre el mapa.
- */
 export function activarModoSeleccionMapaUI() {
     modoCrearParadaActivo = !modoCrearParadaActivo;
-    const btn = document.getElementById("btn-modo-crear-parada");
-
-    if (btn) {
-        btn.style.background = modoCrearParadaActivo ? "var(--neon-green, #00ff66)" : "";
-        btn.style.color = modoCrearParadaActivo ? "#000" : "";
-        btn.innerText = modoCrearParadaActivo ? "[🎯 SELECCIONE EN MAPA]" : "➕ CREAR PARADA";
-    }
 }
 
-/**
- * Registra el evento de clic sobre el mapa (export requerido por mapa-visor.js).
- */
-export function registrarEventosClicMapa(callbackNuevaParada) {
-    if (!window.mapaMensajero) return;
+export function registrarEventosClicMapa(callbackNuevaParada) {}
 
-    if (listenerClicMapa) {
-        google.maps.event.removeListener(listenerClicMapa);
-        listenerClicMapa = null;
-    }
+export function toggleBuscadorMapaUI() {
+    const inputBuscador = document.getElementById("buscador-paradas-mapa");
+    if (inputBuscador) inputBuscador.focus();
+}
 
-    listenerClicMapa = window.mapaMensajero.addListener("click", (e) => {
-        if (!modoCrearParadaActivo) return;
+export function ejecutarBusquedaDireccion(dir) {
+    mapaEventos.ejecutarGeocodificacionDireccion(dir);
+}
 
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-        const geocoder = new google.maps.Geocoder();
+window.toggleBuscadorMapaUI = toggleBuscadorMapaUI;
+window.ejecutarBusquedaDireccion = ejecutarBusquedaDireccion;
 
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-            if (status === "OK" && results[0]) {
-                desplegarFormularioConDireccion(results[0].formatted_address, lat, lng);
-            }
-        });
-
-        activarModoSeleccionMapaUI();
+if (typeof document !== "undefined") {
+    document.addEventListener("DOMContentLoaded", () => {
+        mapaEventos.inicializarBuscadorMapa();
     });
 }
-
-// Registro explícito en el objeto global window para handlers HTML inline
-window.toggleBuscadorMapaUI = toggleBuscadorMapaUI;
-window.activarModoSeleccionMapaUI = activarModoSeleccionMapaUI;
-window.ejecutarBusquedaDireccion = ejecutarBusquedaDireccion;
-window.registrarEventosClicMapa = registrarEventosClicMapa;

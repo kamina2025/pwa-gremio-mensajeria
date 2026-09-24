@@ -19,30 +19,50 @@ let paradasMemoriaLocal = [];
  * Carga dinámica de módulos para compatibilidad con scripts tradicionales y módulos ES6.
  */
 async function cargarModulosDependientes() {
+    console.log("🔄 [MENSAJERO_UI]: Iniciando carga asíncrona de dependencias modulares...");
     try {
-        const mapaVisor = await import("./mapa/mapa-visor.js").catch(() => ({}));
+        const mapaVisor = await import("./mapa/mapa-visor.js").catch((err) => {
+            console.warn("⚠️ [MENSAJERO_UI]: Fallo al importar 'mapa-visor.js', se usará fallback window:", err);
+            return {};
+        });
         actualizarPuntosEnMapaFn = mapaVisor.actualizarPuntosEnMapa || window.actualizarPuntosEnMapa;
         enfocarZonaEnMapaFn = mapaVisor.enfocarZonaEnMapa || window.enfocarZonaEnMapa;
 
-        const zonif = await import("./mapa/zonificacion/mensajero-zonificacion.js").catch(() => ({}));
+        const zonif = await import("./mapa/zonificacion/mensajero-zonificacion.js").catch((err) => {
+            console.warn("⚠️ [MENSAJERO_UI]: Fallo al importar 'mensajero-zonificacion.js':", err);
+            return {};
+        });
         PALETA_ZONAS_REF = zonif.PALETA_ZONAS || window.PALETA_ZONAS || PALETA_ZONAS_REF;
 
-        const storeMod = await import("./db/indexed-store.js").catch(() => ({}));
+        const storeMod = await import("./db/indexed-store.js").catch((err) => {
+            console.warn("⚠️ [MENSAJERO_UI]: Fallo al importar 'indexed-store.js':", err);
+            return {};
+        });
         if (storeMod.IndexedStore) {
             dbStore = new storeMod.IndexedStore();
+            console.log("💾 [MENSAJERO_UI]: Instancia de IndexedStore lista.");
         }
 
-        const uiTarjeta = await import("./ui/ui-tarjeta-activa.js").catch(() => ({}));
+        const uiTarjeta = await import("./ui/ui-tarjeta-activa.js").catch((err) => {
+            console.warn("⚠️ [MENSAJERO_UI]: Fallo al importar 'ui-tarjeta-activa.js':", err);
+            return {};
+        });
         renderizarTarjetaActivaUIFn = uiTarjeta.renderizarTarjetaActivaUI || window.renderizarTarjetaActivaUI;
 
-        const dndMod = await import("./ui/ui-dnd-persistencia.js").catch(() => ({}));
+        const dndMod = await import("./ui/ui-dnd-persistencia.js").catch((err) => {
+            console.warn("⚠️ [MENSAJERO_UI]: Fallo al importar 'ui-dnd-persistencia.js':", err);
+            return {};
+        });
         vincularDragDropUIFn = dndMod.vincularDragDropUI || window.vincularDragDropUI;
 
-        const zonifMaint = await import("./ui/ui-zonificacion-mantenimiento.js").catch(() => ({}));
+        const zonifMaint = await import("./ui/ui-zonificacion-mantenimiento.js").catch((err) => {
+            console.warn("⚠️ [MENSAJERO_UI]: Fallo al importar 'ui-zonificacion-mantenimiento.js':", err);
+            return {};
+        });
         ejecutarZonificacionAutomaticaUIFn = zonifMaint.ejecutarZonificacionAutomaticaUI || window.ejecutarZonificacionAutomaticaUI;
         moverParadaSecuenciaUIFn = zonifMaint.moverParadaSecuenciaUI || window.moverParadaSecuenciaUI;
 
-        console.log("✅ [MENSAJERO_UI]: Módulos dependientes cargados correctamente.");
+        console.log("✅ [MENSAJERO_UI]: Módulos dependientes cargados e integrados correctamente.");
     } catch (e) {
         console.warn("⚠️ [MENSAJERO_UI]: Carga diferida de módulos requerida:", e);
     }
@@ -53,15 +73,24 @@ cargarModulosDependientes();
 
 /**
  * Emitir vibración háptica rápida en Android
+ * @param {number|Array<number>} pattern 
  */
-function emitirHaptico(ms = 30) {
+function emitirHaptico(pattern = 30) {
     if ('vibrate' in navigator) {
-        try { navigator.vibrate(ms); } catch (e) {}
+        try { 
+            navigator.vibrate(pattern);
+            console.log(`📳 [HAPTIC]: Vibración háptica emitida (${JSON.stringify(pattern)}ms)`);
+        } catch (e) {
+            console.warn("⚠️ [HAPTIC]: Vibración no soportada o denegada por navegador:", e);
+        }
     }
 }
 
 /**
  * Renderiza la consola de operaciones táctica desplegando los campos clave de la tirilla y acordeones zonificados.
+ * @param {Array<Object>} listaPedidos 
+ * @param {number} [indiceActivo=0] 
+ * @param {number} [llamadasRealizadas=0] 
  */
 export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 0, llamadasRealizadas = 0) {
     console.group("🖥️ [MENSAJERO_UI]: Renderizando Consola de Operaciones y Acordeones Independientes");
@@ -94,15 +123,20 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
 
     const pedido = paradasMemoriaLocal[indiceActivo] || paradasMemoriaLocal[0];
 
-    // 1. TARJETA ACTIVA EN FOCO
-    if (contenedorActivo && typeof renderizarTarjetaActivaUIFn === "function") {
-        renderizarTarjetaActivaUIFn(contenedorActivo, pedido, indiceActivo, llamadasRealizadas);
+    // 1. TARJETA ACTIVA EN FOCO (Evaluación limpia de visibilidad)
+    const renderFn = renderizarTarjetaActivaUIFn || window.renderizarTarjetaActivaUI;
+    if (contenedorActivo && typeof renderFn === "function") {
+        console.log(`🎯 [MENSAJERO_UI]: Renderizando Tarjeta Activa -> ID: ${pedido.id || pedido.ssc || 'N/A'}`);
+        renderFn(contenedorActivo, pedido, indiceActivo, llamadasRealizadas);
+    } else if (!contenedorActivo) {
+        console.log("ℹ️ [MENSAJERO_UI]: Vista Activa sin `#contenedor-tarjeta-activa`. Omitiendo renderizado de tarjeta estática.");
     }
 
-    // 2. CONSTRUCCIÓN DE ACORDEONES AGRUPADOS POR ZONA
+    // 2. CONSTRUCCIÓN DE ACORDEONES AGRUPADOS POR ZONA (Optimizado con DocumentFragment)
     if (contenedorAcordeones) {
         console.log("📋 [MENSAJERO_UI]: Construyendo acordeones de paradas por zona...");
         contenedorAcordeones.innerHTML = "";
+        const fragmentoAcordeones = document.createDocumentFragment();
 
         const grupos = {};
         paradasMemoriaLocal.forEach((item, index) => {
@@ -113,6 +147,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
         });
 
         const keysZona = Object.keys(grupos);
+        console.log(`🎨 [MENSAJERO_UI]: Grupos de zonas identificados (${keysZona.length}):`, keysZona);
 
         keysZona.forEach((zonaKey, indexZona) => {
             const infoZona = PALETA_ZONAS_REF[zonaKey] || { color: "#00e5ff", label: zonaKey };
@@ -130,12 +165,11 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
             // Cierre automático exclusivo de otros acordeones al abrir uno nuevo
             details.addEventListener("toggle", () => {
                 if (details.open) {
-                    console.log(`📂 [MENSAJERO_UI]: Enfocando zona exclusiva -> ${infoZona.label}`);
+                    console.log(`📂 [MENSAJERO_UI]: Acordeón desplegado -> Zona '${infoZona.label}' (${itemsGrupo.length} envíos)`);
                     
-                    if (typeof enfocarZonaEnMapaFn === "function") {
-                        enfocarZonaEnMapaFn(itemsGrupo);
-                    } else if (typeof window.enfocarZonaEnMapa === "function") {
-                        window.enfocarZonaEnMapa(itemsGrupo);
+                    const enfocarFn = enfocarZonaEnMapaFn || window.enfocarZonaEnMapa;
+                    if (typeof enfocarFn === "function") {
+                        enfocarFn(itemsGrupo);
                     }
 
                     // Cerrar automáticamente todos los demás acordeones del contenedor
@@ -145,6 +179,8 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                             otroAcc.open = false;
                         }
                     });
+                } else {
+                    console.log(`📁 [MENSAJERO_UI]: Acordeón plegado -> Zona '${infoZona.label}'`);
                 }
             });
 
@@ -159,26 +195,26 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                 </span>
             `;
 
-            // Barra de Botones
+            // Barra de Botones de Acción por Zona
             const accionesBar = document.createElement("div");
             accionesBar.className = "zona-acciones-bar";
             accionesBar.style.cssText = "display: flex; gap: 6px; padding: 8px; background: #080b10; border-bottom: 1px solid #30363d; overflow-x: auto;";
             accionesBar.innerHTML = `
-                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#00e5ff; border-color:#00e5ff;" onclick="window.iniciarRutaZona('${infoZona.label}')">
+                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#00e5ff; border-color:#00e5ff; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.iniciarRutaZona('${infoZona.label}')">
                     ► _INICIAR_RUTA
                 </button>
-                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#ffb300; border-color:#ffb300;" onclick="window.optimizarProximidadZona('${infoZona.label}')">
+                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#ffb300; border-color:#ffb300; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.optimizarProximidadZona('${infoZona.label}')">
                     ⚡ OPTIMIZAR
                 </button>
-                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#39ff14; border-color:#39ff14;" onclick="window.planillarRutaZona('${infoZona.label}')">
+                <button type="button" class="btn-zona-action cyber-btn-touch" style="color:#39ff14; border-color:#39ff14; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.planillarRutaZona('${infoZona.label}')">
                     📝 _PLANILLAR
                 </button>
-                <button type="button" class="btn-zona-action cyber-btn-touch danger" onclick="window.verMapaZona('${infoZona.label}')">
+                <button type="button" class="btn-zona-action cyber-btn-touch danger" style="color:#ff3366; border-color:#ff3366; min-height:44px; padding:0 12px; border-radius:4px; background:#161b22; cursor:pointer;" onclick="window.verMapaZona('${infoZona.label}')">
                     🗺️ VER MAPA
                 </button>
             `;
 
-            // Lista con Drag & Drop y barra deslizante independiente propia
+            // Lista con Drag & Drop y scroll dedicado
             const listContainer = document.createElement("div");
             listContainer.className = "paradas-drag-list zona-scroll-dedicado";
             listContainer.style.cssText = `
@@ -207,38 +243,39 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
                 card.innerHTML = `
                     <div id="vista-lectura-${p.origIndex}" style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <div><strong style="color:${infoZona.color}">[#${numSecuencia}]</strong> ${p.destinatario || "Cliente"} - ${p.direccion || ''}</div>
+                            <div><strong style="color:${infoZona.color}">[#${numSecuencia}]</strong> ${p.destinatario || p.cliente || "Cliente"} - ${p.direccion || p.dir || ''}</div>
                             <div style="color:#888; font-size:0.7rem;">
-                                SSC: ${p.ssc || 'N/A'} | Tel: ${p.telefono || 'N/A'} | Cuota: <span style="color:var(--neon-yellow, #ffb300);">${p.cuotaModeradora || '$0'}</span>
+                                SSC: ${p.ssc || 'N/A'} | Tel: ${p.telefono || p.tel || 'N/A'} | Cuota: <span style="color:var(--neon-yellow, #ffb300);">${p.cuotaModeradora || '$0'}</span>
                             </div>
                         </div>
                         <div style="display:flex; align-items:center; gap:4px;">
-                            <button type="button" class="cyber-btn-touch" style="min-height:30px; min-width:30px; padding:2px;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', -1)">▲</button>
-                            <button type="button" class="cyber-btn-touch" style="min-height:30px; min-width:30px; padding:2px;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', 1)">▼</button>
-                            <button type="button" class="cyber-btn-touch" style="min-height:30px; min-width:30px; padding:2px; color:#ffb300; border-color:#ffb300;" onclick="activarEdicionParadaUI(event, ${p.origIndex})">✏️</button>
-                            <button type="button" class="cyber-btn-touch danger" style="min-height:30px; min-width:30px; padding:2px;" onclick="eliminarParadaUI(event, ${p.origIndex})">🗑️</button>
+                            <button type="button" class="cyber-btn-touch" style="min-height:36px; min-width:36px; padding:2px; border:1px solid #30363d; background:#161b22; color:#fff; border-radius:4px;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', -1)">▲</button>
+                            <button type="button" class="cyber-btn-touch" style="min-height:36px; min-width:36px; padding:2px; border:1px solid #30363d; background:#161b22; color:#fff; border-radius:4px;" onclick="window.moverParadaSecuencia('${idParadaLimpio}', 1)">▼</button>
+                            <button type="button" class="cyber-btn-touch" style="min-height:36px; min-width:36px; padding:2px; color:#ffb300; border:1px solid #ffb300; background:#161b22; border-radius:4px;" onclick="activarEdicionParadaUI(event, ${p.origIndex})">✏️</button>
+                            <button type="button" class="cyber-btn-touch danger" style="min-height:36px; min-width:36px; padding:2px; color:#ff3366; border:1px solid #ff3366; background:#161b22; border-radius:4px;" onclick="eliminarParadaUI(event, ${p.origIndex})">🗑️</button>
                         </div>
                     </div>
 
-                    <div id="vista-edicion-${p.origIndex}" style="display:none; flex-direction:column; gap:4px; margin-top:4px; background:#140e1a; padding:6px; border:1px dashed var(--neon-cyan, #00e5ff);">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                            <input type="text" id="input-edit-destinatario-${p.origIndex}" value="${p.destinatario || ''}" placeholder="Destinatario" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                            <input type="text" id="input-edit-telefono-${p.origIndex}" value="${p.telefono || ''}" placeholder="Teléfono" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
+                    <div id="vista-edicion-${p.origIndex}" style="display:none; flex-direction:column; gap:6px; margin-top:6px; background:#140e1a; padding:8px; border:1px dashed var(--neon-cyan, #00e5ff); border-radius:4px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                            <input type="text" id="input-edit-destinatario-${p.origIndex}" value="${p.destinatario || p.cliente || ''}" placeholder="Destinatario" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
+                            <input type="text" id="input-edit-telefono-${p.origIndex}" value="${p.telefono || p.tel || ''}" placeholder="Teléfono" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
                         </div>
-                        <input type="text" id="input-edit-direccion-${p.origIndex}" value="${p.direccion || ''}" placeholder="Dirección" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                            <input type="text" id="input-edit-ssc-${p.origIndex}" value="${p.ssc || ''}" placeholder="SSC" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
-                            <input type="text" id="input-edit-cuota-${p.origIndex}" value="${p.cuotaModeradora || ''}" placeholder="Cuota" style="background:#000; color:#fff; border:1px solid #333; padding:2px 4px; font-size:0.7rem;">
+                        <input type="text" id="input-edit-direccion-${p.origIndex}" value="${p.direccion || p.dir || ''}" placeholder="Dirección" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                            <input type="text" id="input-edit-ssc-${p.origIndex}" value="${p.ssc || ''}" placeholder="SSC" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
+                            <input type="text" id="input-edit-cuota-${p.origIndex}" value="${p.cuotaModeradora || ''}" placeholder="Cuota" style="background:#000; color:#fff; border:1px solid #333; padding:6px; font-size:0.75rem; border-radius:4px;">
                         </div>
-                        <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:4px;">
-                            <button type="button" class="cyber-btn-touch" style="min-height:32px; border-color:#888; color:#888;" onclick="cancelarEdicionParadaUI(event, ${p.origIndex})">[CANCELAR]</button>
-                            <button type="button" class="cyber-btn-touch" style="min-height:32px;" onclick="guardarEdicionParadaUI(event, ${p.origIndex})">[GUARDAR]</button>
+                        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
+                            <button type="button" class="cyber-btn-touch" style="min-height:44px; padding:0 12px; border:1px solid #888; color:#888; background:transparent; border-radius:4px; font-weight:bold;" onclick="cancelarEdicionParadaUI(event, ${p.origIndex})">[CANCELAR]</button>
+                            <button type="button" class="cyber-btn-touch" style="min-height:44px; padding:0 12px; border:none; background:#00e5ff; color:#05070f; border-radius:4px; font-weight:bold;" onclick="guardarEdicionParadaUI(event, ${p.origIndex})">[GUARDAR]</button>
                         </div>
                     </div>
                 `;
 
-                if (typeof vincularDragDropUIFn === "function") {
-                    vincularDragDropUIFn(card, infoZona.label, paradasMemoriaLocal, () => renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0));
+                const dndFn = vincularDragDropUIFn || window.vincularDragDropUI;
+                if (typeof dndFn === "function") {
+                    dndFn(card, infoZona.label, paradasMemoriaLocal, () => renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0));
                 }
                 listContainer.appendChild(card);
             });
@@ -246,8 +283,12 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
             details.appendChild(summary);
             details.appendChild(accionesBar);
             details.appendChild(listContainer);
-            contenedorAcordeones.appendChild(details);
+            fragmentoAcordeones.appendChild(details);
         });
+
+        contenedorAcordeones.appendChild(fragmentoAcordeones);
+    } else {
+        console.warn("⚠️ [MENSAJERO_UI]: No se encontró contenedor de acordeones (#contenedor-acordeones-zonas / #lista-paradas-zonificadas).");
     }
 
     console.log("✅ [MENSAJERO_UI]: Consola de operaciones y acordeones renderizados exitosamente.");
@@ -257,6 +298,7 @@ export async function renderizarConsolaOperaciones(listaPedidos, indiceActivo = 
 // Escuchas del Bus de Eventos de Sincronización Local-First
 window.addEventListener('sincronizacion:inicio', (e) => {
     const { taskId, totalItems } = e.detail || { taskId: 'sync-queue', totalItems: 1 };
+    console.log(`🔄 [MENSAJERO_UI_EVENT]: Evento 'sincronizacion:inicio' capturado -> TaskID: ${taskId} | Total: ${totalItems}`);
     if (typeof window.mostrarAvisoProceso === 'function') {
         window.mostrarAvisoProceso({
             id: taskId,
@@ -269,7 +311,7 @@ window.addEventListener('sincronizacion:inicio', (e) => {
                     texto: 'Cancelar',
                     clase: 'danger',
                     accion: (id) => {
-                        console.log(`[MensajeroUI] Cancelado por usuario: ${id}`);
+                        console.log(`🚫 [MENSAJERO_UI]: Sincronización cancelada por el usuario -> ${id}`);
                         if (typeof window.cerrarAvisoProceso === 'function') window.cerrarAvisoProceso(id);
                     }
                 }
@@ -281,6 +323,7 @@ window.addEventListener('sincronizacion:inicio', (e) => {
 window.addEventListener('sincronizacion:progreso', (e) => {
     const { taskId, completados, totalItems } = e.detail || {};
     const porcentaje = totalItems > 0 ? (completados / totalItems) * 100 : 0;
+    console.log(`📊 [MENSAJERO_UI_EVENT]: Evento 'sincronizacion:progreso' -> TaskID: ${taskId} | ${completados}/${totalItems} (${porcentaje.toFixed(1)}%)`);
     if (typeof window.actualizarProgresoProceso === 'function') {
         window.actualizarProgresoProceso(taskId, porcentaje, `Sincronizando ${completados} de ${totalItems} registros...`);
     }
@@ -288,6 +331,7 @@ window.addEventListener('sincronizacion:progreso', (e) => {
 
 window.addEventListener('sincronizacion:completado', (e) => {
     const { taskId } = e.detail || {};
+    console.log(`✅ [MENSAJERO_UI_EVENT]: Evento 'sincronizacion:completado' -> TaskID: ${taskId}`);
     if (typeof window.actualizarProgresoProceso === 'function') {
         window.actualizarProgresoProceso(taskId, 100, '¡Sincronización completada con éxito!', 'exito');
     }
@@ -298,6 +342,7 @@ window.addEventListener('sincronizacion:completado', (e) => {
 
 window.addEventListener('sincronizacion:error', (e) => {
     const { taskId, errorMsg } = e.detail || {};
+    console.error(`❌ [MENSAJERO_UI_EVENT]: Evento 'sincronizacion:error' -> TaskID: ${taskId} | Error: ${errorMsg}`);
     if (typeof window.mostrarAvisoProceso === 'function') {
         window.mostrarAvisoProceso({
             id: taskId,
@@ -310,6 +355,7 @@ window.addEventListener('sincronizacion:error', (e) => {
                     texto: 'Cerrar',
                     clase: 'danger',
                     accion: (id) => {
+                        console.log(`✖️ [MENSAJERO_UI]: Cerrando aviso de error -> ${id}`);
                         if (typeof window.cerrarAvisoProceso === 'function') window.cerrarAvisoProceso(id);
                     }
                 }
@@ -318,26 +364,70 @@ window.addEventListener('sincronizacion:error', (e) => {
     }
 });
 
-// Bindings globales en Window
+// Bindings de acciones por Zona
+window.iniciarRutaZona = function(labelZona) {
+    console.log(`🚀 [MENSAJERO_UI]: Iniciando ruta para la zona: ${labelZona}`);
+    emitirHaptico(30);
+    const paradasZona = paradasMemoriaLocal.filter(p => (p.zonaKey || p.zona || "GENERAL") === labelZona);
+    const enfocarFn = enfocarZonaEnMapaFn || window.enfocarZonaEnMapa;
+    if (paradasZona.length > 0 && typeof enfocarFn === "function") {
+        enfocarFn(paradasZona);
+    }
+};
+
+window.optimizarProximidadZona = function(labelZona) {
+    console.log(`⚡ [MENSAJERO_UI]: Optimizando proximidad para zona: ${labelZona}`);
+    emitirHaptico(40);
+};
+
+window.planillarRutaZona = function(labelZona) {
+    console.log(`📝 [MENSAJERO_UI]: Generando planilla para zona: ${labelZona}`);
+    emitirHaptico(30);
+};
+
+window.verMapaZona = function(labelZona) {
+    console.log(`🗺️ [MENSAJERO_UI]: Ver mapa completo de zona: ${labelZona}`);
+    emitirHaptico(20);
+    const paradasZona = paradasMemoriaLocal.filter(p => (p.zonaKey || p.zona || "GENERAL") === labelZona);
+    const enfocarFn = enfocarZonaEnMapaFn || window.enfocarZonaEnMapa;
+    if (typeof enfocarFn === "function") {
+        enfocarFn(paradasZona);
+    }
+};
+
+// Bindings globales en Window con monitoreo completo
 window.renderizarConsolaOperaciones = renderizarConsolaOperaciones;
-window.refrescarConsolaOperaciones = function() { renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0); };
+window.refrescarConsolaOperaciones = function() { 
+    console.log("🔄 [MENSAJERO_UI]: Refrescando consola con datos en memoria local...");
+    renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0); 
+};
 
 window.ejecutarZonificacionAutomatica = async function() {
+    console.log("⚡ [MENSAJERO_UI]: Solicitando zonificación automática...");
     emitirHaptico(30);
-    if (typeof ejecutarZonificacionAutomaticaUIFn === "function") {
-        paradasMemoriaLocal = await ejecutarZonificacionAutomaticaUIFn(paradasMemoriaLocal, (p) => renderizarConsolaOperaciones(p, 0, 0));
+    const zonifFn = ejecutarZonificacionAutomaticaUIFn || window.ejecutarZonificacionAutomaticaUI;
+    if (typeof zonifFn === "function") {
+        paradasMemoriaLocal = await zonifFn(paradasMemoriaLocal, (p) => renderizarConsolaOperaciones(p, 0, 0));
+        console.log("✅ [MENSAJERO_UI]: Zonificación automática completada.");
+    } else {
+        console.warn("⚠️ [MENSAJERO_UI]: Función 'ejecutarZonificacionAutomatica' no disponible.");
     }
 };
 
 window.moverParadaSecuencia = async function(idParada, delta) {
+    console.log(`↕️ [MENSAJERO_UI]: Moviendo secuencia de parada ID '${idParada}' (delta: ${delta})...`);
     emitirHaptico(20);
-    if (typeof moverParadaSecuenciaUIFn === "function") {
-        await moverParadaSecuenciaUIFn(paradasMemoriaLocal, idParada, delta, (p) => renderizarConsolaOperaciones(p, 0, 0));
+    const moverFn = moverParadaSecuenciaUIFn || window.moverParadaSecuenciaUI;
+    if (typeof moverFn === "function") {
+        await moverFn(paradasMemoriaLocal, idParada, delta, (p) => renderizarConsolaOperaciones(p, 0, 0));
+    } else {
+        console.warn("⚠️ [MENSAJERO_UI]: Función 'moverParadaSecuencia' no disponible.");
     }
 };
 
 window.activarEdicionParadaUI = function (e, idx) {
     if (e?.preventDefault) e.preventDefault();
+    console.log(`✏️ [MENSAJERO_UI]: Activando modo edición en interfaz para índice -> ${idx}`);
     emitirHaptico(20);
     const lectura = document.getElementById(`vista-lectura-${idx}`);
     const edicion = document.getElementById(`vista-edicion-${idx}`);
@@ -347,6 +437,7 @@ window.activarEdicionParadaUI = function (e, idx) {
 
 window.cancelarEdicionParadaUI = function (e, idx) {
     if (e?.preventDefault) e.preventDefault();
+    console.log(`↩️ [MENSAJERO_UI]: Cancelando edición para índice -> ${idx}`);
     emitirHaptico(20);
     const lectura = document.getElementById(`vista-lectura-${idx}`);
     const edicion = document.getElementById(`vista-edicion-${idx}`);
@@ -356,32 +447,50 @@ window.cancelarEdicionParadaUI = function (e, idx) {
 
 window.guardarEdicionParadaUI = async function (e, idx) {
     if (e?.preventDefault) e.preventDefault();
+    console.log(`💾 [MENSAJERO_UI]: Guardando edición realizada en índice -> ${idx}`);
     emitirHaptico(40);
     if (paradasMemoriaLocal[idx]) {
         paradasMemoriaLocal[idx].destinatario = document.getElementById(`input-edit-destinatario-${idx}`).value;
+        paradasMemoriaLocal[idx].cliente = document.getElementById(`input-edit-destinatario-${idx}`).value;
         paradasMemoriaLocal[idx].telefono = document.getElementById(`input-edit-telefono-${idx}`).value;
+        paradasMemoriaLocal[idx].tel = document.getElementById(`input-edit-telefono-${idx}`).value;
         paradasMemoriaLocal[idx].direccion = document.getElementById(`input-edit-direccion-${idx}`).value;
+        paradasMemoriaLocal[idx].dir = document.getElementById(`input-edit-direccion-${idx}`).value;
         paradasMemoriaLocal[idx].ssc = document.getElementById(`input-edit-ssc-${idx}`).value;
         paradasMemoriaLocal[idx].cuotaModeradora = document.getElementById(`input-edit-cuota-${idx}`).value;
 
+        console.log(`📝 [MENSAJERO_UI]: Datos actualizados -> ${paradasMemoriaLocal[idx].destinatario} | ${paradasMemoriaLocal[idx].direccion}`);
+
         if (dbStore && typeof dbStore.actualizarParada === "function") {
+            console.log("💾 [MENSAJERO_UI]: Persistiendo cambios en IndexedDB...");
             await dbStore.actualizarParada(paradasMemoriaLocal[idx]);
         }
         localStorage.setItem("ruta_zonificada", JSON.stringify(paradasMemoriaLocal));
+        console.log("✅ [MENSAJERO_UI]: Cambios guardados en LocalStorage y renderizado actualizado.");
         renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0);
+    } else {
+        console.error(`❌ [MENSAJERO_UI]: No se encontró la parada en memoria para el índice -> ${idx}`);
     }
 };
 
 window.eliminarParadaUI = async function (e, idx) {
     if (e?.preventDefault) e.preventDefault();
+    console.log(`🗑️ [MENSAJERO_UI]: Solicitud para eliminar parada en índice -> ${idx}`);
     emitirHaptico([50, 30, 50]);
-    if (!confirm("¿Desea eliminar esta parada de la ruta?")) return;
+    if (!confirm("¿Desea eliminar esta parada de la ruta?")) {
+        console.log("❌ [MENSAJERO_UI]: Eliminación cancelada por el usuario.");
+        return;
+    }
 
     const paradaEliminada = paradasMemoriaLocal.splice(idx, 1);
+    console.log("🗑️ [MENSAJERO_UI]: Parada removida de memoria local:", paradaEliminada[0]);
+
     if (paradaEliminada[0]?.id && dbStore && typeof dbStore.eliminarParada === "function") {
+        console.log(`💾 [MENSAJERO_UI]: Purgando registro ID '${paradaEliminada[0].id}' de IndexedDB...`);
         await dbStore.eliminarParada(paradaEliminada[0].id);
     }
 
+    console.log("🔢 [MENSAJERO_UI]: Re-secuenciando paradas restantes...");
     for (let i = 0; i < paradasMemoriaLocal.length; i++) {
         paradasMemoriaLocal[i].secuencia = i + 1;
         paradasMemoriaLocal[i].secuenciaZona = i + 1;
@@ -391,5 +500,6 @@ window.eliminarParadaUI = async function (e, idx) {
     }
 
     localStorage.setItem("ruta_zonificada", JSON.stringify(paradasMemoriaLocal));
+    console.log("✅ [MENSAJERO_UI]: Parada eliminada y consola refrescada.");
     renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0);
 };

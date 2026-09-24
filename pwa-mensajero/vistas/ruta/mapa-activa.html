@@ -1,7 +1,7 @@
-<!-- pwa-mensajero/vistas/ruta/mapa-activa.html -->
-
-<div class="mapa-fullscreen-wrapper">
-    <!-- 🔍 BOTÓN LUPA Y BUSCADOR FLOTANTE -->
+<!-- vistas/ruta/mapa-activa.html -->
+<div id="mapa-container" class="mapa-fullscreen-wrapper">
+    
+    <!-- 🔍 BUSCADOR FLOTANTE Y LUPA -->
     <div class="contenedor-busqueda-mapa">
         <input
             type="text"
@@ -15,6 +15,60 @@
         </button>
     </div>
 
-    <!-- LIENZO INTERACTIVO DEL MAPA -->
-    <div id="mapa-mensajero"></div>
+    <!-- ⚡ BUSCADOR DINÁMICO DE PARADAS EN RUTA -->
+    <div class="cyber-search-wrapper" id="cyber-search-wrapper">
+        <div class="cyber-search-input-box">
+            <span class="cyber-search-icon">🔍</span>
+            <input 
+                type="text" 
+                id="buscador-paradas-mapa" 
+                placeholder="Buscar #Stop, cliente o dirección..." 
+                autocomplete="off" 
+                aria-label="Buscar paradas en el mapa"
+            />
+            <button type="button" id="btn-limpiar-busqueda" class="cyber-btn-clear" style="display:none;">✕</button>
+        </div>
+        
+        <ul class="cyber-sugerencias-lista" id="sugerencias-paradas-mapa" style="display:none;"></ul>
+    </div>
+
+    <!-- 🎛️ CONTROLES FLOTANTES DE MAPA PARA ANDROID (ZOOM & LOCK) -->
+    <div class="cyber-map-controls" id="cyber-map-controls">
+        <button type="button" class="cyber-btn-map" id="btn-zoom-in" aria-label="Acercar mapa">
+            <span class="cyber-btn-icon">➕</span>
+        </button>
+        <button type="button" class="cyber-btn-map" id="btn-zoom-out" aria-label="Alejar mapa">
+            <span class="cyber-btn-icon">➖</span>
+        </button>
+        <button
+            type="button"
+            class="cyber-btn-map"
+            id="btn-toggle-lock"
+            aria-label="Bloquear/Desbloquear mapa"
+            data-locked="false">
+            <span class="cyber-btn-icon" id="icon-lock-state">🔓</span>
+        </button>
+    </div>
+
+    <!-- 📋 TARJETA FLOTANTE DE DETALLE DE PARADA Y CÁLCULO DE PROXIMIDAD -->
+    <div class="cyber-stop-card" id="tarjeta-detalle-parada" style="display:none;">
+        <div class="cyber-card-header">
+            <span class="cyber-card-badge" id="card-stop-secuencia">#STOP --</span>
+            <span class="cyber-card-status" id="card-stop-estado">PENDIENTE</span>
+            <button type="button" class="cyber-card-close" id="btn-cerrar-tarjeta">✕</button>
+        </div>
+        <div class="cyber-card-body">
+            <h4 id="card-stop-destinatario">Nombre del Cliente</h4>
+            <p id="card-stop-direccion">📍 Dirección de la parada</p>
+            <p id="card-stop-telefono">📞 Teléfono</p>
+        </div>
+        <div class="cyber-card-footer">
+            <span class="cyber-cercanas-title">⚡ 3 PARADAS MÁS CERCANAS:</span>
+            <div class="cyber-cercanas-list" id="contenedor-paradas-cercanas"></div>
+        </div>
+    </div>
+
+    <!-- 🗺️ UNICO LIENZO INTERACTIVO DEL MAPA DE PANTALLA COMPLETA -->
+    <div id="mapa-mensajero-view" class="mapa-canvas"></div>
+
 </div>

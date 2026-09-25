@@ -1,22 +1,24 @@
 /**
- * PROTOCOLO MACONDO - EVENTOS, BUSCADOR MULTICRITERIO Y CONTROLES DEL MAPA
+ * PROTOCOLO MACONDO - EVENTOS, BUSCADOR MULTIMODAL Y ESCÁNER TÁCTICO SCC
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-eventos.js
- * Arquitectura: Google Maps SDK / Local-First / Búsqueda Táctica
+ * Arquitectura: Google Maps SDK / Local-First / BarcodeDetector / Android Secure Context
  */
 
 import { crearIconoParadaRadarSVG } from "./mapa-iconos.js";
 import { calcularDistanciaHaversine } from "./zonificacion/mensajero-zonificacion.js";
-import { enfocarParadaEnMapa, recargarMapaCompleto } from "./mapa-visor.js";
+import { enfocarParadaEnMapa, recargarMapaCompleto, enfocarYResaltarGrupoSCC } from "./mapa-visor.js";
 import { obtenerParadasGuardadas } from "../mensajero-persistencia.js";
 
 const KEY_PERSISTENCIA_LOCK = 'map_interaction_locked';
 
 let modoCrearParadaActivo = false;
-let marcadorBusquedaTemp = null;
+let mediaStreamCamara = null;
+let animFrameScanner = null;
 let debounceTimerBuscador = null;
+let marcadorBusquedaTemp = null;
 
 /**
- * Normaliza cadenas eliminando diacríticos, tildes y caracteres especiales.
+ * Normaliza cadenas eliminando diacríticos, tildes y espacios superfluos.
  * @param {string} texto 
  * @returns {string}
  */
@@ -42,16 +44,17 @@ function obtenerIdUnicoParada(p) {
 }
 
 /**
- * Identifica la intención de búsqueda (STOP, CLIENTE o DIRECCION)
+ * Clasifica la intención de búsqueda preservando la compatibilidad con el código SCC.
  * @param {string} query 
  * @returns {Object}
  */
 function clasificarIntencionBusqueda(query) {
     const qNorm = normalizarTextoBusqueda(query);
-    
-    // Búsqueda por número de parada (#stop 1, stop 1, #1, 1)
-    const patronStop = /^(?:#?\s*stop\s*|#\s*)?(\d+)$/i;
-    const matchStop = qNorm.match(patronStop);
+
+    // Detección estricta de orden de parada solo si viene antecedido por # o la palabra STOP
+    const patronStopExplicito = /^(?:#\s*|stop\s+)(\d+)$/i;
+    const matchStop = qNorm.match(patronStopExplicito);
+
     if (matchStop) {
         return {
             tipo: 'STOP',
@@ -60,21 +63,11 @@ function clasificarIntencionBusqueda(query) {
         };
     }
 
-    // Búsqueda por nomenclatura vial o dirección
-    const patronDireccion = /\b(cra|carrera|cll|calle|av|avenida|dg|diagonal|tv|transversal|cl|cr|kr)\b/i;
-    if (patronDireccion.test(qNorm) || /\d+[\s\w]*[-#]\s*\d+/.test(qNorm)) {
-        return {
-            tipo: 'DIRECCION',
-            valorLimpio: qNorm,
-            numeroStop: null
-        };
-    }
-
-    // Búsqueda por Nombre de Cliente / Destinatario
+    // Clasificación Multimodal Unificada (SCC / Secuencia / Cliente / Dirección)
     return {
-        tipo: 'CLIENTE',
+        tipo: 'MULTIMODAL',
         valorLimpio: qNorm,
-        numeroStop: null
+        numeroStop: isNaN(qNorm) ? null : parseInt(qNorm, 10)
     };
 }
 
@@ -83,12 +76,14 @@ export const mapaEventos = {
 
     inicializarControles(mapa) {
         this.mapaInstancia = mapa || window.mapaMensajero || window.mapaInstanciaGlobal;
-        console.log('⚡ [MAPA_EVENTOS]: Asignando listeners a los controles del mapa.');
+        console.log('⚡ [MAPA_EVENTOS]: Asignando listeners a los controles del mapa y escáner SCC.');
 
         const btnZoomIn = document.getElementById('btn-zoom-in');
         const btnZoomOut = document.getElementById('btn-zoom-out');
         const btnRefresh = document.getElementById('btn-refresh-map') || document.getElementById('btn-refrescar-mapa');
         const btnToggleLock = document.getElementById('btn-toggle-lock');
+        const btnEscanear = document.getElementById('btn-escanear-scc');
+        const btnCerrarScanner = document.getElementById('btn-cerrar-escanner');
 
         if (btnZoomIn) {
             btnZoomIn.onclick = (e) => {
@@ -145,11 +140,24 @@ export const mapaEventos = {
             this.restaurarEstadoBloqueo();
         }
 
+        if (btnEscanear) {
+            btnEscanear.onclick = (e) => {
+                e.preventDefault();
+                this.iniciarEscanerCamaraSCC();
+            };
+        }
+
+        if (btnCerrarScanner) {
+            btnCerrarScanner.onclick = () => {
+                this.detenerEscanerCamaraSCC();
+            };
+        }
+
         this.inicializarBuscadorMapa();
     },
 
     inicializarBuscadorMapa() {
-        console.log("🔍 [MAPA_EVENTOS]: Inicializando Buscador con Identificador de Patrón.");
+        console.log("🔍 [MAPA_EVENTOS]: Inicializando Buscador Multimodal SCC con Identificador de Patrón.");
 
         const inputBuscador = document.getElementById("buscador-paradas-mapa");
         const listaSugerencias = document.getElementById("sugerencias-paradas-mapa");
@@ -158,7 +166,6 @@ export const mapaEventos = {
 
         if (!inputBuscador) return;
 
-        // Búsqueda fluida con debounce de 200 ms
         inputBuscador.addEventListener("input", (e) => {
             const query = e.target.value;
             if (btnLimpiar) btnLimpiar.style.display = query.trim().length > 0 ? "block" : "none";
@@ -175,7 +182,7 @@ export const mapaEventos = {
 
             debounceTimerBuscador = setTimeout(() => {
                 this.ejecutarFiltradoParadas(query);
-            }, 200);
+            }, 150);
         });
 
         inputBuscador.addEventListener("keypress", (e) => {
@@ -184,8 +191,7 @@ export const mapaEventos = {
                 clearTimeout(debounceTimerBuscador);
                 const query = inputBuscador.value.trim();
                 if (query.length > 0) {
-                    if (listaSugerencias) listaSugerencias.style.display = "none";
-                    this.ejecutarGeocodificacionDireccion(query);
+                    this.ejecutarFiltradoParadas(query);
                 }
             }
         });
@@ -214,7 +220,7 @@ export const mapaEventos = {
     },
 
     /**
-     * Recupera la lista activa de paradas desde las RAMs o IndexedDB
+     * Recupera la lista activa de paradas desde IndexedDB o RAM.
      * @returns {Promise<Array<Object>>}
      */
     async obtenerColeccionParadas() {
@@ -223,7 +229,6 @@ export const mapaEventos = {
             paradas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
         }
 
-        // Asegurar ordenamiento consistente por secuencia
         paradas.sort((a, b) => {
             const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
             const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
@@ -234,51 +239,47 @@ export const mapaEventos = {
     },
 
     /**
-     * Filtra la colección por cliente, dirección o secuencia (#STOP)
+     * Filtra la colección local evaluando coincidencia por SCC, #Stop, Cliente o Dirección.
      * @param {string} query 
      */
     async ejecutarFiltradoParadas(query) {
         const paradas = await this.obtenerColeccionParadas();
         const intencion = clasificarIntencionBusqueda(query);
-        
+        const qNorm = intencion.valorLimpio;
         let resultados = [];
 
+        console.log(`🔍 [MAPA_EVENTOS]: Evaluando query="${query}" [Intención: ${intencion.tipo}] en ${paradas.length} paradas locales...`);
+
         if (intencion.tipo === 'STOP') {
-            resultados = paradas.filter((p, index) => {
-                const sec = parseInt(p.secuenciaZona || p.secuencia || p.orden || index + 1, 10);
+            resultados = paradas.filter((p, idx) => {
+                const sec = parseInt(p.secuenciaZona || p.secuencia || p.orden || (idx + 1), 10);
                 return sec === intencion.numeroStop;
             }).map(p => ({ ...p, _categoriaBusqueda: 'STOP' }));
-        } 
-        else if (intencion.tipo === 'CLIENTE') {
-            resultados = paradas.filter((p) => {
-                const nombreCliente = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
-                return nombreCliente.includes(intencion.valorLimpio);
-            }).map(p => ({ ...p, _categoriaBusqueda: 'CLIENTE' }));
-        } 
-        else if (intencion.tipo === 'DIRECCION') {
-            resultados = paradas.filter((p) => {
-                const dir = normalizarTextoBusqueda(p.direccion || p.dir || "");
-                return dir.includes(intencion.valorLimpio);
-            }).map(p => ({ ...p, _categoriaBusqueda: 'DIRECCION' }));
+        } else {
+            // Evaluación Multimodo Flexible
+            resultados = paradas.filter((p, idx) => {
+                const sccVal = normalizarTextoBusqueda(p.scc || p.ssc || p.id_scc || p.codigo_scc || "");
+                const clienteVal = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
+                const dirVal = normalizarTextoBusqueda(p.direccion || p.dir || "");
+                const secVal = String(p.secuenciaZona || p.secuencia || p.orden || (idx + 1));
+
+                const coincideSCC = sccVal.length > 0 && sccVal.includes(qNorm);
+                const coincideStop = secVal === qNorm;
+                const coincideTexto = clienteVal.includes(qNorm) || dirVal.includes(qNorm);
+
+                if (coincideSCC) p._categoriaBusqueda = 'SCC';
+                else if (coincideStop) p._categoriaBusqueda = 'STOP';
+                else if (coincideTexto) p._categoriaBusqueda = 'GENERAL';
+
+                return coincideSCC || coincideStop || coincideTexto;
+            });
         }
 
-        if (resultados.length === 0 && intencion.tipo !== 'STOP') {
-            resultados = paradas.filter((p, index) => {
-                const sec = (p.secuenciaZona || p.secuencia || p.orden || index + 1).toString();
-                const nombreCliente = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
-                const dir = normalizarTextoBusqueda(p.direccion || p.dir || "");
-
-                return sec.includes(intencion.valorLimpio) ||
-                       nombreCliente.includes(intencion.valorLimpio) ||
-                       dir.includes(intencion.valorLimpio);
-            }).map(p => ({ ...p, _categoriaBusqueda: 'GENERAL' }));
-        }
-
-        console.log(`🔍 [MAPA_EVENTOS]: Consulta [${intencion.tipo}] "${query}" -> ${resultados.length} resultado(s) local(es).`);
-        this.renderizarSugerencias(resultados, query, intencion);
+        console.log(`🎯 [MAPA_EVENTOS]: ${resultados.length} coincidencia(s) local(es) halladas por SCC/Texto.`);
+        this.renderizarSugerencias(resultados, query);
     },
 
-    renderizarSugerencias(coincidencias, queryOriginal, intencion) {
+    renderizarSugerencias(coincidencias, queryOriginal) {
         const listaSugerencias = document.getElementById("sugerencias-paradas-mapa");
         if (!listaSugerencias) return;
 
@@ -288,26 +289,26 @@ export const mapaEventos = {
             html += coincidencias.map((p, idx) => {
                 const sec = p.secuenciaZona || p.secuencia || p.orden || idx + 1;
                 const uid = obtenerIdUnicoParada(p);
-                const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente N/A";
+                const scc = p.scc || p.ssc || "N/A";
+                const cliente = p.destinatario || p.cliente || "Cliente N/A";
                 const direccionTexto = p.direccion || p.dir || "Sin dirección";
+                const grupo = p.grupoId || "GRUPO-01";
+                const subgrupo = p.subgrupoId || "SUB-001";
 
-                let badgeHTML = "";
-                if (p._categoriaBusqueda === 'STOP') {
-                    badgeHTML = `<span class="cyber-sug-badge badge-stop">#STOP ${sec}</span>`;
-                } else if (p._categoriaBusqueda === 'CLIENTE') {
-                    badgeHTML = `<span class="cyber-sug-badge badge-cliente">👤 CLIENTE</span>`;
-                } else if (p._categoriaBusqueda === 'DIRECCION') {
-                    badgeHTML = `<span class="cyber-sug-badge badge-dir">📍 DIR LOCAL</span>`;
-                } else {
-                    badgeHTML = `<span class="cyber-sug-badge">#STOP ${sec}</span>`;
+                let badgeHTML = `<span class="cyber-sug-badge badge-stop">#${sec}</span>`;
+                if (p._categoriaBusqueda === 'SCC') {
+                    badgeHTML += `<span class="cyber-sug-badge badge-scc" style="background:#00e5ff; color:#000;">SCC</span>`;
                 }
+
+                badgeHTML += `<span class="cyber-sug-badge badge-grupo">${grupo}</span>`;
+                badgeHTML += `<span class="cyber-sug-badge badge-subgrupo">${subgrupo}</span>`;
 
                 return `
                     <li class="cyber-sugerencia-item" data-type="parada" data-id="${uid}">
                         ${badgeHTML}
                         <div class="cyber-sug-info">
-                            <strong>#Stop ${sec} - ${nombreCliente}</strong>
-                            <small>${direccionTexto}</small>
+                            <strong>SCC: ${scc} — ${cliente}</strong>
+                            <small>📍 ${direccionTexto}</small>
                         </div>
                     </li>
                 `;
@@ -335,8 +336,6 @@ export const mapaEventos = {
                     const seleccionada = coincidencias.find(p => obtenerIdUnicoParada(p) === id);
                     if (seleccionada) {
                         this.seleccionarParadaBuscada(seleccionada);
-                    } else {
-                        console.warn("⚠️ [MAPA_EVENTOS]: No se localizó la parada seleccionada en el set de datos:", id);
                     }
                 } else if (type === "geocode") {
                     this.ejecutarGeocodificacionDireccion(queryOriginal);
@@ -347,12 +346,12 @@ export const mapaEventos = {
     },
 
     seleccionarParadaBuscada(parada) {
-        console.log("⚡ [MAPA_EVENTOS]: Parada seleccionada en búsqueda:", parada);
+        console.log("⚡ [MAPA_EVENTOS]: Parada seleccionada en búsqueda SCC:", parada);
 
-        if (typeof enfocarParadaEnMapa === "function") {
+        if (typeof enfocarYResaltarGrupoSCC === "function") {
+            enfocarYResaltarGrupoSCC(parada);
+        } else if (typeof enfocarParadaEnMapa === "function") {
             enfocarParadaEnMapa(parada);
-        } else if (typeof window.enfocarParadaEnMapa === "function") {
-            window.enfocarParadaEnMapa(parada);
         }
 
         this.mostrarTarjetaDetalle(parada);
@@ -364,7 +363,7 @@ export const mapaEventos = {
         const mapa = this.mapaInstancia || window.mapaMensajero || window.mapaInstanciaGlobal;
 
         if (typeof google === "undefined" || !google.maps || !mapa) {
-            console.warn("⚠️ [BUSQUEDA_MAPA_WARN]: Google Maps SDK no está inicializado.");
+            console.warn("⚠️ [BUSQUEDA_MAPA_WARN]: Google Maps SDK no disponible.");
             return;
         }
 
@@ -391,11 +390,6 @@ export const mapaEventos = {
                     title: `📍 ${dirFormateada}`
                 });
 
-                marcadorBusquedaTemp.addListener("click", () => {
-                    const pos = marcadorBusquedaTemp.getPosition();
-                    desplegarFormularioConDireccion(dirFormateada, pos.lat(), pos.lng());
-                });
-
                 console.log(`✅ [GEOCODE_OK]: Punto marcado en ${dirFormateada}`);
             } else {
                 console.error("❌ [GEOCODE_ERROR]: Geocodificación fallida:", status);
@@ -411,12 +405,18 @@ export const mapaEventos = {
         const nombreCliente = parada.destinatario || parada.cliente || parada.nombre_cliente || parada.nombre || "Cliente N/A";
 
         const elemSec = document.getElementById("card-stop-secuencia");
+        const elemGrupo = document.getElementById("card-stop-grupo");
+        const elemSubgrupo = document.getElementById("card-stop-subgrupo");
+        const elemSCC = document.getElementById("card-stop-scc");
         const elemEst = document.getElementById("card-stop-estado");
         const elemDest = document.getElementById("card-stop-destinatario");
         const elemDir = document.getElementById("card-stop-direccion");
         const elemTel = document.getElementById("card-stop-telefono");
 
         if (elemSec) elemSec.textContent = `#STOP ${sec}`;
+        if (elemGrupo) elemGrupo.textContent = parada.grupoId || "GRUPO-01";
+        if (elemSubgrupo) elemSubgrupo.textContent = parada.subgrupoId || "SUB-001";
+        if (elemSCC) elemSCC.textContent = `SCC: ${parada.scc || parada.ssc || 'N/A'}`;
         if (elemEst) elemEst.textContent = (parada.estado || "ASIGNADO").toUpperCase();
         if (elemDest) elemDest.textContent = nombreCliente;
         if (elemDir) elemDir.textContent = `📍 ${parada.direccion || parada.dir || 'N/A'}`;
@@ -484,6 +484,124 @@ export const mapaEventos = {
         });
     },
 
+    /**
+     * Inicia el escáner táctico por cámara con resolución adaptable para Android PWA / WebView.
+     */
+    async iniciarEscanerCamaraSCC() {
+        const modal = document.getElementById("contenedor-escanner-modal");
+        const video = document.getElementById("video-preview-escanner");
+        const txtStatus = document.getElementById("status-escanner-texto");
+
+        if (!modal || !video) return;
+        modal.style.display = "flex";
+
+        // 1. Verificación de Contexto Seguro Web API
+        const esContextoSeguro = window.isSecureContext || window.location.protocol === "https:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+        if (!esContextoSeguro) {
+            console.warn("⚠️ [ESCÁNER_WARN]: Acceso a cámara restringido por la API de Web Browsers debido a un contexto HTTP inseguro.");
+            if (txtStatus) {
+                txtStatus.innerHTML = `⚠️ <b>Contexto HTTP Inseguro</b><br>Android requiere HTTPS para la cámara.<br><small>Habilite chrome://flags/#unsafely-treat-insecure-origin-as-secure con IP local.</small>`;
+            }
+            return;
+        }
+
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+            if (txtStatus) txtStatus.textContent = "❌ Tu navegador no soporta captura de video (MediaDevices API).";
+            return;
+        }
+
+        if (txtStatus) txtStatus.textContent = "⏳ Solicitando acceso a la cámara...";
+
+        // 2. Fallback progresivo para perfiles de cámara en Android
+        const perfilesCamara = [
+            { video: { facingMode: { ideal: "environment" } } },
+            { video: { facingMode: "environment" } },
+            { video: true }
+        ];
+
+        let streamObtenido = null;
+        let ultimoError = null;
+
+        for (const constraints of perfilesCamara) {
+            try {
+                console.log("📷 [ESCÁNER_SCC]: Solicitando cámara con perfil:", constraints);
+                streamObtenido = await navigator.mediaDevices.getUserMedia(constraints);
+                if (streamObtenido) break;
+            } catch (err) {
+                ultimoError = err;
+                console.warn("⚠️ [ESCÁNER_SCC]: Perfil de cámara rechazado, probando fallback...", err.name || err.message);
+            }
+        }
+
+        if (!streamObtenido) {
+            console.error("❌ [ESCÁNER_ERROR]: Fallaron todas las opciones de acceso a la cámara:", ultimoError);
+            if (txtStatus) {
+                const msjError = ultimoError?.name === "NotAllowedError" 
+                    ? "❌ Permiso de cámara denegado. Conceda permisos a la app." 
+                    : `❌ ERROR DE ACCESO A CÁMARA (${ultimoError?.name || "Desconocido"}).`;
+                txtStatus.textContent = msjError;
+            }
+            return;
+        }
+
+        mediaStreamCamara = streamObtenido;
+        video.srcObject = mediaStreamCamara;
+        video.setAttribute("playsinline", "true");
+        video.play();
+
+        if (txtStatus) txtStatus.textContent = "🔍 Apunte la cámara hacia el código de barras o QR...";
+
+        // 3. Integración con la API BarcodeDetector
+        if ("BarcodeDetector" in window) {
+            try {
+                const detector = new BarcodeDetector({ formats: ["code_128", "qr_code", "ean_13", "code_39"] });
+                const escaneoLoop = async () => {
+                    if (!mediaStreamCamara) return;
+                    try {
+                        const barcodes = await detector.detect(video);
+                        if (barcodes.length > 0) {
+                            const codigoEscaneado = barcodes[0].rawValue;
+                            console.log("📷 [ESCÁNER_SCC_OK]: Código capturado:", codigoEscaneado);
+                            if (txtStatus) txtStatus.textContent = `✅ Capturado: ${codigoEscaneado}`;
+                            
+                            this.detenerEscanerCamaraSCC();
+                            
+                            const inputBuscador = document.getElementById("buscador-paradas-mapa");
+                            if (inputBuscador) inputBuscador.value = codigoEscaneado;
+                            
+                            await this.ejecutarFiltradoParadas(codigoEscaneado);
+                            return;
+                        }
+                    } catch (err) {
+                        // Reintento silencioso en siguiente frame
+                    }
+                    animFrameScanner = requestAnimationFrame(escaneoLoop);
+                };
+                animFrameScanner = requestAnimationFrame(escaneoLoop);
+            } catch (errDet) {
+                console.warn("⚠️ [ESCÁNER_SCC]: BarcodeDetector no pudo instanciarse:", errDet);
+            }
+        } else {
+            if (txtStatus) txtStatus.textContent = "⚠️ Escáner de hardware no soportado en este navegador. Digite el SCC manualmente.";
+        }
+    },
+
+    detenerEscanerCamaraSCC() {
+        const modal = document.getElementById("contenedor-escanner-modal");
+        if (modal) modal.style.display = "none";
+
+        if (animFrameScanner) cancelAnimationFrame(animFrameScanner);
+
+        if (mediaStreamCamara) {
+            mediaStreamCamara.getTracks().forEach(track => {
+                track.stop();
+                console.log("📷 [ESCÁNER_SCC]: Track de cámara liberado limpiamente.");
+            });
+            mediaStreamCamara = null;
+        }
+    },
+
     ejecutarZoom(delta) {
         if (!this.mapaInstancia) {
             this.mapaInstancia = window.mapaMensajero || window.mapaInstanciaGlobal;
@@ -549,24 +667,17 @@ export const mapaEventos = {
     }
 };
 
-function desplegarFormularioConDireccion(direccion, lat, lng) {
-    if (typeof window.navegarA === "function") {
-        window.navegarA("vistas/ruta/ruta-activa.html");
-    } else if (typeof window.alternarVistaPestaña === "function") {
-        window.alternarVistaPestaña("pestana-ruta-activa");
-    }
-
-    setTimeout(() => {
-        const inputDir = document.getElementById("edit-parada-direccion");
-        if (inputDir) inputDir.value = direccion;
-    }, 120);
-}
-
 export function activarModoSeleccionMapaUI() {
     modoCrearParadaActivo = !modoCrearParadaActivo;
+    console.log(`📌 [MAPA_EVENTOS]: Modo selección manual de posición ${modoCrearParadaActivo ? 'ACTIVADO' : 'DESACTIVADO'}.`);
+    return modoCrearParadaActivo;
 }
 
-export function registrarEventosClicMapa(callbackNuevaParada) {}
+export function registrarEventosClicMapa(callbackNuevaParada) {
+    if (typeof callbackNuevaParada === "function") {
+        console.log("⚡ [MAPA_EVENTOS]: Callback de clic en mapa registrado.");
+    }
+}
 
 export function toggleBuscadorMapaUI() {
     const inputBuscador = document.getElementById("buscador-paradas-mapa");
@@ -580,6 +691,8 @@ export function ejecutarBusquedaDireccion(dir) {
 }
 
 // BINDINGS GLOBALES EN WINDOW
+window.activarModoSeleccionMapaUI = activarModoSeleccionMapaUI;
+window.registrarEventosClicMapa = registrarEventosClicMapa;
 window.toggleBuscadorMapaUI = toggleBuscadorMapaUI;
 window.ejecutarBusquedaDireccion = ejecutarBusquedaDireccion;
 window.ejecutarBusquedaParadas = (query) => mapaEventos.ejecutarFiltradoParadas(query);

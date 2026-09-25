@@ -36,9 +36,10 @@
 }
 
 /* --------------------------------------------------------------------------
-   2. BUSCADOR FLOTANTE DEL MAPA & INPUTS
+   2. BUSCADOR FLOTANTE DEL MAPA, INPUTS Y ESCÁNER SCC
    -------------------------------------------------------------------------- */
 .cyber-search-wrapper,
+.cyber-search-container,
 .contenedor-busqueda-mapa {
     position: absolute;
     top: calc(14px + env(safe-area-inset-top, 0px));
@@ -48,20 +49,22 @@
     max-width: 420px;
 }
 
-.cyber-search-input-box {
+.cyber-search-input-box,
+.cyber-search-input-wrapper {
     display: flex;
     align-items: center;
     background: rgba(13, 17, 23, 0.98);
     border: 1.5px solid var(--neon-cyan, #00e5ff);
     border-radius: 8px;
-    padding: 6px 12px;
+    padding: 4px 8px 4px 12px;
     box-shadow: 0 0 15px rgba(0, 229, 255, 0.35), inset 0 0 8px rgba(0, 229, 255, 0.1);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.cyber-search-input-box:focus-within {
+.cyber-search-input-box:focus-within,
+.cyber-search-input-wrapper:focus-within {
     border-color: var(--neon-green, #39ff14);
     box-shadow: 0 0 20px rgba(57, 255, 20, 0.4), inset 0 0 10px rgba(57, 255, 20, 0.15);
 }
@@ -74,6 +77,7 @@
 }
 
 #buscador-paradas-mapa,
+.cyber-search-input,
 #input-mapa-buscar-dir {
     flex: 1;
     background: transparent !important;
@@ -84,16 +88,48 @@
     font-size: 0.88rem;
     font-weight: 700;
     padding: 6px 0;
+    min-width: 0;
 }
 
 #buscador-paradas-mapa::placeholder,
+.cyber-search-input::placeholder,
 #input-mapa-buscar-dir::placeholder {
     color: var(--text-color, #c3ccdb);
     opacity: 0.6;
     font-weight: 400;
 }
 
-.cyber-btn-clear {
+/* Botón Táctico de Disparo de Escáner por Cámara / Código de Barras */
+.cyber-scan-btn {
+    background: transparent;
+    border: 1px solid var(--neon-cyan, #00e5ff);
+    color: var(--neon-cyan, #00e5ff);
+    padding: 4px 8px;
+    font-family: var(--cyber-font, "Share Tech Mono", monospace);
+    font-size: 0.9rem;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 0 6px rgba(0, 229, 255, 0.2);
+}
+
+.cyber-scan-btn:hover,
+.cyber-scan-btn:active {
+    background: var(--neon-cyan, #00e5ff);
+    color: #0d1117;
+    box-shadow: 0 0 12px var(--neon-cyan, #00e5ff);
+    transform: scale(1.05);
+}
+
+.cyber-btn-clear,
+.cyber-search-clear {
     background: transparent;
     border: none;
     color: var(--neon-magenta, #ff3366);
@@ -106,12 +142,13 @@
     transition: transform 0.15s ease;
 }
 
-.cyber-btn-clear:active {
+.cyber-btn-clear:active,
+.cyber-search-clear:active {
     transform: scale(0.85);
 }
 
 /* --------------------------------------------------------------------------
-   3. LISTA DESPLEGABLE DE SUGERENCIAS CYBERPUNK
+   3. LISTA DESPLEGABLE DE SUGERENCIAS Y MODAL ESCÁNER CYBERPUNK
    -------------------------------------------------------------------------- */
 .cyber-sugerencias-lista {
     list-style: none;
@@ -148,7 +185,7 @@
 .cyber-sugerencia-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     padding: 10px 14px;
     border-bottom: 1px solid rgba(48, 54, 61, 0.8);
     background: #0d1117;
@@ -167,11 +204,11 @@
     background: rgba(0, 229, 255, 0.18) !important;
 }
 
-/* Badges de clasificación en la lista */
+/* Badges de clasificación y clúster de grupo/subgrupo en la lista */
 .cyber-sug-badge {
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 900;
-    padding: 4px 8px;
+    padding: 3px 6px;
     border-radius: 4px;
     white-space: nowrap;
     font-family: var(--cyber-font, monospace);
@@ -188,6 +225,20 @@
     box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
 }
 
+.cyber-sug-badge.badge-grupo {
+    background: rgba(255, 179, 0, 0.2) !important;
+    color: #ffb300 !important;
+    border: 1px solid #ffb300 !important;
+    box-shadow: 0 0 8px rgba(255, 179, 0, 0.4);
+}
+
+.cyber-sug-badge.badge-subgrupo {
+    background: rgba(57, 255, 20, 0.2) !important;
+    color: #39ff14 !important;
+    border: 1px solid #39ff14 !important;
+    box-shadow: 0 0 8px rgba(57, 255, 20, 0.4);
+}
+
 .cyber-sug-badge.badge-cliente {
     background: #b359ff !important;
     color: #ffffff !important;
@@ -198,12 +249,6 @@
     background: var(--neon-green, #39ff14) !important;
     color: #030308 !important;
     box-shadow: 0 0 10px rgba(57, 255, 20, 0.6);
-}
-
-.cyber-sug-badge.badge-geo {
-    background: var(--neon-magenta, #ff3366) !important;
-    color: #ffffff !important;
-    box-shadow: 0 0 10px rgba(255, 51, 102, 0.6);
 }
 
 .cyber-sug-info {
@@ -230,6 +275,92 @@
     text-overflow: ellipsis;
     margin-top: 2px;
     opacity: 0.8;
+}
+
+/* Modal Visor / Overlay del Escáner de Cámara Táctico SCC */
+.cyber-scanner-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(3, 3, 8, 0.92);
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.cyber-scanner-overlay {
+    width: 100%;
+    max-width: 400px;
+    background: #0d1117;
+    border: 2px solid var(--neon-cyan, #00e5ff);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 0 25px rgba(0, 229, 255, 0.4);
+}
+
+.cyber-scanner-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    color: var(--neon-cyan, #00e5ff);
+    font-family: var(--cyber-font, "Share Tech Mono", monospace);
+    font-weight: bold;
+}
+
+.btn-close-scanner {
+    background: transparent;
+    border: none;
+    color: var(--neon-magenta, #ff3366);
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.cyber-scanner-viewport {
+    position: relative;
+    width: 100%;
+    height: 250px;
+    background: #000;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 229, 255, 0.3);
+}
+
+.cyber-scanner-viewport video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scanner-laser-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--neon-magenta, #ff3366);
+    box-shadow: 0 0 15px var(--neon-magenta, #ff3366);
+    animation: scanLaser 2s infinite ease-in-out;
+}
+
+@keyframes scanLaser {
+    0% { top: 5%; }
+    50% { top: 95%; }
+    100% { top: 5%; }
+}
+
+.cyber-scanner-footer {
+    margin-top: 12px;
+    text-align: center;
+    color: var(--text-color, #c3ccdb);
+    font-family: var(--cyber-font, monospace);
+    font-size: 0.8rem;
 }
 
 /* --------------------------------------------------------------------------
@@ -420,14 +551,33 @@
     margin-bottom: 10px;
 }
 
-.cyber-card-badge {
+.cyber-card-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cyber-card-badge,
+.cyber-badge {
     background: var(--neon-cyan, #00e5ff);
     color: #0d1117;
     font-weight: 900;
-    font-size: 0.8rem;
-    padding: 3px 8px;
+    font-size: 0.75rem;
+    padding: 3px 6px;
     border-radius: 4px;
     letter-spacing: 0.5px;
+}
+
+.cyber-scc-tag {
+    font-family: var(--cyber-font, "Share Tech Mono", monospace);
+    font-size: 0.8rem;
+    color: var(--neon-cyan, #00e5ff);
+    background: rgba(0, 229, 255, 0.1);
+    border-left: 3px solid var(--neon-cyan, #00e5ff);
+    padding: 2px 6px;
+    margin-bottom: 8px;
+    display: inline-block;
 }
 
 .cyber-card-status {
@@ -454,14 +604,16 @@
     transform: scale(0.85);
 }
 
-.cyber-card-body h4 {
+.cyber-card-body h4,
+.cyber-card-title {
     margin: 0 0 6px 0;
     font-size: 0.95rem;
     color: #ffffff;
     font-weight: 700;
 }
 
-.cyber-card-body p {
+.cyber-card-body p,
+.cyber-card-sub {
     margin: 3px 0;
     font-size: 0.8rem;
     color: var(--text-color, #c3ccdb);
@@ -531,6 +683,7 @@
    -------------------------------------------------------------------------- */
 @media screen and (max-width: 480px) {
     .cyber-search-wrapper,
+    .cyber-search-container,
     .contenedor-busqueda-mapa {
         top: calc(10px + env(safe-area-inset-top, 0px));
         left: 10px;

@@ -1,23 +1,35 @@
 <!-- ==========================================================================
-   PROTOCOLO MACONDO - VISTA COMPLETA DEL MAPA INTERACTIVO
+   PROTOCOLO MACONDO - VISTA COMPLETA DEL MAPA INTERACTIVO Y ESCÁNER MULTIMODAL SCC
    Ubicación: vistas/ruta/mapa-activa.html
+   Stack: Vanilla HTML5 / Cyberpunk Dark Mode (#00e5ff, #ff3366, #0d1117, #ffb300, #39ff14)
    ========================================================================== -->
+
 <div class="cyber-map-container">
-    
-    <!-- ⚡ BUSCADOR FLOTANTE DUAL CON LISTA DESPLEGABLE DE SUGERENCIAS -->
-    <div class="cyber-search-wrapper" id="cyber-search-wrapper">
-        <div class="cyber-search-input-box">
+
+    <!-- ⚡ BUSCADOR FLOTANTE DUAL MULTIMODAL (TEXTO / ESCÁNER SCC) -->
+    <div class="cyber-search-container" id="contenedor-buscador-mapa">
+        <div class="cyber-search-input-wrapper">
             <span class="cyber-search-icon">🔍</span>
             <input 
                 type="text" 
                 id="buscador-paradas-mapa" 
-                placeholder="Buscar #Stop, cliente o dirección..." 
+                class="cyber-search-input" 
+                placeholder="Buscar por SCC, #Stop, cliente o dirección..." 
                 autocomplete="off" 
-                aria-label="Buscar paradas en el mapa"
+                aria-label="Buscar paradas o código SCC en el mapa"
             />
-            <button type="button" id="btn-limpiar-busqueda" class="cyber-btn-clear" style="display:none;">✕</button>
+            
+            <!-- Disparador de Cámara / Escáner de Código de Barras / SCC -->
+            <button type="button" id="btn-escanear-scc" class="cyber-scan-btn" title="Escanear Código de Barras / SCC" aria-label="Escanear código de barras o SCC">
+                <span class="scan-icon">█║▌</span>
+            </button>
+
+            <!-- Botón de Limpieza -->
+            <button type="button" id="btn-limpiar-busqueda" class="cyber-search-clear" style="display: none;" title="Limpiar búsqueda">✕</button>
         </div>
-        <ul class="cyber-sugerencias-lista" id="sugerencias-paradas-mapa" style="display:none;"></ul>
+
+        <!-- Lista Desplegable de Sugerencias y Coincidencias Local-First -->
+        <ul id="sugerencias-paradas-mapa" class="cyber-sugerencias-lista" style="display: none;"></ul>
     </div>
 
     <!-- 🎛️ CONTROLES VERTICALES FLOTANTES (ZOOM, REFRESH & LOCK) -->
@@ -28,7 +40,7 @@
         <button type="button" class="cyber-btn-map" id="btn-zoom-out" title="Alejar (Zoom Out)" aria-label="Alejar mapa">
             <span class="cyber-btn-icon">➖</span>
         </button>
-        <button type="button" class="cyber-btn-map cyber-btn-refresh" id="btn-refresh-map" title="Refrescar y Sincronizar Mapa" aria-label="Refrescar mapa">
+        <button type="button" class="cyber-btn-map cyber-btn-refresh" id="btn-refresh-map" title="Refrescar y Sincronizar Mapa Local-First" aria-label="Refrescar mapa">
             <span class="cyber-btn-icon refresh-icon">🔄</span>
         </button>
         <button type="button" class="cyber-btn-map" id="btn-toggle-lock" title="Bloquear / Desbloquear Mapa" aria-label="Bloquear/Desbloquear mapa" data-locked="false">
@@ -36,17 +48,43 @@
         </button>
     </div>
 
-    <!-- 📋 TARJETA FLOTANTE DE DETALLE DE PARADA Y CÁLCULO DE PROXIMIDAD -->
-    <div class="cyber-stop-card" id="tarjeta-detalle-parada" style="display:none;">
+    <!-- 📷 MODAL / VISOR TÁCTICO DE CÁMARA PARA ESCANEO DE BARRAS / SCC -->
+    <div id="contenedor-escanner-modal" class="cyber-scanner-modal" style="display: none;">
+        <div class="cyber-scanner-overlay">
+            <div class="cyber-scanner-header">
+                <span class="scanner-title">⚡ ESCÁNER TÁCTICO SCC</span>
+                <button type="button" id="btn-cerrar-escanner" class="btn-close-scanner" aria-label="Cerrar escáner">✕</button>
+            </div>
+            <div class="cyber-scanner-viewport">
+                <video id="video-preview-escanner" autoplay playsinline muted></video>
+                <div class="scanner-laser-line"></div>
+                <div class="scanner-corner top-left"></div>
+                <div class="scanner-corner top-right"></div>
+                <div class="scanner-corner bottom-left"></div>
+                <div class="scanner-corner bottom-right"></div>
+            </div>
+            <div class="cyber-scanner-footer">
+                <small id="status-escanner-texto">Apunta el código de barras/SCC al recuadro</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📋 TARJETA FLOTANTE DE DETALLE DE PARADA CON INDICADORES DE GRUPO/SUBGRUPO -->
+    <div class="cyber-stop-card" id="tarjeta-detalle-parada" style="display: none;">
         <div class="cyber-card-header">
-            <span class="cyber-card-badge" id="card-stop-secuencia">#STOP --</span>
-            <span class="cyber-card-status" id="card-stop-estado">PENDIENTE</span>
-            <button type="button" class="cyber-card-close" id="btn-cerrar-tarjeta">✕</button>
+            <div class="cyber-card-badges">
+                <span id="card-stop-secuencia" class="cyber-badge badge-stop">#STOP --</span>
+                <span id="card-stop-grupo" class="cyber-badge badge-grupo">GRUPO --</span>
+                <span id="card-stop-subgrupo" class="cyber-badge badge-subgrupo">SUB --</span>
+            </div>
+            <button type="button" class="cyber-card-close" id="btn-cerrar-tarjeta" aria-label="Cerrar tarjeta">✕</button>
         </div>
         <div class="cyber-card-body">
-            <h4 id="card-stop-destinatario">Nombre del Cliente</h4>
-            <p id="card-stop-direccion">📍 Dirección de la parada</p>
-            <p id="card-stop-telefono">📞 Teléfono</p>
+            <div id="card-stop-scc" class="cyber-scc-tag">SCC: N/A</div>
+            <h4 id="card-stop-destinatario" class="cyber-card-title">Cargando destinatario...</h4>
+            <p id="card-stop-direccion" class="cyber-card-sub">📍 Dirección N/A</p>
+            <p id="card-stop-telefono" class="cyber-card-sub">📞 Teléfono N/A</p>
+            <div id="card-stop-estado" class="cyber-card-status">ESTADO: ASIGNADO</div>
         </div>
         <div class="cyber-card-footer">
             <span class="cyber-cercanas-title">⚡ 3 PARADAS MÁS CERCANAS:</span>
@@ -56,4 +94,5 @@
 
     <!-- 🗺️ LIENZO DE MAPA GOOGLE MAPS PANTALLA COMPLETA -->
     <div id="mapa-mensajero-view" class="mapa-canvas"></div>
+
 </div>

@@ -130,7 +130,6 @@ export async function recargarMapaCompleto() {
         const targetCanonico = estandarizarZonaCanonica(zonaActiva);
 
         if (mapa && typeof google !== "undefined" && google.maps) {
-            // Forzar disparo del evento resize sobre la instancia
             google.maps.event.trigger(mapa, "resize");
             console.log("📐 [MAPA_VISOR]: Disparado 'resize' sobre Google Maps.");
 
@@ -282,18 +281,41 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
 
 /**
  * Actualiza waypoints, minirutas por clúster y marcadores sobre el mapa.
- * @param {Array<Object>} listaPedidos 
+ * Preserva el orden persistido en IndexedDB.
+ * @param {Array<Object>} [listaPedidos=null] 
  * @param {number} [indiceActivo=0] 
  */
-export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo = 0) {
+export async function actualizarPuntosEnMapa(listaPedidos = null, indiceActivo = 0) {
     const mapa = window.mapaMensajero || window.mapaInstancia;
     if (!mapa || typeof google === "undefined" || !google.maps) {
         window.pendientesParaRenderizar = { listaPedidos, indiceActivo };
         return;
     }
 
-    const zonaDetectada = localStorage.getItem("zona_activa_operacion") || (Array.isArray(listaPedidos) && listaPedidos.length > 0 
-        ? (listaPedidos[0]?.zonaKey || listaPedidos[0]?.zona || "GENERAL") 
+    let paradas = listaPedidos;
+    if (!Array.isArray(paradas) || paradas.length === 0) {
+        paradas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+    }
+
+    if (!Array.isArray(paradas) || paradas.length === 0) {
+        console.warn("⚠️ [MAPA_VISOR]: No hay paradas para mostrar en el mapa.");
+        return;
+    }
+
+    // PRESERVACIÓN ESTRICTA DEL ORDEN PERSISTIDO
+    paradas.sort((a, b) => {
+        const seqA = parseInt(a.secuenciaZona ?? a.orden ?? a.secuencia ?? 0, 10);
+        const seqB = parseInt(b.secuenciaZona ?? b.orden ?? b.secuencia ?? 0, 10);
+        return seqA - seqB;
+    });
+
+    // Sincronizar cachés RAM
+    window.__CACHE_PARADAS_MACONDO__ = structuredClone(paradas);
+    window.paradasMemoriaLocal = structuredClone(paradas);
+    window.paradasRutaActiva = structuredClone(paradas);
+
+    const zonaDetectada = localStorage.getItem("zona_activa_operacion") || (paradas.length > 0 
+        ? (paradas[0]?.zonaKey || paradas[0]?.zona || "GENERAL") 
         : "TODAS");
 
     const targetCanonico = estandarizarZonaCanonica(zonaDetectada);
@@ -303,16 +325,16 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo = 0) {
     }
 
     if (typeof trazarPolilineaRuta === "function") {
-        trazarPolilineaRuta(listaPedidos, targetCanonico);
+        trazarPolilineaRuta(paradas, targetCanonico);
     }
 
     if (typeof renderizarMarcadoresInteractivos === "function") {
-        renderizarMarcadoresInteractivos(listaPedidos, indiceActivo);
+        renderizarMarcadoresInteractivos(paradas, indiceActivo);
     }
 }
 
 /**
- * Enfoca una zona ajustando sus límites geográficos (FitBounds).
+ * Enfoca una zona ajustando sus límites geográficos (fitBounds).
  * @param {Array<Object>} paradasZona 
  */
 export function enfocarZonaEnMapa(paradasZona) {
@@ -344,17 +366,28 @@ export function enfocarZonaEnMapa(paradasZona) {
 }
 
 /**
- * Centra y acerca suavemente la cámara a una parada específica.
+ * Centra y acerca suavemente la cámara a una parada específica (vía objeto o identificador).
  * Incluye fallback por dirección de texto con auto-guardado en IndexedDB.
- * @param {Object} parada - Objeto de la parada a enfocar
+ * @param {Object|string} paradaOrId - Objeto o ID de la parada
  */
-export function enfocarParadaEnMapa(parada) {
+export function enfocarParadaEnMapa(paradaOrId) {
     const mapa = window.mapaMensajero || window.mapaInstancia;
     
     if (!mapa) {
-        console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible para enfocar la parada.", parada);
+        console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible para enfocar la parada.", paradaOrId);
         return;
     }
+
+    let parada = null;
+    if (typeof paradaOrId === "object" && paradaOrId !== null) {
+        parada = paradaOrId;
+    } else if (paradaOrId) {
+        const idTarget = String(paradaOrId).trim();
+        const paradas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+        parada = paradas.find(p => String(p.id || p.scc || p.ssc).trim() === idTarget);
+    }
+
+    if (!parada) return;
 
     const coords = obtenerCoordenadasValidasParada(parada);
 
@@ -391,13 +424,13 @@ export function enfocarParadaEnMapa(parada) {
                     try {
                         await guardarRutaZonificada(coleccionActual);
                         
-                        // Sincronizar todas las memorias RAM
+                        // Sincronizar memorias RAM
                         window.__CACHE_PARADAS_MACONDO__ = [...coleccionActual];
                         window.paradasMemoriaLocal = [...coleccionActual];
                         window.paradasRutaActiva = [...coleccionActual];
                         window.pedidosGlobales = [...coleccionActual];
 
-                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc} persistidas en IndexedDB y RAM.`);
+                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc || parada.scc} persistidas en IndexedDB y RAM.`);
                     } catch (err) {
                         console.warn("⚠️ [MAPA_VISOR]: No se pudo auto-guardar la coordenada en IndexedDB:", err);
                     }
@@ -417,6 +450,53 @@ export function enfocarParadaEnMapa(parada) {
 }
 
 /**
+ * Centra la cámara en la parada seleccionada por SCC y resalta visualmente todos
+ * los marcadores pertenecientes a su mismo Grupo Principal / Clúster.
+ * Búsqueda DOM flexible e insensible a mayúsculas/minúsculas.
+ * @param {Object} parada - Objeto de la parada localizada por SCC
+ */
+export function enfocarYResaltarGrupoSCC(parada) {
+    const mapa = window.mapaMensajero || window.mapaInstanciaGlobal || window.mapaInstancia;
+    if (!parada) return;
+
+    // 1. Centrado táctico de la cámara
+    const coords = obtenerCoordenadasValidasParada(parada);
+    if (coords && mapa && typeof google !== "undefined" && google.maps) {
+        mapa.panTo(new google.maps.LatLng(coords.lat, coords.lng));
+        mapa.setZoom(17);
+        console.log(`🎯 [MAPA_VISOR]: Cámara enfocada en SCC [${parada.scc || parada.ssc || 'N/A'}] -> Lat: ${coords.lat}, Lng: ${coords.lng}`);
+    } else {
+        enfocarParadaEnMapa(parada);
+    }
+
+    // 2. Resaltado Neón Multimodal sobre marcadores del mismo clúster/grupo en el DOM
+    const grupoBuscado = String(parada.grupoId || parada.grupo || parada.cluster || "").trim();
+    if (!grupoBuscado) return;
+
+    // Escaneo flexible de selectores
+    const marcadoresDOM = document.querySelectorAll(".cyber-pin-marker, [data-grupo], [data-grupo-id], [data-cluster]");
+    let contadorResaltados = 0;
+
+    marcadoresDOM.forEach(el => {
+        const grupoAttr = String(
+            el.getAttribute("data-grupo") || 
+            el.getAttribute("data-grupo-id") || 
+            el.getAttribute("data-cluster") || ""
+        ).trim();
+        
+        if (grupoAttr && grupoAttr.toLowerCase() === grupoBuscado.toLowerCase()) {
+            el.classList.add("activa");
+            if (el.style) el.style.zIndex = "9999";
+            contadorResaltados++;
+        } else {
+            el.classList.remove("activa");
+        }
+    });
+
+    console.log(`⚡ [MAPA_VISOR]: Resaltados ${contadorResaltados} marcadores del clúster [${grupoBuscado}]`);
+}
+
+/**
  * Retorna la instancia global activa del mapa.
  * @returns {google.maps.Map|null}
  */
@@ -430,6 +510,7 @@ window.inicializarMapaMensajero = inicializarMapaMensajero;
 window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;
 window.enfocarZonaEnMapa = enfocarZonaEnMapa;
 window.enfocarParadaEnMapa = enfocarParadaEnMapa;
+window.enfocarYResaltarGrupoSCC = enfocarYResaltarGrupoSCC;
 window.refrescarLienzoMapa = refrescarLienzoMapa;
 window.obtenerInstanciaMapa = obtenerInstanciaMapa;
 window.recargarMapaCompleto = recargarMapaCompleto;

@@ -1,154 +1,219 @@
-// pwa-mensajero/modulos/mapa/mapa-activa.js
+/**
+ * PROTOCOLO MACONDO - NAVEGACIÓN Y CONTROL DEL MAPA
+ * Ubicación: pwa-mensajero/modulos/mapa/mapa-activa.js
+ * Optimizado para PWA Local-First, Geocodificación asíncrona y Sincronización de Memoria
+ */
 
+import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificacion/estandar-zonas.js";
+
+// Estado interno del módulo de mapa
 let modoCrearParadaActivo = false;
 let trazadoRutaPolyline = null;
 let marcadoresMapa = [];
 
-// 1. Mostrar/Ocultar el input de la Lupa
-window.toggleBuscadorMapaUI = function () {
+/**
+ * 1. Alterna la visibilidad del cuadro de búsqueda del mapa
+ */
+export function toggleBuscadorMapaUI() {
     const input = document.getElementById("input-mapa-buscar-dir");
     if (input) {
-        input.style.display = input.style.display === "none" ? "block" : "none";
-        if (input.style.display === "block") input.focus();
+        const estaOculto = input.style.display === "none" || getComputedStyle(input).display === "none";
+        input.style.display = estaOculto ? "block" : "none";
+        if (estaOculto) {
+            input.focus();
+        }
     }
-    console.log("[MapaUI] Toggle buscador dirección:", input ? input.style.display : "no encontrado");
-};
+    console.log("🔍 [MAPA_UI]: Toggle buscador dirección:", input ? input.style.display : "nodo no encontrado");
+}
 
-// 2. Activar modo selección en mapa para añadir paradas
-window.activarModoSeleccionMapaUI = function () {
+/**
+ * 2. Activa o desactiva el modo interactivo para crear paradas haciendo clic sobre el mapa
+ */
+export function activarModoSeleccionMapaUI() {
     modoCrearParadaActivo = !modoCrearParadaActivo;
     const btn = document.getElementById("btn-modo-crear-parada");
     if (btn) {
-        btn.style.background = modoCrearParadaActivo ? "var(--neon-green, #00ff66)" : "";
-        btn.style.color = modoCrearParadaActivo ? "#000" : "";
+        btn.style.background = modoCrearParadaActivo ? "var(--neon-green, #39ff14)" : "";
+        btn.style.color = modoCrearParadaActivo ? "#0d1117" : "";
+        btn.style.boxShadow = modoCrearParadaActivo ? "0 0 12px var(--neon-green, #39ff14)" : "";
     }
-    console.log("[MapaUI] Modo selección de parada activo:", modoCrearParadaActivo);
-};
+    console.log("⚡ [MAPA_UI]: Modo selección táctica de parada activo:", modoCrearParadaActivo);
+}
 
-// 3. Listener de Clics sobre el lienzo de Google Maps
+/**
+ * 3. Registra el listener de clics geográficos sobre el mapa para agregar paradas dinámicas
+ */
 export function registrarEventosClicMapa() {
-    if (!window.mapaMensajero) {
-        console.warn("[Mapa] Instancia de Google Maps (window.mapaMensajero) no detectada.");
+    const mapaInstancia = window.mapaMensajero || window.mapaInstanciaGlobal || window.mapaInstancia;
+
+    if (!mapaInstancia) {
+        console.warn("⚠️ [MAPA_EVENTOS]: Instancia de mapa no detectada para vincular clics.");
         return;
     }
 
-    window.mapaMensajero.addListener("click", (e) => {
+    mapaInstancia.addListener("click", async (e) => {
         if (!modoCrearParadaActivo) return;
 
         const lat = e.latLng.lat();
         const lng = e.latLng.lng();
 
-        console.log(`[Mapa] Clic detectado para crear parada en Lat: ${lat}, Lng: ${lng}`);
+        console.log(`📍 [MAPA_EVENTOS]: Clic capturado en coordenadas Lat: ${lat}, Lng: ${lng}`);
+
+        if (typeof google === "undefined" || !google.maps || !google.maps.Geocoder) {
+            console.error("❌ [MAPA_EVENTOS]: Google Maps Geocoder SDK no está disponible.");
+            return;
+        }
 
         const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-            if (status === "OK" && results[0]) {
-                const nuevaDireccion = results[0].formatted_address;
-
-                // Prompt o modal para registrar destinatario rápido
-                const destinatario = prompt("Nombre del Destinatario para esta parada:", "Cliente Nuevo");
-                if (destinatario) {
-                    const nuevaParada = {
-                        id: "PARADA_" + Date.now(),
-                        destinatario: destinatario,
-                        direccion: nuevaDireccion,
-                        lat: lat,
-                        lng: lng,
-                        estado: "PENDIENTE"
-                    };
-
-                    console.log("[Mapa] Nueva parada creada desde clic:", nuevaParada);
-
-                    // Guardar en la estructura local y refrescar marcadores
-                    if (typeof window.agregarParadaLocal === "function") {
-                        window.agregarParadaLocal(nuevaParada);
+        
+        try {
+            const response = await new Promise((resolve, reject) => {
+                geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+                    if (status === "OK" && results && results[0]) {
+                        resolve(results[0].formatted_address);
+                    } else {
+                        reject(status);
                     }
-                }
-            } else {
-                console.error("[Mapa] Geocoder falló debido a:", status);
-            }
-        });
+                });
+            });
 
-        // Desactivar modo creación tras seleccionar
-        activarModoSeleccionMapaUI();
+            const nuevaDireccion = response || `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+            
+            // Reemplazo asíncrono no bloqueante
+            const destinatario = window.prompt ? window.prompt("Nombre del Destinatario para esta parada:", "Cliente Nuevo") : "Cliente Nuevo";
+            
+            if (destinatario && destinatario.trim() !== "") {
+                const nuevaParada = {
+                    id: "PARADA_" + Date.now(),
+                    ssc: "NEW-" + Math.floor(1000 + Math.random() * 9000),
+                    destinatario: destinatario.trim(),
+                    direccion: nuevaDireccion,
+                    lat: lat,
+                    lng: lng,
+                    estado: "PENDIENTE",
+                    zona: localStorage.getItem("zona_activa_operacion") || "GENERAL",
+                    created_at: new Date().toISOString()
+                };
+
+                console.log("➕ [MAPA_EVENTOS]: Creando y persisiendo nueva parada:", nuevaParada);
+
+                // Integración local y actualización global de memorias RAM
+                if (typeof window.agregarParadaLocal === "function") {
+                    await window.agregarParadaLocal(nuevaParada);
+                } else {
+                    let paradasActuales = await obtenerParadasGuardadas();
+                    paradasActuales.push(nuevaParada);
+                    await guardarRutaZonificada(paradasActuales);
+                    
+                    window.__CACHE_PARADAS_MACONDO__ = [...paradasActuales];
+                    window.paradasMemoriaLocal = [...paradasActuales];
+                    window.paradasRutaActiva = [...paradasActuales];
+                    window.pedidosGlobales = [...paradasActuales];
+                }
+
+                // Refrescar mapa e interfaz
+                if (typeof window.actualizarPuntosEnMapa === "function") {
+                    const paradasActualizadas = window.__CACHE_PARADAS_MACONDO__ || await obtenerParadasGuardadas();
+                    window.actualizarPuntosEnMapa(paradasActualizadas, 0);
+                }
+            }
+        } catch (error) {
+            console.error("❌ [MAPA_EVENTOS]: Fallo en la geocodificación inversa:", error);
+        } finally {
+            activarModoSeleccionMapaUI(); // Desactivar modo edición tras completar
+        }
     });
 }
 
 /**
- * 4. Dibujar / Actualizar Trazado de Ruta y Marcadores por Zona o Secuencia Reordenada
- * @param {string} zonaFilter - Filtro de zona opcional
+ * 4. Dibujar / Actualizar Trazado de Ruta y Marcadores sobre el mapa
+ * @param {string|null} zonaFilter - Filtro opcional de zona
  * @param {Array} listaParadas - Arreglo de paradas ordenadas
  */
 export function actualizarTrazadoMapa(zonaFilter = null, listaParadas = []) {
-    if (!window.mapaMensajero) return;
+    const mapaInstancia = window.mapaMensajero || window.mapaInstanciaGlobal || window.mapaInstancia;
+    if (!mapaInstancia) return;
 
-    console.log(`[Mapa] Actualizando trazado. Zona: ${zonaFilter || 'GLOBAL'}, Total Paradas: ${listaParadas.length}`);
+    const targetZona = zonaFilter ? estandarizarZonaCanonica(zonaFilter) : null;
+    console.log(`🗺️ [MAPA_TRAZADO]: Actualizando ruta. Zona: ${targetZona || 'GLOBAL'}, Paradas: ${listaParadas.length}`);
 
-    // Limpiar marcadores existentes
-    marcadoresMapa.forEach(marker => marker.setMap(null));
+    // Limpieza de marcadores locales previos
+    marcadoresMapa.forEach(marker => {
+        if (marker && typeof marker.setMap === "function") marker.setMap(null);
+    });
     marcadoresMapa = [];
 
-    // Limpiar polyline previa
-    if (trazadoRutaPolyline) {
+    // Limpieza de polilíneas
+    if (trazadoRutaPolyline && typeof trazadoRutaPolyline.setMap === "function") {
         trazadoRutaPolyline.setMap(null);
+        trazadoRutaPolyline = null;
     }
+
+    if (!listaParadas || listaParadas.length === 0) return;
+
+    // Filtrar paradas por zona si aplica
+    const paradasProcesar = targetZona 
+        ? listaParadas.filter(p => p && obtenerZonaParadaCanonica(p) === targetZona)
+        : listaParadas;
 
     const pathCoordinates = [];
     const bounds = new google.maps.LatLngBounds();
 
-    listaParadas.forEach((parada, index) => {
-        if (parada.lat && parada.lng) {
-            const pos = { lat: parseFloat(parada.lat), lng: parseFloat(parada.lng) };
+    paradasProcesar.forEach((parada, index) => {
+        const lat = parseFloat(parada.lat || parada.latitud);
+        const lng = parseFloat(parada.lng || parada.longitud);
+
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            const pos = { lat, lng };
             pathCoordinates.push(pos);
             bounds.extend(pos);
-
-            const marker = new google.maps.Marker({
-                position: pos,
-                map: window.mapaMensajero,
-                title: `#${index + 1} - ${parada.destinatario || 'Parada'}`,
-                label: {
-                    text: `${index + 1}`,
-                    color: "#0d1117",
-                    fontWeight: "bold"
-                }
-            });
-
-            marcadoresMapa.push(marker);
         }
     });
 
-    // Dibujar línea conectora neón
+    // Dibujar línea conectora neón si no existe DirectionsRenderer activo
     if (pathCoordinates.length > 0) {
-        trazadoRutaPolyline = new google.maps.Polyline({
-            path: pathCoordinates,
-            geodesic: true,
-            strokeColor: "#00e5ff",
-            strokeOpacity: 0.8,
-            strokeWeight: 4
-        });
+        if (!window.__DIRECTIONS_RENDERER__) {
+            trazadoRutaPolyline = new google.maps.Polyline({
+                path: pathCoordinates,
+                geodesic: true,
+                strokeColor: "#00e5ff",
+                strokeOpacity: 0.85,
+                strokeWeight: 4
+            });
 
-        trazadoRutaPolyline.setMap(window.mapaMensajero);
-        window.mapaMensajero.fitBounds(bounds);
-        console.log("[Mapa] Polyline y marcadores redibujados exitosamente.");
+            trazadoRutaPolyline.setMap(mapaInstancia);
+        }
+
+        if (!bounds.isEmpty()) {
+            mapaInstancia.fitBounds(bounds);
+        }
+        console.log("✅ [MAPA_TRAZADO]: Trazado y límites de mapa re-calculados exitosamente.");
     }
 }
 
-// 5. Listener Global: Escuchar eventos de reordenamiento por Drag & Drop desde mensajero-rutas.js
+// 5. Escuchar eventos globales de reordenamiento
 window.addEventListener("rutasReordenadas", (event) => {
     const { zonaId, nuevaSecuencia } = event.detail || {};
-    console.log(`[Mapa] Capturado evento 'rutasReordenadas' para Zona: ${zonaId}`, nuevaSecuencia);
+    console.log(`🔄 [MAPA_EVENTO]: Evento 'rutasReordenadas' capturado para Zona: ${zonaId}`);
     
-    if (typeof window.obtenerParadasLocalesPorZona === "function") {
-        const paradasActualizadas = window.obtenerParadasLocalesPorZona(zonaId);
-        actualizarTrazadoMapa(zonaId, paradasActualizadas);
-    }
+    const paradasLocales = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || [];
+    actualizarTrazadoMapa(zonaId, nuevaSecuencia || paradasLocales);
 });
 
-// Inicialización de parámetros de navegación al cargar la vista de mapa
+// Bindings globales para compatibilidad heredada (Window Scope)
+window.toggleBuscadorMapaUI = toggleBuscadorMapaUI;
+window.activarModoSeleccionMapaUI = activarModoSeleccionMapaUI;
+window.actualizarTrazadoMapa = actualizarTrazadoMapa;
+window.registrarEventosClicMapa = registrarEventosClicMapa;
+
+// Inicialización automática
 document.addEventListener("DOMContentLoaded", () => {
     const urlParams = new URLSearchParams(window.location.search);
     const zonaParam = urlParams.get("zona");
     if (zonaParam) {
-        console.log(`[Mapa] Inicializado mapa con foco en Zona: ${zonaParam}`);
+        const zonaLimpia = estandarizarZonaCanonica(zonaParam);
+        console.log(`📍 [MAPA_INIT]: Inicializando vista con foco en Zona: ${zonaLimpia}`);
+        localStorage.setItem("zona_activa_operacion", zonaLimpia);
     }
 });

@@ -1,6 +1,6 @@
 /**
  * PROTOCOLO MACONDO - EVENTOS, BUSCADOR MULTICRITERIO Y CONTROLES DEL MAPA
- * Ubicación: modulos/mapa/mapa-eventos.js
+ * Ubicación: pwa-mensajero/modulos/mapa/mapa-eventos.js
  */
 
 import { crearIconoParadaRadarSVG } from "./mapa-iconos.js";
@@ -11,8 +11,8 @@ import { IndexedStore } from "../db/indexed-store.js";
 const KEY_PERSISTENCIA_LOCK = 'map_interaction_locked';
 
 let modoCrearParadaActivo = false;
-let listenerClicMapa = null;
 let marcadorBusquedaTemp = null;
+let debounceTimerBuscador = null;
 
 const dbStore = new IndexedStore();
 
@@ -83,7 +83,7 @@ export const mapaEventos = {
     mapaInstancia: null,
 
     inicializarControles(mapa) {
-        this.mapaInstancia = mapa;
+        this.mapaInstancia = mapa || window.mapaMensajero || window.mapaInstanciaGlobal;
         console.log('⚡ [MAPA_EVENTOS]: Asignando listeners a los controles del mapa.');
 
         const btnZoomIn = document.getElementById('btn-zoom-in');
@@ -122,8 +122,9 @@ export const mapaEventos = {
                     if (typeof window.recargarMapaCompleto === "function") {
                         await window.recargarMapaCompleto();
                         console.log("✅ [MAPA_EVENTOS]: Sincronización Local-First del mapa completada.");
-                    } else {
-                        console.error("❌ [MAPA_EVENTOS]: 'window.recargarMapaCompleto' no está definida.");
+                    } else if (typeof window.actualizarPuntosEnMapa === "function") {
+                        const paradas = await this.obtenerColeccionParadas();
+                        window.actualizarPuntosEnMapa(paradas, 0);
                     }
                 } catch (err) {
                     console.error("❌ [MAPA_EVENTOS]: Error crítico durante la recarga del mapa:", err);
@@ -157,9 +158,12 @@ export const mapaEventos = {
 
         if (!inputBuscador) return;
 
+        // Búsqueda fluida con debounce de 200 ms
         inputBuscador.addEventListener("input", (e) => {
             const query = e.target.value;
             if (btnLimpiar) btnLimpiar.style.display = query.trim().length > 0 ? "block" : "none";
+
+            clearTimeout(debounceTimerBuscador);
 
             if (query.trim().length === 0) {
                 if (listaSugerencias) {
@@ -169,12 +173,15 @@ export const mapaEventos = {
                 return;
             }
 
-            this.ejecutarFiltradoParadas(query);
+            debounceTimerBuscador = setTimeout(() => {
+                this.ejecutarFiltradoParadas(query);
+            }, 200);
         });
 
         inputBuscador.addEventListener("keypress", (e) => {
             if (e.key === "Enter") {
                 e.preventDefault();
+                clearTimeout(debounceTimerBuscador);
                 const query = inputBuscador.value.trim();
                 if (query.length > 0) {
                     if (listaSugerencias) listaSugerencias.style.display = "none";
@@ -191,7 +198,7 @@ export const mapaEventos = {
                     listaSugerencias.style.display = "none";
                     listaSugerencias.innerHTML = "";
                 }
-                if (marcadorBusquedaTemp) {
+                if (marcadorBusquedaTemp && typeof marcadorBusquedaTemp.setMap === "function") {
                     marcadorBusquedaTemp.setMap(null);
                 }
                 inputBuscador.focus();
@@ -207,16 +214,13 @@ export const mapaEventos = {
     },
 
     /**
-     * Recupera la lista activa de paradas desde la memoria global o IndexedDB
+     * Recupera la lista activa de paradas desde las RAMs o IndexedDB
      * @returns {Promise<Array<Object>>}
      */
     async obtenerColeccionParadas() {
-        if (Array.isArray(window.paradasRutaActiva) && window.paradasRutaActiva.length > 0) {
-            return window.paradasRutaActiva;
-        }
-        if (Array.isArray(window.pedidosGlobales) && window.pedidosGlobales.length > 0) {
-            window.paradasRutaActiva = window.pedidosGlobales;
-            return window.paradasRutaActiva;
+        const cacheRAM = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales;
+        if (Array.isArray(cacheRAM) && cacheRAM.length > 0) {
+            return cacheRAM;
         }
 
         try {
@@ -231,7 +235,8 @@ export const mapaEventos = {
 
             if (Array.isArray(paradasLocal) && paradasLocal.length > 0) {
                 window.paradasRutaActiva = paradasLocal;
-                return window.paradasRutaActiva;
+                window.__CACHE_PARADAS_MACONDO__ = paradasLocal;
+                return paradasLocal;
             }
         } catch (err) {
             console.warn("⚠️ [MAPA_EVENTOS]: No se pudo consultar IndexedDB. Usando fallback de memoria:", err);
@@ -252,7 +257,7 @@ export const mapaEventos = {
 
         if (intencion.tipo === 'STOP') {
             resultados = paradas.filter((p, index) => {
-                const sec = parseInt(p.secuencia || p.orden || index + 1, 10);
+                const sec = parseInt(p.secuencia || p.orden || p.secuenciaZona || index + 1, 10);
                 return sec === intencion.numeroStop;
             }).map(p => ({ ...p, _categoriaBusqueda: 'STOP' }));
         } 
@@ -293,7 +298,7 @@ export const mapaEventos = {
 
         if (coincidencias.length > 0) {
             html += coincidencias.map((p, idx) => {
-                const sec = p.secuencia || p.orden || idx + 1;
+                const sec = p.secuencia || p.orden || p.secuenciaZona || idx + 1;
                 const uid = obtenerIdUnicoParada(p);
                 const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente N/A";
                 const direccionTexto = p.direccion || p.dir || "Sin dirección";
@@ -368,7 +373,7 @@ export const mapaEventos = {
 
     ejecutarGeocodificacionDireccion(direccion) {
         if (!direccion) return;
-        const mapa = window.mapaMensajero || window.mapaInstancia;
+        const mapa = this.mapaInstancia || window.mapaMensajero || window.mapaInstanciaGlobal;
 
         if (typeof google === "undefined" || !google.maps || !mapa) {
             console.warn("⚠️ [BUSQUEDA_MAPA_WARN]: Google Maps SDK no está inicializado.");
@@ -379,14 +384,14 @@ export const mapaEventos = {
         const query = direccion.toLowerCase().includes("cali") ? direccion : `${direccion}, Cali, Colombia`;
 
         geocoder.geocode({ address: query }, (results, status) => {
-            if (status === "OK" && results[0]) {
-                let ubicacionActual = results[0].geometry.location;
-                let dirFormateada = results[0].formatted_address;
+            if (status === "OK" && results && results[0]) {
+                const ubicacionActual = results[0].geometry.location;
+                const dirFormateada = results[0].formatted_address;
 
                 mapa.setCenter(ubicacionActual);
                 mapa.setZoom(16);
 
-                if (marcadorBusquedaTemp) {
+                if (marcadorBusquedaTemp && typeof marcadorBusquedaTemp.setMap === "function") {
                     marcadorBusquedaTemp.setMap(null);
                 }
 
@@ -398,29 +403,6 @@ export const mapaEventos = {
                     title: `📍 ${dirFormateada}`
                 });
 
-                const actualizarInfoWindow = (direccionTexto) => {
-                    if (window.infoWindowMensajero) {
-                        const infoContent = `
-                            <div style="background: #0c080f; color: #fff; padding: 10px; border: 1px solid #ff007f; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 6px; text-align: center; max-width: 220px;">
-                                <strong style="color: #ff007f;">[📍 UBICACIÓN SELECCIONADA]</strong><br/>
-                                <span style="display:inline-block; margin: 4px 0; color: #e0e0e0;">${direccionTexto}</span><br/>
-                                <small style="color: #00ff66;">👉 Clic para agregar parada</small><br/>
-                                <button type="button" onclick="window.confirmarParadaDesdePinBusqueda()" style="margin-top: 8px; background: #ff007f; color: #fff; border: none; padding: 10px; font-weight: bold; font-size: 0.75rem; cursor: pointer; border-radius: 4px; width: 100%; min-height: 44px;">
-                                    ➕ DESPLEGAR FORMULARIO
-                                </button>
-                            </div>`;
-                        window.infoWindowMensajero.setContent(infoContent);
-                        window.infoWindowMensajero.open(mapa, marcadorBusquedaTemp);
-                    }
-                };
-
-                actualizarInfoWindow(dirFormateada);
-
-                window.confirmarParadaDesdePinBusqueda = function() {
-                    const pos = marcadorBusquedaTemp.getPosition();
-                    desplegarFormularioConDireccion(dirFormateada, pos.lat(), pos.lng());
-                };
-
                 marcadorBusquedaTemp.addListener("click", () => {
                     const pos = marcadorBusquedaTemp.getPosition();
                     desplegarFormularioConDireccion(dirFormateada, pos.lat(), pos.lng());
@@ -428,7 +410,7 @@ export const mapaEventos = {
 
                 console.log(`✅ [GEOCODE_OK]: Punto marcado en ${dirFormateada}`);
             } else {
-                alert("⚠️ No se logró ubicar la dirección ingresada en el mapa.");
+                console.error("❌ [GEOCODE_ERROR]: Geocodificación fallida:", status);
             }
         });
     },
@@ -437,7 +419,7 @@ export const mapaEventos = {
         const card = document.getElementById("tarjeta-detalle-parada");
         if (!card) return;
 
-        const sec = parada.secuencia || parada.orden || 1;
+        const sec = parada.secuencia || parada.orden || parada.secuenciaZona || 1;
         const nombreCliente = parada.destinatario || parada.cliente || parada.nombre_cliente || parada.nombre || "Cliente N/A";
 
         const elemSec = document.getElementById("card-stop-secuencia");
@@ -491,7 +473,7 @@ export const mapaEventos = {
             const distTexto = p.distanciaMetros >= 1000 
                 ? `${(p.distanciaMetros / 1000).toFixed(2)} km` 
                 : `${Math.round(p.distanciaMetros)} m`;
-            const sec = p.secuencia || p.orden || "?";
+            const sec = p.secuencia || p.orden || p.secuenciaZona || "?";
             const uid = obtenerIdUnicoParada(p);
             const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente";
 
@@ -516,7 +498,7 @@ export const mapaEventos = {
 
     ejecutarZoom(delta) {
         if (!this.mapaInstancia) {
-            this.mapaInstancia = window.mapaMensajero || window.mapaInstancia;
+            this.mapaInstancia = window.mapaMensajero || window.mapaInstanciaGlobal;
         }
         if (!this.mapaInstancia) return;
 
@@ -528,7 +510,7 @@ export const mapaEventos = {
 
     alternarBloqueoMapa(estadoForzado = null) {
         if (!this.mapaInstancia) {
-            this.mapaInstancia = window.mapaMensajero || window.mapaInstancia;
+            this.mapaInstancia = window.mapaMensajero || window.mapaInstanciaGlobal;
         }
 
         const btnToggleLock = document.getElementById('btn-toggle-lock');
@@ -582,13 +564,8 @@ export const mapaEventos = {
 function desplegarFormularioConDireccion(direccion, lat, lng) {
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/ruta-activa.html");
-    } else {
-        const pestanaRuta = document.getElementById("pestana-ruta-activa");
-        if (pestanaRuta) {
-            document.querySelectorAll(".contenedor-pestana").forEach((p) => p.classList.remove("activa"));
-            document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
-            pestanaRuta.classList.add("activa");
-        }
+    } else if (typeof window.alternarVistaPestaña === "function") {
+        window.alternarVistaPestaña("pestana-ruta-activa");
     }
 
     setTimeout(() => {
@@ -605,15 +582,19 @@ export function registrarEventosClicMapa(callbackNuevaParada) {}
 
 export function toggleBuscadorMapaUI() {
     const inputBuscador = document.getElementById("buscador-paradas-mapa");
-    if (inputBuscador) inputBuscador.focus();
+    if (inputBuscador) {
+        inputBuscador.focus();
+    }
 }
 
 export function ejecutarBusquedaDireccion(dir) {
     mapaEventos.ejecutarGeocodificacionDireccion(dir);
 }
 
+// Global Bindings
 window.toggleBuscadorMapaUI = toggleBuscadorMapaUI;
 window.ejecutarBusquedaDireccion = ejecutarBusquedaDireccion;
+window.ejecutarBusquedaParadas = (query) => mapaEventos.ejecutarFiltradoParadas(query);
 
 if (typeof document !== "undefined") {
     document.addEventListener("DOMContentLoaded", () => {

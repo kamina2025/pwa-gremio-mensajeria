@@ -1,7 +1,7 @@
 /* ==========================================================================
-   VISOR DE MAPA FULLSCREEN & CONTROLES CIBERPUNK
-   Ruta: style/mapa-activa.css
-   Optimizado para PWA, Android Accessibility y Alto Contraste Neón
+   PROTOCOLO MACONDO - VISOR DE MAPA FULLSCREEN & CONTROLES CYBERPUNK
+   Ubicación: style/mapa-activa.css (o vistas/ruta/mapa-activa.css)
+   Optimizado para PWA, Android Accessibility, Safe-Areas y Alto Contraste Neón
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -41,10 +41,10 @@
 .cyber-search-wrapper,
 .contenedor-busqueda-mapa {
     position: absolute;
-    top: 14px;
+    top: calc(14px + env(safe-area-inset-top, 0px));
     left: 14px;
     z-index: 1000;
-    width: calc(100% - 90px);
+    width: calc(100% - 80px);
     max-width: 420px;
 }
 
@@ -57,6 +57,7 @@
     padding: 6px 12px;
     box-shadow: 0 0 15px rgba(0, 229, 255, 0.35), inset 0 0 8px rgba(0, 229, 255, 0.1);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -98,9 +99,10 @@
     color: var(--neon-magenta, #ff3366);
     font-weight: bold;
     cursor: pointer;
-    padding: 0 6px;
+    padding: 4px 8px;
     font-size: 1rem;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
     transition: transform 0.15s ease;
 }
 
@@ -109,7 +111,7 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. LISTA DESPLEGABLE DE SUGERENCIAS CYBERPUNK (ELEVACIÓN & ALTO CONTRASTE)
+   3. LISTA DESPLEGABLE DE SUGERENCIAS CYBERPUNK
    -------------------------------------------------------------------------- */
 .cyber-sugerencias-lista {
     list-style: none;
@@ -122,6 +124,7 @@
     overflow-y: auto;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.95), 0 0 15px rgba(0, 229, 255, 0.3) !important;
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     position: absolute;
     width: 100%;
     left: 0;
@@ -152,6 +155,7 @@
     cursor: pointer;
     transition: background 0.2s ease;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .cyber-sugerencia-item:last-child {
@@ -246,6 +250,7 @@
     border: 1px solid var(--neon-cyan, #00e5ff);
     box-shadow: 0 0 15px rgba(0, 229, 255, 0.3);
     backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
 }
 
 .cyber-btn-map {
@@ -278,7 +283,7 @@
     box-shadow: 0 0 12px rgba(255, 51, 102, 0.4);
 }
 
-/* Botón de Refresco Cyberpunk (Ámbar Neón) */
+/* Botón de Refresco Cyberpunk */
 .cyber-btn-map.cyber-btn-refresh {
     border-color: #ffb300;
     color: #ffb300;
@@ -306,12 +311,8 @@
 }
 
 @keyframes cyberSpin {
-    0% {
-        transform: rotate(0deg);
-    }
-    100% {
-        transform: rotate(360deg);
-    }
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* --------------------------------------------------------------------------
@@ -319,7 +320,7 @@
    -------------------------------------------------------------------------- */
 .panel-inferior-mapa {
     position: absolute;
-    bottom: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     left: 12px;
     right: 12px;
     z-index: 100;
@@ -329,6 +330,7 @@
     gap: 8px;
     background: rgba(13, 17, 23, 0.95);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     padding: 8px;
     border: 1px solid var(--neon-cyan, #00e5ff);
     border-radius: 8px;
@@ -347,7 +349,7 @@
     background: transparent;
     color: var(--neon-cyan, #00e5ff);
     border: 1px solid var(--neon-cyan, #00e5ff);
-    font-family: var(--cyber-font, monospace);
+    font-family: var(--cyber-font, "Share Tech Mono", monospace);
     font-weight: bold;
     border-radius: 6px;
     cursor: pointer;
@@ -363,24 +365,200 @@
 }
 
 /* --------------------------------------------------------------------------
-   6. ADAPTABILIDAD RESPONSIVE (PANTALLAS ESTRECHAS / MÓVILES)
+   6. TARJETA FLOTANTE DETALLE DE PARADA (CENTRADOS & COTA SEGURA)
+   -------------------------------------------------------------------------- */
+.cyber-stop-card {
+    position: absolute;
+    /* Eleva la tarjeta por encima del panel de acciones y la botonera flotante */
+    bottom: calc(110px + env(safe-area-inset-bottom, 0px)); 
+    
+    /* Centrado horizontal perfecto con matriz relativa */
+    left: 50%;
+    transform: translateX(-50%);
+    
+    /* Ancho adaptativo fluido para móviles y tablets */
+    width: calc(100% - 32px);
+    max-width: 420px;
+    margin: 0;
+    
+    /* Nivel z-index superior sobre el visor ráster y paneles */
+    z-index: 1002 !important; 
+    
+    /* Estilos Neón Cyberpunk */
+    background: rgba(13, 17, 23, 0.96) !important;
+    border: 1.5px solid var(--neon-cyan, #00e5ff);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 229, 255, 0.35);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    font-family: var(--cyber-font, "Share Tech Mono", monospace);
+    color: #ffffff;
+    
+    /* Animación de entrada fluida */
+    animation: fadeInCyberCard 0.25s ease-out forwards;
+}
+
+/* Animación ajustada para preservar el centrado en el eje X (-50%) */
+@keyframes fadeInCyberCard {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 15px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+.cyber-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.25);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
+.cyber-card-badge {
+    background: var(--neon-cyan, #00e5ff);
+    color: #0d1117;
+    font-weight: 900;
+    font-size: 0.8rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+}
+
+.cyber-card-status {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--neon-green, #39ff14);
+    text-shadow: 0 0 6px rgba(57, 255, 20, 0.5);
+}
+
+.cyber-card-close {
+    background: transparent;
+    border: none;
+    color: var(--neon-magenta, #ff3366);
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 2px 6px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.15s ease;
+}
+
+.cyber-card-close:active {
+    transform: scale(0.85);
+}
+
+.cyber-card-body h4 {
+    margin: 0 0 6px 0;
+    font-size: 0.95rem;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.cyber-card-body p {
+    margin: 3px 0;
+    font-size: 0.8rem;
+    color: var(--text-color, #c3ccdb);
+    word-break: break-word;
+}
+
+.cyber-card-footer {
+    margin-top: 10px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    padding-top: 8px;
+}
+
+.cyber-cercanas-title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #ffb300;
+    display: block;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+
+.cyber-cercanas-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.btn-parada-cercana {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #ffffff;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.btn-parada-cercana:active,
+.btn-parada-cercana:hover {
+    background: rgba(0, 229, 255, 0.15);
+    border-color: var(--neon-cyan, #00e5ff);
+}
+
+.btn-parada-cercana span {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--neon-cyan, #00e5ff);
+}
+
+.btn-parada-cercana small {
+    font-size: 0.72rem;
+    color: #c3ccdb;
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   7. ADAPTABILIDAD RESPONSIVE (PANTALLAS PEQUEÑAS / MÓVILES)
    -------------------------------------------------------------------------- */
 @media screen and (max-width: 480px) {
     .cyber-search-wrapper,
     .contenedor-busqueda-mapa {
-        top: 10px;
+        top: calc(10px + env(safe-area-inset-top, 0px));
         left: 10px;
-        width: calc(100% - 80px);
+        width: calc(100% - 74px);
     }
 
     .cyber-map-controls {
         right: 10px;
+        padding: 6px;
+        gap: 8px;
+    }
+
+    .cyber-btn-map {
+        width: 44px;
+        height: 44px;
+        font-size: 1.1rem;
     }
 
     .panel-inferior-mapa {
-        bottom: 10px;
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px));
         left: 10px;
         right: 10px;
         padding: 6px;
+    }
+
+    .cyber-stop-card {
+        bottom: calc(105px + env(safe-area-inset-bottom, 0px));
+        width: calc(100% - 20px);
+        padding: 10px;
     }
 }

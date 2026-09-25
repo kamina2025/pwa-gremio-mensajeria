@@ -1,12 +1,29 @@
 /**
- * Módulo de Aislamiento y Secuenciación de Rutas por Zona
+ * PROTOCOLO MACONDO - MÓDULO DE AISLAMIENTO Y SECUENCIACIÓN DE RUTAS POR ZONA
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-aislamiento.js
+ * Optimizado para PWA Local-First, prevención de re-renders redundantes y ordenamiento numérico estricto.
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
 import { obtenerParadasGuardadas } from "../mensajero-persistencia.js";
 import { trazarPolilineaRuta } from "../mapa/mapa-rutas.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
+
+// Control de caché en memoria para evitar ciclos de re-renderizado duplicados sobre el Canvas
+let ultimaZonaAislada = null;
+let ultimoHashParadas = "";
+
+/**
+ * Parsea y extrae el valor numérico de la secuencia de una parada.
+ * @param {Object} p - Objeto de parada
+ * @returns {number}
+ */
+function obtenerNumeroSecuencia(p) {
+  if (!p) return 0;
+  const val = p.secuenciaZona ?? p.orden ?? p.secuencia ?? 0;
+  const num = parseInt(val, 10);
+  return isNaN(num) ? 999999 : num;
+}
 
 /**
  * Procesa y aísla las paradas de la zona activa asegurando su orden físico secuencial.
@@ -16,55 +33,62 @@ import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zon
  */
 export async function calcularRutaAisladaPorZona(zonaKeyInput) {
   if (!zonaKeyInput) {
-    console.warn("⚠️ [MENSAJERO_RUTAS]: Se requiere una zonaKey para aislar la ruta.");
+    console.warn("⚠️ [ZONA_ISOLATION]: Se requiere una zonaKey válida para aislar la ruta.");
     return [];
   }
 
-  const targetCanónico = estandarizarZonaCanonica(zonaKeyInput);
-  const targetLimpio = normalizarClaveZona(targetCanónico);
+  const targetCanonico = estandarizarZonaCanonica(zonaKeyInput);
+  const targetLimpio = normalizarClaveZona(targetCanonico);
 
-  console.group(`⚡ [ZONA_ISOLATION]: Procesando secuencia exclusiva para zona: [${zonaKeyInput}] -> '${targetCanónico}'`);
+  console.group(`⚡ [ZONA_ISOLATION]: Procesando secuencia exclusiva para zona: [${zonaKeyInput}] -> '${targetCanonico}'`);
 
-  let todasLasParadas = [];
-
-  try {
-    todasLasParadas = (await obtenerParadasGuardadas()) || [];
-  } catch (err) {
-    console.warn("⚠️ [ZONA_ISOLATION]: Fallo al leer IndexedDB, recurriendo a memoria RAM...", err);
-  }
+  // 1. Prioridad de obtención de datos: RAM activa (Local-First) -> IndexedDB
+  let todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
 
   if (!todasLasParadas || todasLasParadas.length === 0) {
-    todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+    try {
+      todasLasParadas = (await obtenerParadasGuardadas()) || [];
+    } catch (err) {
+      console.warn("⚠️ [ZONA_ISOLATION]: Fallo al consultar IndexedDB local:", err);
+    }
   }
 
-  // 1. Filtrado canónico estricto
+  // 2. Filtrado canónico estricto de paradas pertenecientes a la zona objetivo
   let paradasDeZona = todasLasParadas.filter((p) => {
     if (!p) return false;
-    return obtenerZonaParadaCanonica(p) === targetCanónico;
+    return obtenerZonaParadaCanonica(p) === targetCanonico;
   });
 
   if (paradasDeZona.length === 0) {
-    console.warn(`⚠️ [ZONA_ISOLATION]: No hay paradas registradas para la zona canónica: '${targetCanónico}'`);
+    console.warn(`⚠️ [ZONA_ISOLATION]: No hay paradas registradas para la zona canónica: '${targetCanonico}'`);
     console.groupEnd();
     return [];
   }
 
-  // 2. ORDENAMIENTO FÍSICO (Crucial para que las líneas no se crucen y los marcadores coincidan)
-  // Reemplazamos la reescritura destructiva que ocurría aquí por un simple ordenamiento matemático.
-  paradasDeZona.sort((a, b) => {
-    const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
-    const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
-    return seqA - seqB;
-  });
+  // 3. Ordenamiento numérico estricto por secuencia
+  paradasDeZona.sort((a, b) => obtenerNumeroSecuencia(a) - obtenerNumeroSecuencia(b));
+
+  // 4. Generación de Hash de Control para evitar re-renderizados duplicados
+  const hashActual = `${targetCanonico}_${paradasDeZona.map(p => (p.id || p.ssc) + "_" + obtenerNumeroSecuencia(p)).join('|')}`;
+
+  if (ultimaZonaAislada === targetCanonico && ultimoHashParadas === hashActual) {
+    console.log(`ℹ️ [ZONA_ISOLATION]: Omitiendo re-renderizado duplicado para Zona: [${targetCanonico}] (Sin cambios detectados).`);
+    console.groupEnd();
+    return paradasDeZona;
+  }
+
+  // Actualizar estado de caché interna
+  ultimaZonaAislada = targetCanonico;
+  ultimoHashParadas = hashActual;
 
   console.log(`💾 [ZONA_ISOLATION]: ${paradasDeZona.length} parada(s) aisladas y ORDENADAS con éxito.`);
 
-  // 3. Renderizado Gráfico
+  // 5. Delegación del Renderizado Gráfico sobre el lienzo de mapa
   if (typeof window.actualizarPuntosEnMapa === "function") {
     console.log("🗺️ [ZONA_ISOLATION]: Delegando al renderizador principal del mapa...");
     window.actualizarPuntosEnMapa(paradasDeZona, 0);
   } else {
-    // Fallback de dibujo
+    // Fallback de dibujo para arquitecturas alternativas
     if (typeof trazarPolilineaRuta === "function") {
       trazarPolilineaRuta(paradasDeZona, targetLimpio);
     }
@@ -77,5 +101,8 @@ export async function calcularRutaAisladaPorZona(zonaKeyInput) {
   return paradasDeZona;
 }
 
+// BINDINGS GLOBALES EN WINDOW (Compatibilidad Legacy PWA)
 window.calcularRutaAisladaPorZona = calcularRutaAisladaPorZona;
 window.aislarParadasPorZona = calcularRutaAisladaPorZona;
+
+console.log("🟢 [ZONA_ISOLATION]: Módulo de aislamiento de rutas por zona inicializado y listo.");

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   PROTOCOLO MACONDO - CYBERPUNK MAP PIN MARKER (UI HOMOLOGADO)
+   PROTOCOLO MACONDO - CYBERPUNK MAP PIN MARKER & RADIAL MENU (UI HOMOLOGADO)
    Ubicación: pwa-mensajero/style/cyber-pin.css
    Coherencia total con pwa-mensajero/modulos/ui/ y layout.css
    ========================================================================== */
@@ -21,7 +21,150 @@
 }
 
 /* --------------------------------------------------------------------------
-   1. CONTENEDOR PRINCIPAL DEL PIN (Touch Target Apto Android: 52x64px)
+   1. ANIMACIONES Y KEYFRAMES (INVERSIÓN, RADAR Y GLOW)
+   -------------------------------------------------------------------------- */
+@keyframes spin-inversion {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-anim {
+  animation: spin-inversion 0.8s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes cyber-radar {
+  0% {
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.3);
+    opacity: 0;
+  }
+}
+
+@keyframes parpadeo-glow {
+  0% {
+    filter: drop-shadow(0 0 4px var(--state-glow));
+  }
+  100% {
+    filter: drop-shadow(0 0 12px var(--state-glow));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   2. CONTENEDOR OVERLAY Y BOTONES DEL MENÚ RADIAL EN CRUZ / ORBITAL
+   -------------------------------------------------------------------------- */
+.cyberpunk-cross-menu {
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  transform: translate(-50%, -50%);
+  pointer-events: auto !important;
+  z-index: 99999 !important;
+  touch-action: manipulation;
+}
+
+.cyber-btn {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  background: #0d1117;
+  border: 2px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--cyber-font);
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--neon-cyan), inset 0 0 4px var(--neon-cyan);
+  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.cyber-btn:active, 
+.cyber-btn:hover {
+  background: var(--neon-cyan);
+  color: #0d1117;
+  box-shadow: 0 0 18px var(--neon-cyan);
+  transform: scale(1.15);
+}
+
+/* POSICIONAMIENTO RADIAL / CARDINAL */
+.cyber-btn-norte { 
+  top: 0; 
+  left: 53px; 
+}
+
+.cyber-btn-este { 
+  top: 53px; 
+  right: 0; 
+  border-color: var(--neon-yellow); 
+  color: var(--neon-yellow); 
+  box-shadow: 0 0 10px var(--neon-yellow), inset 0 0 4px var(--neon-yellow); 
+}
+
+.cyber-btn-este:active,
+.cyber-btn-este:hover {
+  background: var(--neon-yellow);
+  color: #0d1117;
+  box-shadow: 0 0 18px var(--neon-yellow);
+}
+
+.cyber-btn-sur { 
+  bottom: 0; 
+  left: 53px; 
+}
+
+.cyber-btn-oeste { 
+  top: 53px; 
+  left: 0; 
+  border-color: var(--neon-magenta); 
+  color: var(--neon-magenta); 
+  box-shadow: 0 0 10px var(--neon-magenta), inset 0 0 4px var(--neon-magenta); 
+}
+
+.cyber-btn-oeste:active,
+.cyber-btn-oeste:hover {
+  background: var(--neon-magenta);
+  color: #0d1117;
+  box-shadow: 0 0 18px var(--neon-magenta);
+}
+
+/* VARIACIONES DE COLOR TRICOLOR DE ESTADO (BOTÓN SUR) */
+.cyber-btn-sur.estado-entregado {
+  border-color: var(--neon-green) !important;
+  color: var(--neon-green) !important;
+  box-shadow: 0 0 12px var(--neon-green), inset 0 0 4px var(--neon-green) !important;
+}
+
+.cyber-btn-sur.estado-en-camino {
+  border-color: var(--neon-yellow) !important;
+  color: var(--neon-yellow) !important;
+  box-shadow: 0 0 12px var(--neon-yellow), inset 0 0 4px var(--neon-yellow) !important;
+}
+
+.cyber-btn-sur.estado-no-entregado {
+  border-color: var(--neon-magenta) !important;
+  color: var(--neon-magenta) !important;
+  box-shadow: 0 0 12px var(--neon-magenta), inset 0 0 4px var(--neon-magenta) !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. CONTENEDOR PRINCIPAL DEL PIN (Touch Target Apto Android: 52x64px)
    -------------------------------------------------------------------------- */
 .cyber-pin-marker {
   position: relative;
@@ -50,11 +193,11 @@
 .cyber-pin-marker:active,
 .cyber-pin-marker.activa {
   transform: scale(1.22) translateY(-4px);
-  z-index: 999 !important; /* Mantiene el marcador por debajo de modales y toasts UI */
+  z-index: 999 !important;
 }
 
 /* --------------------------------------------------------------------------
-   2. CUERPO HEXAGONA BISELADO Y ANCLAJE
+   4. CUERPO HEXAGONAL BISELADO Y ANCLAJE
    -------------------------------------------------------------------------- */
 .pin-body {
   position: relative;
@@ -108,9 +251,7 @@
   fill: currentColor;
 }
 
-/* --------------------------------------------------------------------------
-   3. ANIMACIONES Y PULSO DE RADAR
-   -------------------------------------------------------------------------- */
+/* Pulso de Radar */
 .pin-pulse {
   display: none;
   position: absolute;
@@ -127,31 +268,8 @@
   will-change: transform, opacity;
 }
 
-@keyframes cyber-radar {
-  0% {
-    transform: translate(-50%, -50%) scale(0.4);
-    opacity: 0.9;
-  }
-  70% {
-    opacity: 0.3;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(2.3);
-    opacity: 0;
-  }
-}
-
-@keyframes parpadeo-glow {
-  0% {
-    filter: drop-shadow(0 0 4px var(--state-glow));
-  }
-  100% {
-    filter: drop-shadow(0 0 12px var(--state-glow));
-  }
-}
-
 /* --------------------------------------------------------------------------
-   4. MUTACIONES DE ESTADO COMPATIBLES CON LA CONSOLA UI (data-state)
+   5. MUTACIONES DE ESTADO COMPATIBLES CON LA CONSOLA UI (data-state)
    -------------------------------------------------------------------------- */
 
 /* Creación / Borrador */

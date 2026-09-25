@@ -7,13 +7,51 @@
 import { MAPA_ZONAS_CALI } from './geojson-cali.js';
 
 /**
+ * Extrae y normaliza las coordenadas (lat, lng) de un objeto de parada o nodo.
+ * @param {Object} p 
+ * @returns {{lat: number, lng: number}|null}
+ */
+function extraerCoordenadasValidas(p) {
+  if (!p || typeof p !== "object") return null;
+
+  let rawLat = p.lat ?? p.latitud ?? p.latitud_num ?? p.y ?? p.lat_num;
+  if ((rawLat === undefined || rawLat === null) && p.coordenadas) {
+    rawLat = p.coordenadas.lat ?? p.coordenadas.latitud;
+  }
+  if ((rawLat === undefined || rawLat === null) && p.centroide) {
+    rawLat = p.centroide.lat ?? p.centroide.latitud;
+  }
+
+  let rawLng = p.lng ?? p.longitud ?? p.longitud_num ?? p.x ?? p.lng_num;
+  if ((rawLng === undefined || rawLng === null) && p.coordenadas) {
+    rawLng = p.coordenadas.lng ?? p.coordenadas.longitud;
+  }
+  if ((rawLng === undefined || rawLng === null) && p.centroide) {
+    rawLng = p.centroide.lng ?? p.centroide.longitud;
+  }
+
+  if (rawLat === undefined || rawLng === undefined || rawLat === null || rawLng === null) {
+    return null;
+  }
+
+  const lat = parseFloat(String(rawLat).trim().replace(',', '.'));
+  const lng = parseFloat(String(rawLng).trim().replace(',', '.'));
+
+  if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+    return null;
+  }
+
+  return { lat, lng };
+}
+
+/**
  * Evalúa si un punto de coordenadas [lng, lat] se encuentra dentro de un polígono (Ray-casting algorithm).
  * @param {Array<number>} punto - Arreglo [longitud, latitud]
  * @param {Array<Array<number>>} vs - Matriz de vértices del polígono [[lng, lat], ...]
  * @returns {boolean} True si el punto está dentro del polígono
  */
 export function puntoEnPoligono(punto, vs) {
-  if (!punto || !vs || !Array.isArray(vs)) return false;
+  if (!punto || !vs || !Array.isArray(vs) || vs.length === 0) return false;
   const x = punto[0], y = punto[1];
   let inside = false;
   for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
@@ -35,8 +73,8 @@ export function obtenerZonaPorNombre(nombreZona) {
   const target = String(nombreZona).toLowerCase().trim();
   return MAPA_ZONAS_CALI.features.find(
     (feat) => feat.properties && (
-      (feat.properties.nombre && feat.properties.nombre.toLowerCase() === target) ||
-      (feat.properties.key && feat.properties.key.toLowerCase() === target)
+      (feat.properties.nombre && String(feat.properties.nombre).toLowerCase().trim() === target) ||
+      (feat.properties.key && String(feat.properties.key).toLowerCase().trim() === target)
     )
   ) || null;
 }
@@ -48,18 +86,17 @@ export function obtenerZonaPorNombre(nombreZona) {
  * @returns {Object|null} Feature GeoJSON de la zona coincidente o null
  */
 export function obtenerZonaPorCoordenadas(lat, lng) {
-  const pointLat = parseFloat(lat);
-  const pointLng = parseFloat(lng);
+  const coords = extraerCoordenadasValidas({ lat, lng });
+  if (!coords) return null;
 
-  if (isNaN(pointLat) || isNaN(pointLng) || pointLat === 0 || pointLng === 0) return null;
   if (!MAPA_ZONAS_CALI || !MAPA_ZONAS_CALI.features) return null;
 
-  const punto = [pointLng, pointLat];
+  const punto = [coords.lng, coords.lat];
 
   for (const feature of MAPA_ZONAS_CALI.features) {
     if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates[0]) {
-      const coords = feature.geometry.coordinates[0];
-      if (puntoEnPoligono(punto, coords)) {
+      const vs = feature.geometry.coordinates[0];
+      if (puntoEnPoligono(punto, vs)) {
         return feature;
       }
     }
@@ -76,20 +113,18 @@ export function obtenerZonaPorCoordenadas(lat, lng) {
  * @returns {number} Distancia en kilómetros
  */
 export function calcularDistanciaHaversine(lat1, lon1, lat2, lon2) {
-  const l1 = parseFloat(lat1);
-  const n1 = parseFloat(lon1);
-  const l2 = parseFloat(lat2);
-  const n2 = parseFloat(lon2);
+  const c1 = extraerCoordenadasValidas({ lat: lat1, lng: lon1 });
+  const c2 = extraerCoordenadasValidas({ lat: lat2, lng: lon2 });
 
-  if (isNaN(l1) || isNaN(n1) || isNaN(l2) || isNaN(n2)) return Infinity;
+  if (!c1 || !c2) return Infinity;
 
   const R = 6371; // Radio terrestre en km
-  const dLat = (l2 - l1) * (Math.PI / 180);
-  const dLon = (n2 - n1) * (Math.PI / 180);
+  const dLat = (c2.lat - c1.lat) * (Math.PI / 180);
+  const dLon = (c2.lng - c1.lng) * (Math.PI / 180);
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(l1 * (Math.PI / 180)) * Math.cos(l2 * (Math.PI / 180)) *
+    Math.cos(c1.lat * (Math.PI / 180)) * Math.cos(c2.lat * (Math.PI / 180)) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -111,13 +146,10 @@ export function calcularCentroide(paradas) {
   let validos = 0;
 
   paradas.forEach(p => {
-    if (!p) return;
-    const lat = parseFloat(p.lat || p.latitud || (p.coordenadas && p.coordenadas.lat) || (p.centroide && p.centroide.lat));
-    const lng = parseFloat(p.lng || p.longitud || (p.coordenadas && p.coordenadas.lng) || (p.centroide && p.centroide.lng));
-
-    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-      sumLat += lat;
-      sumLng += lng;
+    const coords = extraerCoordenadasValidas(p);
+    if (coords) {
+      sumLat += coords.lat;
+      sumLng += coords.lng;
       validos++;
     }
   });
@@ -141,23 +173,21 @@ export function buscarParadaMasCercana(origen, pendientes) {
     return { parada: null, indice: -1, distanciaKm: Infinity };
   }
 
-  const latOrigen = parseFloat(origen.lat || origen.latitud);
-  const lngOrigen = parseFloat(origen.lng || origen.longitud);
-
-  if (isNaN(latOrigen) || isNaN(lngOrigen)) {
+  const coordsOrigen = extraerCoordenadasValidas(origen);
+  if (!coordsOrigen) {
     return { parada: null, indice: -1, distanciaKm: Infinity };
   }
 
   pendientes.forEach((parada, idx) => {
-    if (!parada) return;
-    const latDestino = parseFloat(parada.lat || parada.latitud);
-    const lngDestino = parseFloat(parada.lng || parada.longitud);
+    const coordsDestino = extraerCoordenadasValidas(parada);
+    if (!coordsDestino) return;
 
-    if (isNaN(latDestino) || isNaN(lngDestino) || latDestino === 0 || lngDestino === 0) {
-      return;
-    }
-
-    const dist = calcularDistanciaHaversine(latOrigen, lngOrigen, latDestino, lngDestino);
+    const dist = calcularDistanciaHaversine(
+      coordsOrigen.lat,
+      coordsOrigen.lng,
+      coordsDestino.lat,
+      coordsDestino.lng
+    );
 
     if (dist < menorDistancia) {
       menorDistancia = dist;
@@ -169,7 +199,7 @@ export function buscarParadaMasCercana(origen, pendientes) {
   return { parada: paradaMasCercana, indice: indiceEncontrado, distanciaKm: menorDistancia };
 }
 
-// BINDINGS GLOBALES EN WINDOW
+// BINDINGS GLOBALES EN WINDOW EN ENTORNO DE NAVEGADOR
 if (typeof window !== "undefined") {
   window.puntoEnPoligono = puntoEnPoligono;
   window.obtenerZonaPorNombre = obtenerZonaPorNombre;

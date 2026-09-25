@@ -1,7 +1,7 @@
 /**
- * PROTOCOLO MACONDO - OPTIMIZADOR DE RUTAS Y PROXIMIDAD
- * Ubicación: modulos/rutas/rutas-optimizacion.js
- * Arquitectura: Local-First / Clustering (Min 2 / Max 4) / SCC & Subgrupos por Dirección
+ * PROTOCOLO MACONDO - OPTIMIZADOR DE RUTAS, PROXIMIDAD E INVERSIÓN
+ * Ubicación: pwa-mensajero/modulos/rutas/rutas-optimizacion.js
+ * Arquitectura: Local-First / Clustering (Min 2 / Max 4) / SCC & Subgrupos por Dirección / Inversión de Sentido
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
@@ -49,6 +49,26 @@ function obtenerCoordenadasValidas(p) {
 
   if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return null;
   return { lat, lng };
+}
+
+/**
+ * Recalcula atómicamente secuencias numéricas y clústeres en bloques de 4 elementos.
+ * @param {Array<Object>} paradasZonaOrdenadas 
+ * @returns {Array<Object>}
+ */
+function recalcularSecuenciasYClusteres(paradasZonaOrdenadas) {
+  const TAMANO_CLUSTER = 4;
+  return paradasZonaOrdenadas.map((p, idx) => {
+    const nuevoNumero = idx + 1;
+    const numGrupo = Math.ceil(nuevoNumero / TAMANO_CLUSTER);
+    
+    p.secuenciaZona = nuevoNumero;
+    p.orden = nuevoNumero;
+    p.secuencia = nuevoNumero;
+    p.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
+    p.updated_at = new Date().toISOString();
+    return p;
+  });
 }
 
 /**
@@ -134,7 +154,6 @@ function crearClustersProximidad(subgrupos) {
 
   while (pendientes.length > 0) {
     if (pendientes.length === 1) {
-      // Balancear sobrante de 1 elemento ajustando el clúster anterior
       if (clusters.length > 0 && clusters[clusters.length - 1].length < 4) {
         clusters[clusters.length - 1].push(pendientes.pop());
       } else if (clusters.length > 0) {
@@ -154,14 +173,13 @@ function crearClustersProximidad(subgrupos) {
     const coordsPivote = pivote.centroide;
     const clusterActual = [pivote];
 
-    // Ordenar pendientes restantes por proximidad Haversine al pivote
     pendientes.sort((a, b) => {
       const dA = calcularDistanciaHaversine(coordsPivote.lat, coordsPivote.lng, a.centroide.lat, a.centroide.lng);
       const dB = calcularDistanciaHaversine(coordsPivote.lat, coordsPivote.lng, b.centroide.lat, b.centroide.lng);
       return dA - dB;
     });
 
-    const tamanoDeseado = Math.min(3, pendientes.length); // Pivote (1) + hasta 3 cercanos = Max 4
+    const tamanoDeseado = Math.min(3, pendientes.length);
     const cercanos = pendientes.splice(0, tamanoDeseado);
     clusterActual.push(...cercanos);
 
@@ -220,7 +238,6 @@ function enrotrarSecuenciaFinal(clusters) {
           updated_at: new Date().toISOString()
         };
         listaFinalEnrutada.push(paradaEnrutada);
-        console.log(` 📍 [#${secuenciaGlobal}] [${grupoId}] [${subgrupo.subgrupoId}] -> ${paradaEnrutada.destinatario || paradaEnrutada.cliente || 'Parada'}`);
         secuenciaGlobal++;
       });
     });
@@ -230,41 +247,108 @@ function enrotrarSecuenciaFinal(clusters) {
 }
 
 /**
- * Función Principal Executable de Optimización por Zona.
- * @param {string} zonaKeyInput - Nombre o clave de la zona
- * @param {Object|null} [paradaInicioFix=null] - Parada inicial fijada
- * @param {Object|null} [paradaFinFix=null] - Parada final fijada
- * @returns {Promise<Array<Object>>} Lista de paradas de la zona enrutadas
+ * Invierte el orden secuencial de enrutamiento para una zona (Inversión de Sentido).
+ * @param {string} zonaKeyInput - Clave o nombre de la zona a invertir
+ * @returns {Promise<Array<Object>>} Lista global de paradas actualizada
  */
-export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioFix = null, paradaFinFix = null) {
+export async function invertirSecuenciaRutaZona(zonaKeyInput) {
   if (!zonaKeyInput) return [];
 
   const targetCanonico = estandarizarZonaCanonica(zonaKeyInput);
-  const targetLimpio = normalizarClaveZona(targetCanonico);
+  console.group(`🔄 [INVERSOR_RUTA]: Invirtiendo sentido de ruta para Zona '${targetCanonico}'`);
+
+  let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+
+  if (!todasLasParadas || todasLasParadas.length === 0) {
+    console.warn("⚠️ [INVERSOR_RUTA]: No se encontraron paradas en la base local.");
+    console.groupEnd();
+    return [];
+  }
+
+  let paradasZona = todasLasParadas.filter((p) => p && obtenerZonaParadaCanonica(p) === targetCanonico);
+
+  if (paradasZona.length <= 1) {
+    console.warn("ℹ️ [INVERSOR_RUTA]: Insuficientes paradas en la zona para realizar inversión.");
+    console.groupEnd();
+    return todasLasParadas;
+  }
+
+  // Ordenar por secuencia actual e invertir
+  paradasZona.sort((a, b) => (parseInt(a.secuenciaZona || a.secuencia || 0, 10)) - (parseInt(b.secuenciaZona || b.secuencia || 0, 10)));
+  paradasZona.reverse();
+
+  // Recalcular secuencias y clústeres atómicamente
+  paradasZona = recalcularSecuenciasYClusteres(paradasZona);
+
+  const mapaNuevosOrdenes = new Map();
+  paradasZona.forEach((p) => {
+    mapaNuevosOrdenes.set(obtenerIdUnicoParada(p), p);
+  });
+
+  let listaGlobalActualizada = todasLasParadas.map((p) => {
+    const idUnico = obtenerIdUnicoParada(p);
+    return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
+  });
+
+  listaGlobalActualizada.sort((a, b) => {
+    const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
+    const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
+    return seqA - seqB;
+  });
+
+  // Persistencia e integración Local-First
+  await guardarRutaZonificada(listaGlobalActualizada);
+  window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
+  window.paradasMemoriaLocal = [...listaGlobalActualizada];
+  window.paradasRutaActiva = [...listaGlobalActualizada];
+  window.pedidosGlobales = [...listaGlobalActualizada];
+
+  console.log(`✅ [INVERSOR_RUTA]: Secuencia invertida para ${paradasZona.length} paradas.`);
+
+  // Actualizar polilinea y UI
+  if (typeof window.trazarPolilineaRuta === "function") {
+    window.trazarPolilineaRuta(listaGlobalActualizada, targetCanonico);
+  } else if (typeof window.actualizarPuntosEnMapa === "function") {
+    window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
+  }
+
+  if (typeof window.renderizarParadasZonificadasUI === "function") {
+    await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
+  }
+
+  console.groupEnd();
+  return listaGlobalActualizada;
+}
+
+/**
+ * Función Principal de Optimización por Zona.
+ * @param {string} zonaKeyInput - Nombre o clave de la zona
+ * @returns {Promise<Array<Object>>} Lista de paradas enrutadas
+ */
+export async function optimizarRutaPorProximidadZona(zonaKeyInput) {
+  if (!zonaKeyInput) return [];
+
+  const targetCanonico = estandarizarZonaCanonica(zonaKeyInput);
 
   console.group(`⚡ [OPTIMIZADOR_PROXIMIDAD]: Ejecutando para Zona '${targetCanonico}'`);
 
-  // 1. Obtener la colección global de paradas (Memoria / Persistencia)
   let todasLasParadas = await obtenerParadasGuardadas();
   if (!todasLasParadas || todasLasParadas.length === 0) {
     todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
   }
 
-  // 2. Filtrar las paradas correspondientes a la zona solicitada
   let paradasZona = todasLasParadas.filter((p) => p && obtenerZonaParadaCanonica(p) === targetCanonico);
 
   if (paradasZona.length === 0) {
-    console.warn("ℹ️ [OPTIMIZADOR_PROXIMIDAD]: Insuficientes paradas en la zona para realizar optimización.");
+    console.warn("ℹ️ [OPTIMIZADOR_PROXIMIDAD]: Insuficientes paradas en la zona.");
     console.groupEnd();
     return paradasZona;
   }
 
-  // 3. Ejecutar Pipeline Jerárquico de Optimización
   const subgrupos = procesarSubgruposYDirecciones(paradasZona);
   const clusters = crearClustersProximidad(subgrupos);
   const paradasZonaEnrutadas = enrotrarSecuenciaFinal(clusters);
 
-  // 4. Mapear y Reemplazar dentro de la Lista Global
   const mapaNuevosOrdenes = new Map();
   paradasZonaEnrutadas.forEach(p => {
     mapaNuevosOrdenes.set(obtenerIdUnicoParada(p), p);
@@ -275,21 +359,18 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
     return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
   });
 
-  // Ordenamiento global por secuencia
   listaGlobalActualizada.sort((a, b) => {
     const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
     const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
     return seqA - seqB;
   });
 
-  // 5. Persistencia Local-First y Sincronización en RAM
   await guardarRutaZonificada(listaGlobalActualizada);
   window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
   window.paradasMemoriaLocal = [...listaGlobalActualizada];
   window.paradasRutaActiva = [...listaGlobalActualizada];
   window.pedidosGlobales = [...listaGlobalActualizada];
 
-  // 6. Refrescar Mapa y UI de Acordeones
   if (typeof window.trazarPolilineaRuta === "function") {
     window.trazarPolilineaRuta(paradasZonaEnrutadas, targetCanonico);
   } else if (typeof window.actualizarPuntosEnMapa === "function") {
@@ -309,3 +390,4 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
 // BINDINGS GLOBALES DE LEGACY / WINDOW
 window.optimizarRutaPorProximidadZona = optimizarRutaPorProximidadZona;
 window.optimizarRutaPorProximidad = optimizarRutaPorProximidadZona;
+window.invertirSecuenciaRutaZona = invertirSecuenciaRutaZona;

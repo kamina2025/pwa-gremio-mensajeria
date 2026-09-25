@@ -1,13 +1,11 @@
 /**
- * PROTOCOLO MACONDO - GESTOR DE MARCADORES, INFOWINDOWS Y MENÚ RADIAL CYBERPUNK
+ * PROTOCOLO MACONDO - GESTOR DE MARCADORES, INFOWINDOWS Y MENÚ ORBITAL CYBERPUNK
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
+ * Arquitectura: Google Maps OverlayView / Local-First / Orbital UI
  */
 
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
 import { IndexedStore } from "../db/indexed-store.js";
-/**
- * Habilita el arrastre del pin en el lienzo para reubicación (Acción Este - Mover).
- */
 import { actualizarParadaEnPlanillaLocal } from "../planilla/planillas-db.js";
 
 // Instancia de persistencia Local-First para operaciones de IndexedDB
@@ -33,7 +31,7 @@ function obtenerEndpointAPI() {
 }
 
 /**
- * Cierra de manera segura cualquier overlay activo de menú radial en pantalla.
+ * Cierra de manera segura cualquier overlay activo de menú orbital en pantalla.
  */
 export function cerrarOverlayActivo() {
     if (window.overlayMenuActivo && typeof window.overlayMenuActivo.cerrar === "function") {
@@ -49,7 +47,7 @@ export function cerrarOverlayActivo() {
 function sanitizarDireccionContexto(direccion) {
     if (!direccion) return "Cali, Colombia";
     const dirLower = direccion.toLowerCase();
-    if (dirLower.includes("cali") || dirLower.includes("jamundi") || dirLower.includes("yumbo")) {
+    if (dirLower.includes("cali") || dirLower.includes("jamundi") || dirLower.includes("yumbo") || dirLower.includes("palmira")) {
         return direccion;
     }
     return `${direccion}, Cali, Colombia`;
@@ -69,8 +67,8 @@ window.iniciarLlamadaAndroid = function (numeroTelefono) {
 };
 
 /**
- * Fabrica dinámicamente la clase MenuRadialOverlay garantizando
- * que google.maps.OverlayView esté definido al momento de instanciar.
+ * Fabrica dinámicamente la clase MenuRadialOverlay con geometría Orbital Cyberpunk
+ * garantizando que google.maps.OverlayView esté definido al momento de instanciar.
  * @returns {Function|null}
  */
 function obtenerClaseMenuRadialOverlay() {
@@ -87,32 +85,49 @@ function obtenerClaseMenuRadialOverlay() {
         constructor(posicion, handlers = {}) {
             super();
             this.posicion = posicion;
-            this.handlers = handlers; // { onEdit, onMove, onDelete, onReport }
+            this.handlers = handlers; // { onEdit, onMove, onDelete, onReport, ... }
             this.container = null;
             this.injectStyles();
         }
 
         injectStyles() {
-            if (document.getElementById("cyberpunk-menu-styles")) return;
+            if (document.getElementById("cyberpunk-orbital-styles")) return;
             const style = document.createElement("style");
-            style.id = "cyberpunk-menu-styles";
+            style.id = "cyberpunk-orbital-styles";
             style.textContent = `
                 .cyberpunk-cross-menu {
                     position: absolute;
                     width: 150px;
                     height: 150px;
                     transform: translate(-50%, -50%);
-                    pointer-events: auto;
-                    z-index: 10000;
+                    pointer-events: auto !important;
+                    z-index: 99999 !important;
                     touch-action: manipulation;
+                }
+                .orbital-ring-bg {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    width: 116px;
+                    height: 116px;
+                    transform: translate(-50%, -50%);
+                    border: 1px dashed rgba(0, 229, 255, 0.4);
+                    border-radius: 50%;
+                    pointer-events: none;
+                    box-shadow: 0 0 15px rgba(0, 229, 255, 0.15), inset 0 0 15px rgba(0, 229, 255, 0.15);
+                    animation: cyber-pulse-ring 3s infinite linear;
+                }
+                @keyframes cyber-pulse-ring {
+                    0% { transform: translate(-50%, -50%) rotate(0deg); }
+                    100% { transform: translate(-50%, -50%) rotate(360deg); }
                 }
                 .cyber-btn {
                     position: absolute;
-                    width: 44px;
-                    height: 44px;
+                    width: 36px;
+                    height: 36px;
                     background: #0d1117;
-                    border: 2px solid #00e5ff;
-                    color: #00e5ff;
+                    border: 2px solid var(--neon-cyan, #00e5ff);
+                    color: var(--neon-cyan, #00e5ff);
                     border-radius: 50%;
                     display: flex;
                     align-items: center;
@@ -121,31 +136,57 @@ function obtenerClaseMenuRadialOverlay() {
                     font-size: 13px;
                     font-weight: bold;
                     cursor: pointer;
-                    box-shadow: 0 0 10px #00e5ff, inset 0 0 4px #00e5ff;
+                    box-shadow: 0 0 8px var(--neon-cyan, #00e5ff), inset 0 0 4px var(--neon-cyan, #00e5ff);
                     transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
                     touch-action: manipulation;
                     -webkit-tap-highlight-color: transparent;
+                    user-select: none;
                 }
                 .cyber-btn:active, .cyber-btn:hover {
-                    background: #00e5ff;
+                    background: var(--neon-cyan, #00e5ff);
                     color: #0d1117;
-                    box-shadow: 0 0 18px #00e5ff;
-                    transform: scale(1.15);
+                    box-shadow: 0 0 16px var(--neon-cyan, #00e5ff);
+                    transform: scale(1.18);
                 }
                 .cyber-btn.danger {
                     border-color: #ff3366;
                     color: #ff3366;
-                    box-shadow: 0 0 10px #ff3366, inset 0 0 4px #ff3366;
+                    box-shadow: 0 0 8px #ff3366, inset 0 0 4px #ff3366;
                 }
                 .cyber-btn.danger:active, .cyber-btn.danger:hover {
                     background: #ff3366;
                     color: #0d1117;
-                    box-shadow: 0 0 18px #ff3366;
+                    box-shadow: 0 0 16px #ff3366;
                 }
-                .cyber-btn-norte { top: 0; left: 53px; }
-                .cyber-btn-este  { top: 53px; right: 0; }
-                .cyber-btn-sur   { bottom: 0; left: 53px; }
-                .cyber-btn-oeste { top: 53px; left: 0; }
+                .cyber-btn.amber {
+                    border-color: #ffb300;
+                    color: #ffb300;
+                    box-shadow: 0 0 8px #ffb300, inset 0 0 4px #ffb300;
+                }
+                .cyber-btn.amber:active, .cyber-btn.amber:hover {
+                    background: #ffb300;
+                    color: #0d1117;
+                    box-shadow: 0 0 16px #ffb300;
+                }
+                .cyber-btn.green {
+                    border-color: #39ff14;
+                    color: #39ff14;
+                    box-shadow: 0 0 8px #39ff14, inset 0 0 4px #39ff14;
+                }
+                .cyber-btn.green:active, .cyber-btn.green:hover {
+                    background: #39ff14;
+                    color: #0d1117;
+                    box-shadow: 0 0 16px #39ff14;
+                }
+                /* POSICIONAMIENTO ORBITAL EN ANILLO RADIANICO (8 NODOS, R=58px) */
+                .cyber-btn-norte    { top: 17px;  left: 57px; }  /* 0deg */
+                .cyber-btn-noreste  { top: 34px;  left: 98px; }  /* 45deg */
+                .cyber-btn-este     { top: 75px;  left: 115px;}  /* 90deg */
+                .cyber-btn-sudeste  { top: 116px; left: 98px; }  /* 135deg */
+                .cyber-btn-sur      { top: 133px; left: 57px; }  /* 180deg */
+                .cyber-btn-suroeste { top: 116px; left: 16px; }  /* 225deg */
+                .cyber-btn-oeste    { top: 75px;  left: -1px; }  /* 270deg */
+                .cyber-btn-noroeste { top: 34px;  left: 16px; }  /* 315deg */
             `;
             document.head.appendChild(style);
         }
@@ -154,10 +195,15 @@ function obtenerClaseMenuRadialOverlay() {
             this.container = document.createElement("div");
             this.container.className = "cyberpunk-cross-menu";
             this.container.innerHTML = `
-                <button type="button" class="cyber-btn cyber-btn-norte" title="Editar Parada" aria-label="Editar">N</button>
-                <button type="button" class="cyber-btn cyber-btn-este" title="Mover Punto" aria-label="Mover">E</button>
-                <button type="button" class="cyber-btn cyber-btn-sur danger" title="Eliminar Parada" aria-label="Eliminar">S</button>
-                <button type="button" class="cyber-btn cyber-btn-oeste" title="Reportar Novedad" aria-label="Reportar">O</button>
+                <div class="orbital-ring-bg"></div>
+                <button type="button" class="cyber-btn cyber-btn-norte" title="Editar Parada (N)" aria-label="Editar">✏️</button>
+                <button type="button" class="cyber-btn cyber-btn-noreste amber" title="Subir / Mover en Secuencia (NE)" aria-label="Secuencia">▲</button>
+                <button type="button" class="cyber-btn cyber-btn-este" title="Mover Punto Geodésico (E)" aria-label="Mover">📍</button>
+                <button type="button" class="cyber-btn cyber-btn-sudeste green" title="Llamar Cliente (SE)" aria-label="Llamar">📞</button>
+                <button type="button" class="cyber-btn cyber-btn-sur danger" title="Eliminar Parada (S)" aria-label="Eliminar">🗑️</button>
+                <button type="button" class="cyber-btn cyber-btn-suroeste" title="Copiar Coordenadas (SO)" aria-label="Copiar">📋</button>
+                <button type="button" class="cyber-btn cyber-btn-oeste amber" title="Reportar Novedad / Evidencias (O)" aria-label="Reportar">📷</button>
+                <button type="button" class="cyber-btn cyber-btn-noroeste green" title="Navegar Google Maps (NO)" aria-label="GPS">🧭</button>
             `;
             this.attachEvents();
             const panes = this.getPanes();
@@ -175,7 +221,7 @@ function obtenerClaseMenuRadialOverlay() {
                     btn.addEventListener("click", (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log(`📢 [MENU_RADIAL]: Acción ${actionName} seleccionada`);
+                        console.log(`📢 [MENU_ORBITAL]: Acción ${actionName} seleccionada`);
                         if (typeof handler === "function") handler();
                         this.cerrar();
                     });
@@ -183,9 +229,13 @@ function obtenerClaseMenuRadialOverlay() {
             };
 
             bindAction(".cyber-btn-norte", "NORTE (Editar)", this.handlers.onEdit);
-            bindAction(".cyber-btn-este", "ESTE (Mover)", this.handlers.onMove);
+            bindAction(".cyber-btn-noreste", "NORESTE (Mover Secuencia)", this.handlers.onSequence);
+            bindAction(".cyber-btn-este", "ESTE (Mover Punto)", this.handlers.onMove);
+            bindAction(".cyber-btn-sudeste", "SUDESTE (Llamar)", this.handlers.onCall);
             bindAction(".cyber-btn-sur", "SUR (Eliminar)", this.handlers.onDelete);
-            bindAction(".cyber-btn-oeste", "OESTE (Reportar)", this.handlers.onReport);
+            bindAction(".cyber-btn-suroeste", "SUROESTE (Copiar GPS)", this.handlers.onCopyGPS);
+            bindAction(".cyber-btn-oeste", "OESTE (Reportar/Evidencias)", this.handlers.onReport);
+            bindAction(".cyber-btn-noroeste", "NOROESTE (Abrir GPS External)", this.handlers.onExternalNav);
         }
 
         draw() {
@@ -456,9 +506,25 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 
                 window.overlayMenuActivo = new MenuClass(marker.getPosition(), {
                     onEdit: () => window.cargarEdicionDesdePin(idUnicoParada),
+                    onSequence: () => {
+                        if (typeof window.moverParadaManual === "function") {
+                            window.moverParadaManual(idUnicoParada, -1, pedido.zonaKey || pedido.zona);
+                        }
+                    },
                     onMove: () => activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion),
+                    onCall: () => window.iniciarLlamadaAndroid(pedido.telefono || pedido.tel),
                     onDelete: () => eliminarParadaProceso(marker, idUnicoParada, callbackActualizacion),
-                    onReport: () => abrirModalGestionParada(pedido, idx + 1)
+                    onCopyGPS: () => {
+                        const lat = pedido.lat || marker.getPosition().lat();
+                        const lng = pedido.lng || marker.getPosition().lng();
+                        navigator.clipboard.writeText(`${lat}, ${lng}`).then(() => alert(`📋 Coordenadas copiadas: ${lat}, ${lng}`));
+                    },
+                    onReport: () => abrirModalGestionParada(pedido, idx + 1),
+                    onExternalNav: () => {
+                        const lat = pedido.lat || marker.getPosition().lat();
+                        const lng = pedido.lng || marker.getPosition().lng();
+                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, "_blank");
+                    }
                 });
 
                 window.overlayMenuActivo.setMap(mapa);
@@ -481,8 +547,6 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
         }
     });
 }
-
-// ... [mantener resto del archivo sin cambios hasta activarArrastreMarcador] ...
 
 function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion) {
     marker.setDraggable(true);

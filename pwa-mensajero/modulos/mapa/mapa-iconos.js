@@ -10,39 +10,55 @@ const ESTADOS_PARADA = {
         color: '#b359ff', 
         glow: '#d980ff', 
         tag: 'DRAFT',
+        clase: 'estado-creacion',
         path: '<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>'
     },
     'asignado': { 
         color: '#00e5ff', 
         glow: '#80f2ff', 
         tag: 'ASSIGNED',
+        clase: 'estado-asignado',
         path: '<path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" fill="currentColor"/>'
     },
     'en-camino': { 
         color: '#ffb300', 
         glow: '#ffd166', 
         tag: 'EN_ROUTE',
+        clase: 'estado-en-camino',
         path: '<path d="M7 2v11h3v9l7-12h-4l4-8z" fill="currentColor"/>'
     },
     'en-punto': { 
         color: '#00ff66', 
         glow: '#66ff99', 
         tag: 'ARRIVED',
+        clase: 'estado-en-punto',
         path: '<circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/>'
     },
     'entregado': { 
-        color: '#00e5ff', 
+        color: '#39ff14', 
         glow: '#00ffcc', 
         tag: 'COMPLETED',
+        clase: 'estado-entregado',
         path: '<path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" fill="currentColor"/>'
     },
     'no-entregado': { 
-        color: '#ff3333', 
+        color: '#ff3366', 
         glow: '#ff8080', 
         tag: 'FAIL_ERR',
+        clase: 'estado-no-entregado',
         path: '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/>'
     }
 };
+
+/**
+ * Retorna la configuración de color y metadatos del estado táctico.
+ * @param {string} estado 
+ * @returns {Object}
+ */
+export function obtenerPaletaEstado(estado) {
+    const est = String(estado || 'asignado').toLowerCase().trim();
+    return ESTADOS_PARADA[est] || ESTADOS_PARADA['asignado'];
+}
 
 /**
  * Convierte una cadena SVG a Data URL codificado en Base64 seguro para Google Maps SDK
@@ -168,4 +184,5 @@ export function crearIconoParadaRadarSVG(colorFill = "#00e5ff", colorStroke = "#
 if (typeof window !== "undefined") {
     window.crearIconoParadaCyberpunkSVG = crearIconoParadaCyberpunkSVG;
     window.crearIconoParadaRadarSVG = crearIconoParadaRadarSVG;
+    window.obtenerPaletaEstado = obtenerPaletaEstado;
 }

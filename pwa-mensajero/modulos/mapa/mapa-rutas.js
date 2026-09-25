@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO Y RUTAS AISLADAS POR ZONA
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-rutas.js
- * Arquitectura: Google Maps JavaScript API
+ * Arquitectura: Google Maps JavaScript API / Local-First / Cyberpunk Dark Mode
  */
 
 import { PALETA_ZONAS } from "./zonificacion/mensajero-zonificacion.js";
@@ -33,8 +33,8 @@ function normalizarPuntoUbicacion(punto) {
     if (typeof google !== "undefined" && google.maps && punto instanceof google.maps.LatLng) return punto;
 
     if (typeof punto === "object") {
-        const lat = parseFloat(punto.lat || punto.latitud || (punto.ubicacion && punto.ubicacion.lat));
-        const lng = parseFloat(punto.lng || punto.longitud || (punto.ubicacion && punto.ubicacion.lng));
+        const lat = parseFloat(punto.lat || punto.latitud || (punto.ubicacion && punto.ubicacion.lat) || (punto.centroide && punto.centroide.lat));
+        const lng = parseFloat(punto.lng || punto.longitud || (punto.ubicacion && punto.ubicacion.lng) || (punto.centroide && punto.centroide.lng));
         
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
             return new google.maps.LatLng(lat, lng);
@@ -53,9 +53,12 @@ function normalizarPuntoUbicacion(punto) {
 }
 
 /**
- * Limpia el trazado de polilíneas y renderers previos en el visor del mapa.
+ * Limpia el trazado de polilineas y renderers previos en el visor del mapa.
  */
 export function limpiarRutaTrazada() {
+    console.log("🧹 [MAPA_RUTAS]: Limpiando polilíneas y trazos previos en visor...");
+
+    // Limpiar polilíneas manuales
     if (Array.isArray(coleccionPolilineasActivas)) {
         coleccionPolilineasActivas.forEach(poly => {
             if (poly && typeof poly.setMap === "function") poly.setMap(null);
@@ -63,9 +66,14 @@ export function limpiarRutaTrazada() {
         coleccionPolilineasActivas = [];
     }
 
+    // Limpiar renderers de direcciones activos
     if (directionsRendererActivo && typeof directionsRendererActivo.setMap === "function") {
         directionsRendererActivo.setMap(null);
         directionsRendererActivo = null;
+    }
+
+    if (window.__DIRECTIONS_RENDERER__ && typeof window.__DIRECTIONS_RENDERER__.setMap === "function") {
+        window.__DIRECTIONS_RENDERER__.setMap(null);
     }
 
     if (window.renderRutasMensajero && typeof window.renderRutasMensajero.setDirections === "function") {
@@ -78,15 +86,19 @@ export function limpiarRutaTrazada() {
 }
 
 /**
- * Traza de forma segmentada las rutas aisladas por zona en el mapa.
- * Garantiza la separación visual entre zonas y evita duplicación de líneas cuando DirectionsRenderer está activo.
+ * Traza de forma segmentada las rutas aisladas por zona y grupo en el mapa.
+ * Garantiza la separación visual entre zonas e interconecta las secuencias optimizadas.
  * 
  * @param {Array<Object>} listaPedidos - Arreglo global de paradas
  * @param {string} [zonaFoco=null] - Zona específica para enfocar/aislar opcionalmente
  * @param {google.maps.Map} [mapaInstancia=null] - Instancia del mapa
  */
 export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaInstancia = null) {
-    const mapaTarget = mapaInstancia || window.mapaVisorInstancia || window.mapaMensajero || (window.renderRutasMensajero && window.renderRutasMensajero.getMap());
+    const mapaTarget = mapaInstancia 
+        || window.mapaVisorInstancia 
+        || window.mapaMensajero 
+        || window.mapaInstanciaGlobal 
+        || (window.renderRutasMensajero && window.renderRutasMensajero.getMap());
 
     if (!listaPedidos || !Array.isArray(listaPedidos) || listaPedidos.length < 1) {
         console.warn("⚠️ [MAPA_RUTAS]: Se requiere al menos una parada para procesar trazado.");
@@ -94,16 +106,20 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
         return;
     }
 
-    // Si la API de Google Maps DirectionsRenderer ya está dibujando la ruta por carreteras, omitimos polilíneas manuales
+    // Si la API de Google Maps DirectionsRenderer está dibujando activamente por carreteras, se respeta
     if (window.__DIRECTIONS_RENDERER__ && window.__DIRECTIONS_RENDERER__.getMap()) {
-        console.log("ℹ️ [MAPA_RUTAS]: Trazado de ruta vial por DirectionsRenderer activo. Omitiendo polilíneas manuales.");
-        limpiarRutaTrazada();
+        console.log("ℹ️ [MAPA_RUTAS]: Trazado vial por DirectionsRenderer activo. Preservando render de carretera.");
         return;
     }
 
     limpiarRutaTrazada();
 
-    // 1. Agrupar paradas en contenedores aislados según su zona geográfica
+    if (!mapaTarget || typeof google === "undefined" || !google.maps) {
+        console.warn("⚠️ [MAPA_RUTAS]: Instancia de Google Maps no lista para dibujar polilínea.");
+        return;
+    }
+
+    // 1. Agrupar paradas por zona geográfica
     const gruposPorZona = {};
 
     listaPedidos.forEach(p => {
@@ -124,7 +140,7 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
         gruposPorZona[zKey].push(p);
     });
 
-    console.group(`🛣️ [MAPA_RUTAS]: Procesando trayectos independientes por zona ${zonaFoco ? `[Foco: ${zonaFoco}]` : ''}`);
+    console.group(`KM [MAPA_RUTAS]: Procesando trayectos independientes ${zonaFoco ? `[Foco: ${zonaFoco}]` : ''}`);
 
     // 2. Dibujar polilíneas autónomas para cada grupo/zona
     for (const [keyZona, paradasDeEstaZona] of Object.entries(gruposPorZona)) {
@@ -133,34 +149,36 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
             continue;
         }
 
-        const infoMeta = PALETA_ZONAS[keyZona] || PALETA_ZONAS["GENERAL"] || { color: "#00E5FF" };
-        const colorPolilinea = infoMeta.color;
+        // Ordenar paradas estrictamente por su atributo de secuencia numérico
+        paradasDeEstaZona.sort((a, b) => {
+            const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
+            const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
+            return seqA - seqB;
+        });
 
-        let trazadoExitoso = false;
+        const infoMeta = (PALETA_ZONAS && PALETA_ZONAS[keyZona]) || (PALETA_ZONAS && PALETA_ZONAS["GENERAL"]) || { color: "#00E5FF" };
+        const colorPolilinea = infoMeta.color || "#00E5FF";
 
-        // Trazado directo por coordenadas locales (fallback de alto rendimiento)
-        if (!trazadoExitoso && mapaTarget) {
-            const pathPuntos = paradasDeEstaZona
-                .map(p => {
-                    const lat = parseFloat(p.lat || p.latitud);
-                    const lng = parseFloat(p.lng || p.longitud);
-                    return (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) ? new google.maps.LatLng(lat, lng) : null;
-                })
-                .filter(Boolean);
+        const pathPuntos = paradasDeEstaZona
+            .map(p => {
+                const lat = parseFloat(p.lat || p.latitud || (p.coordenadas && p.coordenadas.lat) || (p.centroide && p.centroide.lat));
+                const lng = parseFloat(p.lng || p.longitud || (p.coordenadas && p.coordenadas.lng) || (p.centroide && p.centroide.lng));
+                return (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) ? new google.maps.LatLng(lat, lng) : null;
+            })
+            .filter(Boolean);
 
-            if (pathPuntos.length >= 2) {
-                const polyDirecta = new google.maps.Polyline({
-                    path: pathPuntos,
-                    geodesic: true,
-                    strokeColor: colorPolilinea,
-                    strokeOpacity: 0.85,
-                    strokeWeight: 4,
-                    map: mapaTarget
-                });
+        if (pathPuntos.length >= 2) {
+            const polyDirecta = new google.maps.Polyline({
+                path: pathPuntos,
+                geodesic: true,
+                strokeColor: colorPolilinea,
+                strokeOpacity: 0.85,
+                strokeWeight: 4,
+                map: mapaTarget
+            });
 
-                coleccionPolilineasActivas.push(polyDirecta);
-                console.log(`✅ [MAPA_RUTAS_OK]: Trayecto directo trazado para Zona [${keyZona}] (${pathPuntos.length} puntos).`);
-            }
+            coleccionPolilineasActivas.push(polyDirecta);
+            console.log(`✅ [MAPA_RUTAS_OK]: Trayecto directo trazado para Zona [${keyZona}] (${pathPuntos.length} puntos).`);
         }
     }
 

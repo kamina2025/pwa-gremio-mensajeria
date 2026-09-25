@@ -1,13 +1,13 @@
 /**
- * PROTOCOLO MACONDO - OPTIMIZADOR DE RUTAS Y PROXIMIDAD GOOGLE MAPS
- * Ubicación: pwa-mensajero/modulos/rutas/rutas-optimizacion.js
- * Arquitectura: Local-First / Fallback Geodésico Offline
+ * PROTOCOLO MACONDO - OPTIMIZADOR DE RUTAS Y PROXIMIDAD
+ * Ubicación: modulos/rutas/rutas-optimizacion.js
+ * Arquitectura: Local-First / Clustering (Min 2 / Max 4) / SCC & Subgrupos por Dirección
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
 import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
-import { calcularDistanciaHaversine } from "../mapa/zonificacion/mensajero-zonificacion.js";
+import { calcularDistanciaHaversine, calcularCentroide } from "../mapa/zonificacion/geo-utils.js";
 
 /**
  * Extrae o construye un identificador único para una parada dada.
@@ -16,19 +16,33 @@ import { calcularDistanciaHaversine } from "../mapa/zonificacion/mensajero-zonif
  */
 function obtenerIdUnicoParada(p) {
   if (!p) return "";
-  return String(p.id || p.ssc || p.idParada || p.id_parada || "").trim();
+  return String(p.id || p.scc || p.ssc || p.idParada || p.id_parada || "").trim();
 }
 
 /**
- * Garantiza la extracción de coordenadas numéricas válidas de forma totalmente flexible.
+ * Normaliza cadenas de dirección física para asegurar comparaciones exactas.
+ * @param {string} dir 
+ * @returns {string}
+ */
+function normalizarDireccion(dir) {
+  if (!dir) return "";
+  return String(dir)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Garantiza la extracción de coordenadas numéricas válidas de forma flexible.
  * @param {Object} p 
  * @returns {{lat: number, lng: number}|null}
  */
 function obtenerCoordenadasValidas(p) {
   if (!p) return null;
   
-  const latVal = p.lat !== undefined ? p.lat : (p.latitud !== undefined ? p.latitud : (p.coordenadas?.lat));
-  const lngVal = p.lng !== undefined ? p.lng : (p.longitud !== undefined ? p.longitud : (p.coordenadas?.lng));
+  const latVal = p.lat !== undefined ? p.lat : (p.latitud !== undefined ? p.latitud : (p.coordenadas?.lat || p.centroide?.lat));
+  const lngVal = p.lng !== undefined ? p.lng : (p.longitud !== undefined ? p.longitud : (p.coordenadas?.lng || p.centroide?.lng));
 
   const lat = parseFloat(latVal);
   const lng = parseFloat(lngVal);
@@ -38,13 +52,189 @@ function obtenerCoordenadasValidas(p) {
 }
 
 /**
- * Optimiza la secuencia de visitas de paradas dentro de una zona específica
- * utilizando la API clásica DirectionsService de Google Maps con fallback geodésico Haversine.
- * 
- * @param {string} zonaKeyInput - Clave o nombre de la zona a optimizar
- * @param {Object|null} [paradaInicioFix=null] - Parada fijada como origen
- * @param {Object|null} [paradaFinFix=null] - Parada fijada como destino
- * @returns {Promise<Array<Object>>} Lista de paradas en el nuevo orden optimizado
+ * PASO 1: Tratamiento de SCCs e Identificación de Subgrupos por Dirección Física.
+ * @param {Array<Object>} paradasZona - Arreglo de paradas de la zona
+ * @returns {Array<Object>} Lista de Nodos Subgrupo estructurados
+ */
+function procesarSubgruposYDirecciones(paradasZona) {
+  console.log("🔍 [OPTIMIZADOR]: Paso 1 - Fusión SCC y Subagrupamiento por Dirección...");
+
+  // 1A. Regla SCC Identificador (Fusionar registros con el mismo SCC)
+  const mapaSCC = new Map();
+  const paradasIndependientes = [];
+
+  paradasZona.forEach(p => {
+    const sccVal = String(p.scc || p.ssc || p.id_scc || "").trim();
+    if (sccVal && sccVal !== "0" && sccVal !== "null" && sccVal !== "undefined") {
+      if (!mapaSCC.has(sccVal)) {
+        mapaSCC.set(sccVal, { ...p });
+      } else {
+        const existente = mapaSCC.get(sccVal);
+        existente.observaciones = `${existente.observaciones || ''} | ${p.observaciones || ''}`.trim();
+        existente.paquetes_consolidados = (existente.paquetes_consolidados || 1) + 1;
+      }
+    } else {
+      paradasIndependientes.push({ ...p });
+    }
+  });
+
+  const listaUnificadaSCC = [...mapaSCC.values(), ...paradasIndependientes];
+
+  // 1B. Subagrupamiento por Dirección Identica (Distinto SCC)
+  const mapaDirecciones = new Map();
+
+  listaUnificadaSCC.forEach(p => {
+    const dirClave = normalizarDireccion(p.direccion || p.direccion_entrega || p.dir);
+    if (!dirClave) {
+      const keyUnica = `sin_dir_${obtenerIdUnicoParada(p) || Math.random()}`;
+      mapaDirecciones.set(keyUnica, [p]);
+    } else {
+      if (!mapaDirecciones.has(dirClave)) {
+        mapaDirecciones.set(dirClave, []);
+      }
+      mapaDirecciones.get(dirClave).push(p);
+    }
+  });
+
+  // 1C. Generar Nodos Subgrupo con Centroide Geográfico
+  const subgruposResultantes = [];
+  let subgrupoCounter = 1;
+
+  mapaDirecciones.forEach((items, dirKey) => {
+    const centroide = calcularCentroide(items);
+    const subgrupoId = `SUB-${subgrupoCounter.toString().padStart(3, "0")}`;
+    subgrupoCounter++;
+
+    subgruposResultantes.push({
+      subgrupoId,
+      direccionNormalizada: dirKey,
+      esSubgrupoMultiples: items.length > 1,
+      centroide,
+      paradas: items.map((p, idx) => ({
+        ...p,
+        subgrupoId,
+        ordenEnSubgrupo: idx + 1
+      }))
+    });
+  });
+
+  console.log(`✅ [OPTIMIZADOR]: ${subgruposResultantes.length} subgrupos creados a partir de ${paradasZona.length} registros.`);
+  return subgruposResultantes;
+}
+
+/**
+ * PASO 2: Clustering por Proximidad (Mínimo 2 / Máximo 4 paradas/subgrupos por clúster).
+ * @param {Array<Object>} subgrupos - Lista de subgrupos estructurados
+ * @returns {Array<Array<Object>>} Colección de clústeres agrupados
+ */
+function crearClustersProximidad(subgrupos) {
+  console.log("🧩 [OPTIMIZADOR]: Paso 2 - Clustering por proximidad (Min 2 / Max 4)...");
+  let pendientes = [...subgrupos];
+  const clusters = [];
+
+  while (pendientes.length > 0) {
+    if (pendientes.length === 1) {
+      // Balancear sobrante de 1 elemento ajustando el clúster anterior
+      if (clusters.length > 0 && clusters[clusters.length - 1].length < 4) {
+        clusters[clusters.length - 1].push(pendientes.pop());
+      } else if (clusters.length > 0) {
+        const ultimoCluster = clusters.pop();
+        pendientes.push(...ultimoCluster);
+        const c1 = pendientes.splice(0, 3);
+        clusters.push(c1);
+        clusters.push(pendientes);
+        pendientes = [];
+      } else {
+        clusters.push([pendientes.pop()]);
+      }
+      break;
+    }
+
+    const pivote = pendientes.shift();
+    const coordsPivote = pivote.centroide;
+    const clusterActual = [pivote];
+
+    // Ordenar pendientes restantes por proximidad Haversine al pivote
+    pendientes.sort((a, b) => {
+      const dA = calcularDistanciaHaversine(coordsPivote.lat, coordsPivote.lng, a.centroide.lat, a.centroide.lng);
+      const dB = calcularDistanciaHaversine(coordsPivote.lat, coordsPivote.lng, b.centroide.lat, b.centroide.lng);
+      return dA - dB;
+    });
+
+    const tamanoDeseado = Math.min(3, pendientes.length); // Pivote (1) + hasta 3 cercanos = Max 4
+    const cercanos = pendientes.splice(0, tamanoDeseado);
+    clusterActual.push(...cercanos);
+
+    clusters.push(clusterActual);
+  }
+
+  console.log(`✅ [OPTIMIZADOR]: ${clusters.length} clusters generados exitosamente.`);
+  return clusters;
+}
+
+/**
+ * PASO 3 & 4: Enrutamiento Nearest Neighbor e Indexación de Secuencias Finales.
+ * @param {Array<Array<Object>>} clusters - Clústeres formados
+ * @returns {Array<Object>} Lista plana ordenada de paradas con secuencias actualizadas
+ */
+function enrotrarSecuenciaFinal(clusters) {
+  console.log("🚀 [OPTIMIZADOR]: Paso 3 - Enrutando secuencia óptima (Nearest Neighbor)...");
+  
+  const clustersPendientes = [...clusters];
+  let clusterActual = clustersPendientes.shift();
+  const clustersOrdenados = [clusterActual];
+
+  while (clustersPendientes.length > 0) {
+    const centroideActual = calcularCentroide(clusterActual.map(sub => sub.centroide));
+    let idxCercano = 0;
+    let distMinima = Infinity;
+
+    clustersPendientes.forEach((cl, idx) => {
+      const centroideTarget = calcularCentroide(cl.map(sub => sub.centroide));
+      const d = calcularDistanciaHaversine(centroideActual.lat, centroideActual.lng, centroideTarget.lat, centroideTarget.lng);
+      if (d < distMinima) {
+        distMinima = d;
+        idxCercano = idx;
+      }
+    });
+
+    clusterActual = clustersPendientes.splice(idxCercano, 1)[0];
+    clustersOrdenados.push(clusterActual);
+  }
+
+  const listaFinalEnrutada = [];
+  let secuenciaGlobal = 1;
+
+  clustersOrdenados.forEach((cluster, idxCluster) => {
+    const grupoId = `GRUPO-${(idxCluster + 1).toString().padStart(2, "0")}`;
+
+    cluster.forEach(subgrupo => {
+      subgrupo.paradas.forEach(parada => {
+        const paradaEnrutada = {
+          ...parada,
+          grupoId,
+          subgrupoId: subgrupo.subgrupoId,
+          secuenciaZona: secuenciaGlobal,
+          secuencia: secuenciaGlobal,
+          orden: secuenciaGlobal,
+          updated_at: new Date().toISOString()
+        };
+        listaFinalEnrutada.push(paradaEnrutada);
+        console.log(` 📍 [#${secuenciaGlobal}] [${grupoId}] [${subgrupo.subgrupoId}] -> ${paradaEnrutada.destinatario || paradaEnrutada.cliente || 'Parada'}`);
+        secuenciaGlobal++;
+      });
+    });
+  });
+
+  return listaFinalEnrutada;
+}
+
+/**
+ * Función Principal Executable de Optimización por Zona.
+ * @param {string} zonaKeyInput - Nombre o clave de la zona
+ * @param {Object|null} [paradaInicioFix=null] - Parada inicial fijada
+ * @param {Object|null} [paradaFinFix=null] - Parada final fijada
+ * @returns {Promise<Array<Object>>} Lista de paradas de la zona enrutadas
  */
 export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioFix = null, paradaFinFix = null) {
   if (!zonaKeyInput) return [];
@@ -52,7 +242,7 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
   const targetCanonico = estandarizarZonaCanonica(zonaKeyInput);
   const targetLimpio = normalizarClaveZona(targetCanonico);
 
-  console.group(`⚡ [OPTIMIZADOR_GOOGLE]: Optimizando vía Google Maps API para: '${targetCanonico}'`);
+  console.group(`⚡ [OPTIMIZADOR_PROXIMIDAD]: Ejecutando para Zona '${targetCanonico}'`);
 
   // 1. Obtener la colección global de paradas (Memoria / Persistencia)
   let todasLasParadas = await obtenerParadasGuardadas();
@@ -63,253 +253,46 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
   // 2. Filtrar las paradas correspondientes a la zona solicitada
   let paradasZona = todasLasParadas.filter((p) => p && obtenerZonaParadaCanonica(p) === targetCanonico);
 
-  if (paradasZona.length <= 1) {
-    console.warn("ℹ️ [OPTIMIZADOR_GOOGLE]: Insuficientes paradas en la zona para realizar optimización.");
+  if (paradasZona.length === 0) {
+    console.warn("ℹ️ [OPTIMIZADOR_PROXIMIDAD]: Insuficientes paradas en la zona para realizar optimización.");
     console.groupEnd();
     return paradasZona;
   }
 
-  // Control preventivo: Si los waypoints superan el límite de Google Directions (25 paradas total), conmutar a Haversine
-  if (paradasZona.length > 25) {
-    console.warn(`⚠️ [OPTIMIZADOR_GOOGLE]: La zona tiene ${paradasZona.length} paradas (> máx 25 de Google Directions API). Ejecutando optimizador geodésico Haversine offline...`);
-    const resultadoFallback = await optimizarFallbackHaversine(paradasZona, paradaInicioFix, todasLasParadas);
-    console.groupEnd();
-    return resultadoFallback;
-  }
+  // 3. Ejecutar Pipeline Jerárquico de Optimización
+  const subgrupos = procesarSubgruposYDirecciones(paradasZona);
+  const clusters = crearClustersProximidad(subgrupos);
+  const paradasZonaEnrutadas = enrotrarSecuenciaFinal(clusters);
 
-  // 3. Comprobar disponibilidad del SDK clásico de Google Maps
-  const gMapsListo = typeof google !== "undefined" && google && google.maps && google.maps.DirectionsService;
-  if (!gMapsListo) {
-    console.warn("⚠️ [OPTIMIZADOR_GOOGLE]: SDK de Google Maps no disponible. Ejecutando fallback Haversine offline...");
-    const resultadoFallback = await optimizarFallbackHaversine(paradasZona, paradaInicioFix, todasLasParadas);
-    console.groupEnd();
-    return resultadoFallback;
-  }
-
-  // 4. Configurar Origen, Destino e Intermedias
-  let origen = paradaInicioFix;
-  let destino = paradaFinFix;
-  let intermedias = [...paradasZona];
-
-  if (origen) {
-    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(origen));
-  } else {
-    origen = intermedias.shift();
-  }
-
-  if (destino) {
-    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(destino));
-  } else if (intermedias.length > 0) {
-    destino = intermedias.pop();
-  } else {
-    destino = origen;
-  }
-
-  const coordsOrigen = obtenerCoordenadasValidas(origen);
-  const coordsDestino = obtenerCoordenadasValidas(destino);
-
-  if (!coordsOrigen || !coordsDestino) {
-    console.warn("⚠️ [OPTIMIZADOR_GOOGLE]: Coordenadas inválidas en Origen o Destino. Recayendo a Fallback Haversine...");
-    const resultadoFallback = await optimizarFallbackHaversine(paradasZona, paradaInicioFix, todasLasParadas);
-    console.groupEnd();
-    return resultadoFallback;
-  }
-
-  // Construcción de Waypoints mapeados y filtrados
-  const waypointsGoogle = intermedias
-    .map(p => {
-      const coords = obtenerCoordenadasValidas(p);
-      if (!coords) return null;
-      return {
-        location: new google.maps.LatLng(coords.lat, coords.lng),
-        stopover: true
-      };
-    })
-    .filter(Boolean);
-
-  const origenLatLng = new google.maps.LatLng(coordsOrigen.lat, coordsOrigen.lng);
-  const destinoLatLng = new google.maps.LatLng(coordsDestino.lat, coordsDestino.lng);
-
-  try {
-    let ordenOptimizadoIndices = [];
-    let directionsResult = null;
-
-    // Ejecutar servicio DirectionsService clásico
-    const directionsService = new google.maps.DirectionsService();
-    const request = {
-      origin: origenLatLng,
-      destination: destinoLatLng,
-      waypoints: waypointsGoogle,
-      optimizeWaypoints: true,
-      travelMode: google.maps.TravelMode.DRIVING
-    };
-
-    directionsResult = await new Promise((resolve, reject) => {
-      directionsService.route(request, (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK || status === "OK") resolve(result);
-        else reject(status);
-      });
-    });
-
-    if (directionsResult && directionsResult.routes && directionsResult.routes[0]) {
-      ordenOptimizadoIndices = directionsResult.routes[0].waypoint_order || [];
-    }
-
-    console.log("🧩 [OPTIMIZADOR_GOOGLE]: Secuencia de waypoints devuelta por Google:", ordenOptimizadoIndices);
-
-    // 5. Reconstruir la secuencia ordenada de la zona
-    const secuenciaOptimizada = [origen];
-    ordenOptimizadoIndices.forEach((indexDevuelto) => {
-      if (intermedias[indexDevuelto]) {
-        secuenciaOptimizada.push(intermedias[indexDevuelto]);
-      }
-    });
-
-    if (obtenerIdUnicoParada(origen) !== obtenerIdUnicoParada(destino)) {
-      secuenciaOptimizada.push(destino);
-    }
-
-    // 6. Actualizar atributos numéricos de secuencia de forma atómica
-    const mapaNuevosOrdenes = new Map();
-    secuenciaOptimizada.forEach((p, idx) => {
-      const nuevoNumero = idx + 1;
-      p.secuenciaZona = nuevoNumero;
-      p.orden = nuevoNumero;
-      p.secuencia = nuevoNumero;
-      p.updated_at = new Date().toISOString();
-      mapaNuevosOrdenes.set(obtenerIdUnicoParada(p), p);
-      console.log(` 📍 [#${nuevoNumero}] -> ${p.destinatario || p.cliente || p.nombre_cliente}`);
-    });
-
-    // 7. Ensamblar y ordenar físicamente la lista global de paradas
-    let listaGlobalActualizada = todasLasParadas.map(p => {
-      const idUnico = obtenerIdUnicoParada(p);
-      return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
-    });
-
-    // Ordenamiento global obligatorio
-    listaGlobalActualizada.sort((a, b) => {
-      const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
-      const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
-      return seqA - seqB;
-    });
-
-    // 8. Persistir cambios localmente y sincronizar todas las memorias RAM
-    await guardarRutaZonificada(listaGlobalActualizada);
-    window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
-    window.paradasMemoriaLocal = [...listaGlobalActualizada];
-    window.paradasRutaActiva = [...listaGlobalActualizada];
-    window.pedidosGlobales = [...listaGlobalActualizada];
-
-    // 9. Trazado vial oficial sobre el visor con DirectionsRenderer
-    const mapaInstancia = window.mapaInstanciaGlobal || window.mapaMensajero || window.mapaInstancia;
-    if (mapaInstancia && directionsResult) {
-      if (!window.__DIRECTIONS_RENDERER__) {
-        window.__DIRECTIONS_RENDERER__ = new google.maps.DirectionsRenderer({
-          map: mapaInstancia,
-          suppressMarkers: true,
-          polylineOptions: { strokeColor: "#00e5ff", strokeWeight: 5, strokeOpacity: 0.9 }
-        });
-      } else {
-        window.__DIRECTIONS_RENDERER__.setMap(mapaInstancia);
-      }
-      window.__DIRECTIONS_RENDERER__.setDirections(directionsResult);
-    }
-
-    // 10. Refrescar marcadores interactivos y UI de acordeones
-    if (typeof window.actualizarPuntosEnMapa === "function") {
-      window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
-    }
-
-    if (typeof window.renderizarParadasZonificadasUI === "function") {
-      await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
-    }
-
-    console.groupEnd();
-    return secuenciaOptimizada;
-
-  } catch (error) {
-    console.error("❌ [OPTIMIZADOR_GOOGLE]: Error calculando ruta con Google. Ejecutando fallback Haversine...", error);
-    const resultadoFallback = await optimizarFallbackHaversine(paradasZona, paradaInicioFix, todasLasParadas);
-    console.groupEnd();
-    return resultadoFallback;
-  }
-}
-
-/**
- * Algoritmo de reserva por proximidad (Vecino más cercano / Haversine) para uso Offline local-first.
- * 
- * @param {Array<Object>} paradasZona - Paradas de la zona a ordenar
- * @param {Object|null} puntoInicio - Parada inicial fijada
- * @param {Array<Object>} todasLasParadas - Colección global completa
- * @returns {Promise<Array<Object>>}
- */
-async function optimizarFallbackHaversine(paradasZona, puntoInicio, todasLasParadas) {
-  console.log("📐 [FALLBACK_HAVERSINE]: Ejecutando reordenamiento geométrico por proximidad...");
-  
-  let pendientes = [...paradasZona];
-  let actual = puntoInicio || pendientes.shift();
-  let resultado = [actual];
-
-  pendientes = pendientes.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(actual));
-
-  while (pendientes.length > 0) {
-    const coordsA = obtenerCoordenadasValidas(actual);
-    if (!coordsA) {
-      actual = pendientes.shift();
-      if (actual) resultado.push(actual);
-      continue;
-    }
-
-    let idxMasCercano = 0;
-    let distMinima = Infinity;
-
-    pendientes.forEach((p, idx) => {
-      const coordsB = obtenerCoordenadasValidas(p);
-      if (coordsB) {
-        const d = calcularDistanciaHaversine(coordsA.lat, coordsA.lng, coordsB.lat, coordsB.lng);
-        if (d < distMinima) {
-          distMinima = d;
-          idxMasCercano = idx;
-        }
-      }
-    });
-
-    actual = pendientes.splice(idxMasCercano, 1)[0];
-    if (actual) resultado.push(actual);
-  }
-
-  // Actualizar atributo de secuencia numérico
+  // 4. Mapear y Reemplazar dentro de la Lista Global
   const mapaNuevosOrdenes = new Map();
-  resultado.forEach((p, idx) => {
-    const nuevoNumero = idx + 1;
-    p.secuenciaZona = nuevoNumero;
-    p.orden = nuevoNumero;
-    p.secuencia = nuevoNumero;
-    p.updated_at = new Date().toISOString();
+  paradasZonaEnrutadas.forEach(p => {
     mapaNuevosOrdenes.set(obtenerIdUnicoParada(p), p);
   });
 
-  // Re-ensamblar globalmente
   let listaGlobalActualizada = todasLasParadas.map(p => {
     const idUnico = obtenerIdUnicoParada(p);
     return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
   });
 
+  // Ordenamiento global por secuencia
   listaGlobalActualizada.sort((a, b) => {
     const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
     const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
     return seqA - seqB;
   });
 
-  // Guardar en persistencia y memoria RAM
+  // 5. Persistencia Local-First y Sincronización en RAM
   await guardarRutaZonificada(listaGlobalActualizada);
   window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
   window.paradasMemoriaLocal = [...listaGlobalActualizada];
   window.paradasRutaActiva = [...listaGlobalActualizada];
   window.pedidosGlobales = [...listaGlobalActualizada];
 
-  if (typeof window.actualizarPuntosEnMapa === "function") {
+  // 6. Refrescar Mapa y UI de Acordeones
+  if (typeof window.trazarPolilineaRuta === "function") {
+    window.trazarPolilineaRuta(paradasZonaEnrutadas, targetCanonico);
+  } else if (typeof window.actualizarPuntosEnMapa === "function") {
     window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
   }
 
@@ -317,10 +300,12 @@ async function optimizarFallbackHaversine(paradasZona, puntoInicio, todasLasPara
     await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
   }
 
-  console.log("✅ [FALLBACK_HAVERSINE]: Secuencia offline reordenada y persistida.");
-  return resultado;
+  console.log("✅ [OPTIMIZADOR_PROXIMIDAD]: Secuencia ordenada, agrupada y persistida exitosamente.");
+  console.groupEnd();
+
+  return paradasZonaEnrutadas;
 }
 
-// BINDINGS GLOBALES LEGACY
+// BINDINGS GLOBALES DE LEGACY / WINDOW
 window.optimizarRutaPorProximidadZona = optimizarRutaPorProximidadZona;
 window.optimizarRutaPorProximidad = optimizarRutaPorProximidadZona;

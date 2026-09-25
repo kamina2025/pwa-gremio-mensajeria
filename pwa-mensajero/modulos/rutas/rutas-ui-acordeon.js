@@ -1,7 +1,7 @@
 /**
- * Módulo de Renderizado de UI Acordeones, Selección de Puntos Fijos y Drag & Drop
+ * PROTOCOLO MACONDO - MÓDULO DE RENDERIZADO DE UI ACORDEONES Y DRAG & DROP
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-ui-acordeon.js
- * Arquitectura: Async Local-First
+ * Arquitectura: Async Local-First / Cyberpunk UI / Clustering & Subgrupos
  */
 
 import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
@@ -11,7 +11,7 @@ let itemArrastrado = null;
 let touchElementoInicial = null;
 
 /**
- * Renderiza la UI de acordeones con selectores de inicio/fin, botones de zona y tarjetas interactivas.
+ * Renderiza la UI de acordeones por zona incorporando clustering, subgrupos por dirección y acciones fijas.
  * 
  * @param {Array<Object>|Promise<Array<Object>>} listaPedidosParam
  */
@@ -30,51 +30,51 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         listaPedidos = (await obtenerParadasGuardadas()) || [];
     }
 
+    // Sincronización inmediata de cachés RAM
     window.__CACHE_PARADAS_MACONDO__ = structuredClone(listaPedidos);
     window.paradasMemoriaLocal = structuredClone(listaPedidos);
+    window.paradasRutaActiva = structuredClone(listaPedidos);
 
     contenedor.innerHTML = "";
 
     if (!Array.isArray(listaPedidos) || listaPedidos.length === 0) {
-        contenedor.innerHTML = `<p style="text-align:center; color:#aaa; font-family:monospace; padding:10px;">[SISTEMA]: No hay paradas en la ruta activa.</p>`;
+        contenedor.innerHTML = `<p style="text-align:center; color:#aaa; font-family:monospace; padding:15px;">[SISTEMA]: No hay paradas en la ruta activa.</p>`;
         return;
     }
 
-    // Agrupar pedidos estrictamente por la clave canónica GeoJSON
+    // Agrupar pedidos estrictamente por la clave canónica de zona
     const zonasMap = {};
     listaPedidos.forEach((ped) => {
-        const claveCanonica = obtenerZonaParadaCanonica(ped);
+        const claveCanonica = obtenerZonaParadaCanonica(ped) || "GENERAL";
         if (!zonasMap[claveCanonica]) zonasMap[claveCanonica] = [];
         zonasMap[claveCanonica].push(ped);
     });
 
     Object.entries(zonasMap).forEach(([claveCanonica, paradasZona]) => {
-        paradasZona.sort((a, b) => (a.secuenciaZona || 0) - (b.secuenciaZona || 0));
+        // Ordenar paradas por secuencia de zona
+        paradasZona.sort((a, b) => (a.secuenciaZona || a.secuencia || 0) - (b.secuenciaZona || b.secuencia || 0));
 
         const totalParadas = paradasZona.length;
-        const colorHex = paradasZona[0]?.colorZona || "#39FF14";
+        const colorHex = paradasZona[0]?.colorZona || "#00E5FF";
         const nombreZonaDisplay = `ZONA ${claveCanonica}`;
 
         const details = document.createElement("details");
         details.className = "cyber-accordion";
-        details.style.setProperty("border-color", colorHex, "important");
-        details.style.marginBottom = "12px";
+        details.style.cssText = `border: 1px solid ${colorHex}; margin-bottom: 12px; background: #0d1117; border-radius: 6px; padding: 6px;`;
         details.open = true;
-
-        console.log(`🎨 [RUTAS_UI]: Acordeón asignado a zona '${claveCanonica}' con color: ${colorHex}`);
 
         const summary = document.createElement("summary");
         summary.className = "cyber-summary";
-        summary.style.borderLeft = `4px solid ${colorHex}`;
+        summary.style.cssText = `border-left: 4px solid ${colorHex}; padding: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #161b22;`;
         summary.innerHTML = `
-            <span>▼ ${nombreZonaDisplay} (${totalParadas})</span>
-            <span class="badge-zone" style="background-color: ${colorHex}; color: #0d1117;">${colorHex}</span>
+            <span style="color: ${colorHex}; font-weight: bold; font-family: monospace;">▼ ${nombreZonaDisplay} (${totalParadas} Paradas)</span>
+            <span class="badge-zone" style="background-color: ${colorHex}; color: #0d1117; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.75rem;">${claveCanonica}</span>
         `;
 
         // BARRA DE ACCIONES DE ZONA CON SELECTORES DE PUNTO INICIAL Y FINAL
         const accionesContainer = document.createElement("div");
         accionesContainer.className = "zona-acciones-container";
-        accionesContainer.style.cssText = "background: #080b10; border-bottom: 1px solid #30363d; padding: 8px; margin-bottom: 8px;";
+        accionesContainer.style.cssText = "background: #080b10; border-bottom: 1px solid #30363d; padding: 8px; margin-top: 6px; margin-bottom: 8px;";
 
         const selectoresBar = document.createElement("div");
         selectoresBar.style.cssText = "display: flex; gap: 8px; margin-bottom: 8px; font-size: 0.75rem;";
@@ -89,23 +89,18 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         selectFin.className = "select-punto-fijo";
         selectFin.style.cssText = "width:100%; background:#161b22; color:#fff; border:1px solid #30363d; padding:4px; border-radius:4px; font-size:0.75rem;";
 
-        const optDefaultInicio = new Option("-- Automático (Por Posición) --", "");
-        const optDefaultFin = new Option("-- Automático (Por Posición) --", "");
-        selectInicio.add(optDefaultInicio);
-        selectFin.add(optDefaultFin);
+        selectInicio.add(new Option("-- Automático (Por Posición) --", ""));
+        selectFin.add(new Option("-- Automático (Por Posición) --", ""));
 
         let inicioPersistido = null;
         let finPersistido = null;
 
         paradasZona.forEach((p) => {
-            const pId = String(p.id || p.ssc);
-            const pNombre = p.destinatario || p.cliente || `Parada #${p.secuenciaZona}`;
+            const pId = String(p.id || p.scc || p.ssc);
+            const pNombre = p.destinatario || p.cliente || `Parada #${p.secuenciaZona || p.secuencia}`;
             
-            const optInicio = new Option(`[#${p.secuenciaZona}] ${pNombre}`, pId);
-            const optFin = new Option(`[#${p.secuenciaZona}] ${pNombre}`, pId);
-
-            selectInicio.add(optInicio);
-            selectFin.add(optFin);
+            selectInicio.add(new Option(`[#${p.secuenciaZona || p.secuencia}] ${pNombre}`, pId));
+            selectFin.add(new Option(`[#${p.secuenciaZona || p.secuencia}] ${pNombre}`, pId));
 
             if (p.esInicioZona) inicioPersistido = pId;
             if (p.esFinZona) finPersistido = pId;
@@ -113,21 +108,6 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
 
         if (inicioPersistido) selectInicio.value = inicioPersistido;
         if (finPersistido) selectFin.value = finPersistido;
-
-        // Listeners para cambio de punto fijo
-        selectInicio.addEventListener("change", (e) => {
-            console.log(`📌 [RUTAS_UI]: Inicio fijado para ${claveCanonica} -> ${e.target.value}`);
-            if (typeof window.fijarPuntoInicioZona === "function") {
-                window.fijarPuntoInicioZona(claveCanonica, e.target.value);
-            }
-        });
-
-        selectFin.addEventListener("change", (e) => {
-            console.log(`📌 [RUTAS_UI]: Fin fijado para ${claveCanonica} -> ${e.target.value}`);
-            if (typeof window.fijarPuntoFinZona === "function") {
-                window.fijarPuntoFinZona(claveCanonica, e.target.value);
-            }
-        });
 
         const divInicio = document.createElement("div");
         divInicio.style.flex = "1";
@@ -146,16 +126,16 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         botonesBar.className = "zona-acciones-bar";
         botonesBar.style.cssText = "display: flex; gap: 6px; overflow-x: auto;";
         botonesBar.innerHTML = `
-            <button type="button" class="btn-zona-action btn-zona-iniciar" data-action="iniciar" data-zona="${claveCanonica}" style="background: #0d1117; color: #00e5ff; border: 1px solid #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 8px;">
+            <button type="button" class="btn-zona-action btn-zona-iniciar" data-action="iniciar" data-zona="${claveCanonica}" style="background: #0d1117; color: #00e5ff; border: 1px solid #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
                 ► _INICIAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-optimizar" data-action="optimizar" data-zona="${claveCanonica}" style="background: #0d1117; color: #ffb300; border: 1px solid #ffb300; font-weight: bold; cursor: pointer; padding: 4px 8px;">
+            <button type="button" class="btn-zona-action btn-zona-optimizar" data-action="optimizar" data-zona="${claveCanonica}" style="background: #0d1117; color: #ffb300; border: 1px solid #ffb300; font-weight: bold; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
                 ⚡ OPTIMIZAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-planillar" data-action="planillar" data-zona="${claveCanonica}" style="background: #0d1117; color: #8af7b3; border: 1px solid #8af7b3; cursor: pointer; padding: 4px 8px;">
+            <button type="button" class="btn-zona-action btn-zona-planillar" data-action="planillar" data-zona="${claveCanonica}" style="background: #0d1117; color: #8af7b3; border: 1px solid #8af7b3; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
                 📝 _PLANILLAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-mapa" data-action="mapa" data-zona="${claveCanonica}" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 4px 8px;">
+            <button type="button" class="btn-zona-action btn-zona-mapa" data-action="mapa" data-zona="${claveCanonica}" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
                 🗺️ VER MAPA
             </button>
         `;
@@ -163,34 +143,50 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         accionesContainer.appendChild(selectoresBar);
         accionesContainer.appendChild(botonesBar);
 
-        // TARJETAS DE PARADAS DRAG & DROP
+        // CONTENEDOR DE PARADAS CON CLUSTERING Y DRAG & DROP
         const listContainer = document.createElement("div");
         listContainer.className = "paradas-drag-list";
         listContainer.style.padding = "4px";
 
-        paradasZona.forEach((parada, idx) => {
-            const rawId = String(parada.id || parada.ssc || `p_${idx}`);
-            const numSecuencia = parada.secuenciaZona || idx + 1;
-            const card = document.createElement("div");
+        let ultimoGrupoRenderizado = null;
 
+        paradasZona.forEach((parada, idx) => {
+            const rawId = String(parada.id || parada.scc || parada.ssc || `p_${idx}`);
+            const numSecuencia = parada.secuenciaZona || parada.secuencia || idx + 1;
+
+            // Renderizar encabezado divisor de Bucle/Clúster
+            if (parada.grupoId && parada.grupoId !== ultimoGrupoRenderizado) {
+                ultimoGrupoRenderizado = parada.grupoId;
+                const divisorGrupo = document.createElement("div");
+                divisorGrupo.className = "divisor-cluster-header";
+                divisorGrupo.style.cssText = "background: rgba(0, 229, 255, 0.12); border-left: 4px solid #00e5ff; color: #00e5ff; font-weight: bold; font-family: monospace; font-size: 0.78rem; padding: 4px 8px; margin: 8px 0 4px 0; border-radius: 2px;";
+                divisorGrupo.innerHTML = `⚡ BUCLE / CLUSTER: ${parada.grupoId}`;
+                listContainer.appendChild(divisorGrupo);
+            }
+
+            const card = document.createElement("div");
             card.className = "parada-card item-parada-lista";
             card.setAttribute("draggable", "true");
             card.dataset.id = rawId;
             card.dataset.zona = claveCanonica;
+            card.style.cssText = "background: #161b22; border: 1px solid #30363d; margin-bottom: 6px; padding: 8px; border-radius: 4px; transition: border-color 0.2s;";
+
+            const badgeSubgrupo = parada.subgrupoId ? `<span style="background: #ff3366; color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 0.68rem; font-weight: bold; margin-left: 6px;">${parada.subgrupoId}</span>` : "";
 
             card.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="flex:1; padding-right:8px;">
-                        <strong style="color: var(--neon-green, #00ff66);">[#${numSecuencia}] ${parada.destinatario || parada.cliente || "Cliente"}</strong> - ${parada.direccion || ""}
-                        <div style="font-size: 0.72rem; color: #aaa; margin-top: 2px;">
-                            SSC: ${parada.ssc || "N/A"} | Tel: ${parada.telefono || "N/A"} | Cuota: ${parada.cuotaModeradora || "$0"}
+                        <strong style="color: #00ff66;">[#${numSecuencia}] ${parada.destinatario || parada.cliente || "Cliente"}</strong> ${badgeSubgrupo}
+                        <div style="color: #c9d1d9; font-size: 0.8rem; margin-top: 2px;">📍 ${parada.direccion || "Sin Dirección"}</div>
+                        <div style="font-size: 0.72rem; color: #8b949e; margin-top: 2px;">
+                            SCC: <span style="color: #00e5ff;">${parada.scc || parada.ssc || "N/A"}</span> | Tel: ${parada.telefono || "N/A"} | Estado: <span style="color:#7ee787;">${parada.causal || "PENDIENTE"}</span>
                         </div>
                     </div>
-                    <div class="btn-group-reorder">
-                        <button type="button" class="btn-reorder" data-action="subir" data-id="${rawId}" data-zona="${claveCanonica}">▲</button>
-                        <button type="button" class="btn-reorder" data-action="bajar" data-id="${rawId}" data-zona="${claveCanonica}">▼</button>
-                        <button type="button" class="btn-reorder" style="border-color: #ffb300; color: #ffb300;" data-action="editar" data-id="${rawId}">✏️</button>
-                        <button type="button" class="btn-reorder" style="border-color: #ff3366; color: #ff3366;" data-action="eliminar" data-id="${rawId}">🗑️</button>
+                    <div class="btn-group-reorder" style="display:flex; gap:3px;">
+                        <button type="button" class="btn-reorder" data-action="subir" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:2px 6px; border-radius:3px;">▲</button>
+                        <button type="button" class="btn-reorder" data-action="bajar" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:2px 6px; border-radius:3px;">▼</button>
+                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ffb300; color: #ffb300; cursor:pointer; padding:2px 6px; border-radius:3px;" data-action="editar" data-id="${rawId}">✏️</button>
+                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ff3366; color: #ff3366; cursor:pointer; padding:2px 6px; border-radius:3px;" data-action="eliminar" data-id="${rawId}">🗑️</button>
                     </div>
                 </div>
             `;
@@ -205,14 +201,12 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         contenedor.appendChild(details);
     });
 
-    // Delegación global de acciones de botones
     vincularEventosGlobalesAcciones(contenedor);
-
     console.log("🟢 [RUTAS_UI]: Renderizado dinámico de acordeones completado.");
 }
 
 /**
- * Event delegation para acciones de botones globales y reordenamiento manual
+ * Event delegation para acciones de botones globales y reordenamiento manual.
  */
 function vincularEventosGlobalesAcciones(contenedor) {
     contenedor.onclick = (e) => {
@@ -253,10 +247,9 @@ function vincularEventosGlobalesAcciones(contenedor) {
 }
 
 /**
- * Vincula eventos nativos Drag & Drop y Touch para interacción PWA en móviles
+ * Vincula eventos nativos Drag & Drop y Touch para interacción PWA en móviles.
  */
 function vincularEventosDragDrop(cardElement, zonaNombre) {
-    // Eventos Escritorio
     cardElement.addEventListener("dragstart", (e) => {
         itemArrastrado = cardElement;
         cardElement.classList.add("dragging");
@@ -334,7 +327,7 @@ function vincularEventosDragDrop(cardElement, zonaNombre) {
 }
 
 /**
- * Persiste la nueva secuencia atómicamente en IndexedDB tras reordenación manual.
+ * Persiste la nueva secuencia atómicamente en IndexedDB y recalcula los clústeres visuales.
  */
 async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
     const cards = contenedorPadre.querySelectorAll(".parada-card");
@@ -353,22 +346,40 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
     });
 
     todasLasParadas.forEach((p) => {
-        const pId = String(p.id || p.ssc);
+        const pId = String(p.id || p.scc || p.ssc);
         if (obtenerZonaParadaCanonica(p) === targetCanonico && ordenMapa.has(pId)) {
-            p.secuenciaZona = ordenMapa.get(pId);
-            p.orden = ordenMapa.get(pId);
+            const nuevaSec = ordenMapa.get(pId);
+            p.secuenciaZona = nuevaSec;
+            p.secuencia = nuevaSec;
+            p.orden = nuevaSec;
+            
+            // Re-asignación dinámica de grupoId en bloques de 4 para reordenamiento manual
+            const numGrupo = Math.ceil(nuevaSec / 4);
+            p.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
             p.updated_at = new Date().toISOString();
         }
     });
+
+    // Ordenamiento global sincronizado
+    todasLasParadas.sort((a, b) => (a.secuenciaZona || a.secuencia || 0) - (b.secuenciaZona || b.secuencia || 0));
 
     await guardarRutaZonificada(todasLasParadas);
 
     window.__CACHE_PARADAS_MACONDO__ = structuredClone(todasLasParadas);
     window.paradasMemoriaLocal = structuredClone(todasLasParadas);
+    window.paradasRutaActiva = structuredClone(todasLasParadas);
 
     console.log(`💾 [LOCAL_FIRST]: Secuencia reordenada guardada para ${targetCanonico}.`);
 
-    if (typeof window.actualizarPuntosEnMapa === "function") {
+    // Refrescar mapa y UI
+    if (typeof window.trazarPolilineaRuta === "function") {
+        window.trazarPolilineaRuta(todasLasParadas, targetCanonico);
+    } else if (typeof window.actualizarPuntosEnMapa === "function") {
         window.actualizarPuntosEnMapa(todasLasParadas, 0);
     }
+
+    await renderizarParadasZonificadasUI(todasLasParadas);
 }
+
+// BINDING GLOBAL
+window.renderizarParadasZonificadasUI = renderizarParadasZonificadasUI;

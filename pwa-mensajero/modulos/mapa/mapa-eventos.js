@@ -1,20 +1,19 @@
 /**
  * PROTOCOLO MACONDO - EVENTOS, BUSCADOR MULTICRITERIO Y CONTROLES DEL MAPA
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-eventos.js
+ * Arquitectura: Google Maps SDK / Local-First / Búsqueda Táctica
  */
 
 import { crearIconoParadaRadarSVG } from "./mapa-iconos.js";
 import { calcularDistanciaHaversine } from "./zonificacion/mensajero-zonificacion.js";
-import { enfocarParadaEnMapa } from "./mapa-visor.js";
-import { IndexedStore } from "../db/indexed-store.js";
+import { enfocarParadaEnMapa, recargarMapaCompleto } from "./mapa-visor.js";
+import { obtenerParadasGuardadas } from "../mensajero-persistencia.js";
 
 const KEY_PERSISTENCIA_LOCK = 'map_interaction_locked';
 
 let modoCrearParadaActivo = false;
 let marcadorBusquedaTemp = null;
 let debounceTimerBuscador = null;
-
-const dbStore = new IndexedStore();
 
 /**
  * Normaliza cadenas eliminando diacríticos, tildes y caracteres especiales.
@@ -39,7 +38,7 @@ function normalizarTextoBusqueda(texto) {
  */
 function obtenerIdUnicoParada(p) {
     if (!p) return "";
-    return String(p.id || p.ssc || p.idParada || p.id_parada || p.secuencia || p.orden || "").trim();
+    return String(p.id || p.scc || p.ssc || p.idParada || p.id_parada || p.secuencia || p.orden || "").trim();
 }
 
 /**
@@ -88,7 +87,7 @@ export const mapaEventos = {
 
         const btnZoomIn = document.getElementById('btn-zoom-in');
         const btnZoomOut = document.getElementById('btn-zoom-out');
-        const btnRefresh = document.getElementById('btn-refresh-map');
+        const btnRefresh = document.getElementById('btn-refresh-map') || document.getElementById('btn-refrescar-mapa');
         const btnToggleLock = document.getElementById('btn-toggle-lock');
 
         if (btnZoomIn) {
@@ -119,13 +118,14 @@ export const mapaEventos = {
                 btnRefresh.disabled = true;
 
                 try {
-                    if (typeof window.recargarMapaCompleto === "function") {
+                    if (typeof recargarMapaCompleto === "function") {
+                        await recargarMapaCompleto();
+                    } else if (typeof window.recargarMapaCompleto === "function") {
                         await window.recargarMapaCompleto();
-                        console.log("✅ [MAPA_EVENTOS]: Sincronización Local-First del mapa completada.");
-                    } else if (typeof window.actualizarPuntosEnMapa === "function") {
-                        const paradas = await this.obtenerColeccionParadas();
-                        window.actualizarPuntosEnMapa(paradas, 0);
+                    } else if (typeof window.ejecutarRefrescoLocalMapa === "function") {
+                        await window.ejecutarRefrescoLocalMapa();
                     }
+                    console.log("✅ [MAPA_EVENTOS]: Sincronización Local-First del mapa completada.");
                 } catch (err) {
                     console.error("❌ [MAPA_EVENTOS]: Error crítico durante la recarga del mapa:", err);
                 } finally {
@@ -218,31 +218,19 @@ export const mapaEventos = {
      * @returns {Promise<Array<Object>>}
      */
     async obtenerColeccionParadas() {
-        const cacheRAM = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales;
-        if (Array.isArray(cacheRAM) && cacheRAM.length > 0) {
-            return cacheRAM;
+        let paradas = await obtenerParadasGuardadas();
+        if (!Array.isArray(paradas) || paradas.length === 0) {
+            paradas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
         }
 
-        try {
-            let paradasLocal = [];
-            if (typeof dbStore.obtenerParadas === 'function') {
-                paradasLocal = await dbStore.obtenerParadas();
-            } else if (typeof dbStore.obtenerTodasParadas === 'function') {
-                paradasLocal = await dbStore.obtenerTodasParadas();
-            } else if (typeof dbStore.getAll === 'function') {
-                paradasLocal = await dbStore.getAll('paradas');
-            }
+        // Asegurar ordenamiento consistente por secuencia
+        paradas.sort((a, b) => {
+            const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
+            const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
+            return seqA - seqB;
+        });
 
-            if (Array.isArray(paradasLocal) && paradasLocal.length > 0) {
-                window.paradasRutaActiva = paradasLocal;
-                window.__CACHE_PARADAS_MACONDO__ = paradasLocal;
-                return paradasLocal;
-            }
-        } catch (err) {
-            console.warn("⚠️ [MAPA_EVENTOS]: No se pudo consultar IndexedDB. Usando fallback de memoria:", err);
-        }
-
-        return window.paradasRutaActiva || [];
+        return paradas;
     },
 
     /**
@@ -257,7 +245,7 @@ export const mapaEventos = {
 
         if (intencion.tipo === 'STOP') {
             resultados = paradas.filter((p, index) => {
-                const sec = parseInt(p.secuencia || p.orden || p.secuenciaZona || index + 1, 10);
+                const sec = parseInt(p.secuenciaZona || p.secuencia || p.orden || index + 1, 10);
                 return sec === intencion.numeroStop;
             }).map(p => ({ ...p, _categoriaBusqueda: 'STOP' }));
         } 
@@ -276,7 +264,7 @@ export const mapaEventos = {
 
         if (resultados.length === 0 && intencion.tipo !== 'STOP') {
             resultados = paradas.filter((p, index) => {
-                const sec = (p.secuencia || p.orden || index + 1).toString();
+                const sec = (p.secuenciaZona || p.secuencia || p.orden || index + 1).toString();
                 const nombreCliente = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
                 const dir = normalizarTextoBusqueda(p.direccion || p.dir || "");
 
@@ -298,7 +286,7 @@ export const mapaEventos = {
 
         if (coincidencias.length > 0) {
             html += coincidencias.map((p, idx) => {
-                const sec = p.secuencia || p.orden || p.secuenciaZona || idx + 1;
+                const sec = p.secuenciaZona || p.secuencia || p.orden || idx + 1;
                 const uid = obtenerIdUnicoParada(p);
                 const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente N/A";
                 const direccionTexto = p.direccion || p.dir || "Sin dirección";
@@ -419,7 +407,7 @@ export const mapaEventos = {
         const card = document.getElementById("tarjeta-detalle-parada");
         if (!card) return;
 
-        const sec = parada.secuencia || parada.orden || parada.secuenciaZona || 1;
+        const sec = parada.secuenciaZona || parada.secuencia || parada.orden || 1;
         const nombreCliente = parada.destinatario || parada.cliente || parada.nombre_cliente || parada.nombre || "Cliente N/A";
 
         const elemSec = document.getElementById("card-stop-secuencia");
@@ -473,7 +461,7 @@ export const mapaEventos = {
             const distTexto = p.distanciaMetros >= 1000 
                 ? `${(p.distanciaMetros / 1000).toFixed(2)} km` 
                 : `${Math.round(p.distanciaMetros)} m`;
-            const sec = p.secuencia || p.orden || p.secuenciaZona || "?";
+            const sec = p.secuenciaZona || p.secuencia || p.orden || "?";
             const uid = obtenerIdUnicoParada(p);
             const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente";
 
@@ -591,7 +579,7 @@ export function ejecutarBusquedaDireccion(dir) {
     mapaEventos.ejecutarGeocodificacionDireccion(dir);
 }
 
-// Global Bindings
+// BINDINGS GLOBALES EN WINDOW
 window.toggleBuscadorMapaUI = toggleBuscadorMapaUI;
 window.ejecutarBusquedaDireccion = ejecutarBusquedaDireccion;
 window.ejecutarBusquedaParadas = (query) => mapaEventos.ejecutarFiltradoParadas(query);

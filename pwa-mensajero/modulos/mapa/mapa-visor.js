@@ -1,6 +1,7 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL DEL MAPA (MODO RÁSTER ESTABLE 2D)
- * Ubicación: modulos/mapa/mapa-visor.js
+ * Ubicación: pwa-mensajero/modulos/mapa/mapa-visor.js
+ * Arquitectura: Google Maps SDK / Local-First / Orden Persistente
  */
 
 import { desplegarZonaMensajeroEnMapa } from "./mapa-mensajero-zonas.js";
@@ -14,6 +15,7 @@ import {
     mapaEventos 
 } from "./mapa-eventos.js";
 import { guardarRutaZonificada, obtenerParadasGuardadas } from "../mensajero-persistencia.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificacion/estandar-zonas.js";
 
 // Instancias y variables de estado global
 window.mapaMensajero = window.mapaMensajero || null;
@@ -77,23 +79,22 @@ export function refrescarLienzoMapa() {
 
     temporizadorDebounceResize = setTimeout(() => {
         requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                if (contenedor.clientWidth > 0 && contenedor.clientHeight > 0) {
-                    const centroActual = mapa.getCenter();
-                    google.maps.event.trigger(mapa, "resize");
-                    
-                    if (centroActual) {
-                        mapa.setCenter(centroActual);
-                    }
-                    console.log("⚡ [MAPA_VISOR]: Re-renderizado Post-Paint de lienzo Ráster ejecutado con éxito.");
+            if (contenedor.clientWidth > 0 && contenedor.clientHeight > 0) {
+                const centroActual = mapa.getCenter();
+                google.maps.event.trigger(mapa, "resize");
+                
+                if (centroActual) {
+                    mapa.setCenter(centroActual);
                 }
-            });
+                console.log("⚡ [MAPA_VISOR]: Re-renderizado Post-Paint de lienzo Ráster ejecutado con éxito.");
+            }
         });
     }, 80);
 }
 
 /**
- * Consulta IndexedDB, resincroniza la RAM global y fuerza la actualización del canvas y marcadores.
+ * Consulta IndexedDB, resincroniza la RAM global y fuerza la actualización del canvas,
+ * respetando de forma SAGRADA la secuenciaZona guardada por el usuario.
  * @returns {Promise<boolean>}
  */
 export async function recargarMapaCompleto() {
@@ -111,6 +112,13 @@ export async function recargarMapaCompleto() {
 
         console.log(`📦 [MAPA_VISOR]: Total de paradas recuperadas para refresco: ${paradasFrescas.length}`);
 
+        // ORDENACIÓN ESTRICTA: Respetar la secuencia exacta guardada por el usuario
+        paradasFrescas.sort((a, b) => {
+            const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
+            const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
+            return seqA - seqB;
+        });
+
         // Sincronizar memorias RAM
         window.__CACHE_PARADAS_MACONDO__ = [...paradasFrescas];
         window.paradasMemoriaLocal = [...paradasFrescas];
@@ -118,20 +126,26 @@ export async function recargarMapaCompleto() {
         window.pedidosGlobales = [...paradasFrescas];
 
         const mapa = window.mapaMensajero || window.mapaInstancia;
+        const zonaActiva = localStorage.getItem("zona_activa_operacion") || "ORIENTE";
+        const targetCanonico = estandarizarZonaCanonica(zonaActiva);
 
         if (mapa && typeof google !== "undefined" && google.maps) {
             // Forzar disparo del evento resize sobre la instancia
             google.maps.event.trigger(mapa, "resize");
             console.log("📐 [MAPA_VISOR]: Disparado 'resize' sobre Google Maps.");
 
-            // Actualizar Marcadores y Polilíneas
+            // Actualizar Marcadores y Minirutas por Clúster
             await actualizarPuntosEnMapa(paradasFrescas, 0);
 
-            // Ajustar los límites (fitBounds) si existen coordenadas válidas
+            // Filtrar paradas de la zona activa para fitBounds enfocado
+            const paradasDeZona = paradasFrescas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
+            const listaParaBounds = paradasDeZona.length > 0 ? paradasDeZona : paradasFrescas;
+
+            // Ajustar los límites (fitBounds)
             const bounds = new google.maps.LatLngBounds();
             let puntosValidos = 0;
 
-            paradasFrescas.forEach((p) => {
+            listaParaBounds.forEach((p) => {
                 const coords = obtenerCoordenadasValidasParada(p);
                 if (coords) {
                     bounds.extend(new google.maps.LatLng(coords.lat, coords.lng));
@@ -141,13 +155,13 @@ export async function recargarMapaCompleto() {
 
             if (puntosValidos > 0) {
                 mapa.fitBounds(bounds);
-                console.log(`🔍 [MAPA_VISOR]: Bounds re-ajustados para ${puntosValidos} coordenadas.`);
+                console.log(`🔍 [MAPA_VISOR]: Bounds re-ajustados para ${puntosValidos} coordenadas de la zona [${targetCanonico}].`);
             }
         } else {
             console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible durante el refresco.");
         }
 
-        // Refrescar acordiones de la UI si la función existe
+        // Refrescar acordeones de la UI si la función existe
         if (typeof window.renderizarParadasZonificadasUI === "function") {
             await window.renderizarParadasZonificadasUI(paradasFrescas);
         }
@@ -267,7 +281,7 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
 }
 
 /**
- * Actualiza waypoints, polilínea y marcadores sobre el mapa.
+ * Actualiza waypoints, minirutas por clúster y marcadores sobre el mapa.
  * @param {Array<Object>} listaPedidos 
  * @param {number} [indiceActivo=0] 
  */
@@ -278,16 +292,18 @@ export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo = 0) {
         return;
     }
 
-    const zonaDetectada = Array.isArray(listaPedidos) && listaPedidos.length > 0 
+    const zonaDetectada = localStorage.getItem("zona_activa_operacion") || (Array.isArray(listaPedidos) && listaPedidos.length > 0 
         ? (listaPedidos[0]?.zonaKey || listaPedidos[0]?.zona || "GENERAL") 
-        : "TODAS";
+        : "TODAS");
+
+    const targetCanonico = estandarizarZonaCanonica(zonaDetectada);
 
     if (typeof desplegarZonaMensajeroEnMapa === "function") {
-        desplegarZonaMensajeroEnMapa(mapa, zonaDetectada);
+        desplegarZonaMensajeroEnMapa(mapa, targetCanonico);
     }
 
     if (typeof trazarPolilineaRuta === "function") {
-        trazarPolilineaRuta(listaPedidos, zonaDetectada);
+        trazarPolilineaRuta(listaPedidos, targetCanonico);
     }
 
     if (typeof renderizarMarcadoresInteractivos === "function") {
@@ -370,11 +386,18 @@ export function enfocarParadaEnMapa(parada) {
                 parada.latitud = latNum;
                 parada.longitud = lngNum;
 
-                const coleccionActual = window.paradasRutaActiva || window.pedidosGlobales || [];
+                let coleccionActual = window.paradasRutaActiva || window.__CACHE_PARADAS_MACONDO__ || [];
                 if (Array.isArray(coleccionActual) && coleccionActual.length > 0) {
                     try {
                         await guardarRutaZonificada(coleccionActual);
-                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc} persistidas en IndexedDB.`);
+                        
+                        // Sincronizar todas las memorias RAM
+                        window.__CACHE_PARADAS_MACONDO__ = [...coleccionActual];
+                        window.paradasMemoriaLocal = [...coleccionActual];
+                        window.paradasRutaActiva = [...coleccionActual];
+                        window.pedidosGlobales = [...coleccionActual];
+
+                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc} persistidas en IndexedDB y RAM.`);
                     } catch (err) {
                         console.warn("⚠️ [MAPA_VISOR]: No se pudo auto-guardar la coordenada en IndexedDB:", err);
                     }
@@ -401,7 +424,7 @@ export function obtenerInstanciaMapa() {
     return window.mapaMensajero || window.mapaInstancia || null;
 }
 
-// BINDINGS GLOBALES
+// BINDINGS GLOBALES EN WINDOW
 window.obtenerCoordenadasValidasParada = obtenerCoordenadasValidasParada;
 window.inicializarMapaMensajero = inicializarMapaMensajero;
 window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;
@@ -410,6 +433,7 @@ window.enfocarParadaEnMapa = enfocarParadaEnMapa;
 window.refrescarLienzoMapa = refrescarLienzoMapa;
 window.obtenerInstanciaMapa = obtenerInstanciaMapa;
 window.recargarMapaCompleto = recargarMapaCompleto;
+window.ejecutarRefrescoLocalMapa = recargarMapaCompleto;
 
 export { 
     ejecutarBusquedaDireccion, 

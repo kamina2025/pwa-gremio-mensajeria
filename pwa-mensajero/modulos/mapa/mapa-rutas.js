@@ -1,13 +1,29 @@
 /**
- * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO Y RUTAS AISLADAS POR ZONA
+ * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO Y MINIRUTAS POR CLÚSTER
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-rutas.js
  * Arquitectura: Google Maps JavaScript API / Local-First / Cyberpunk Dark Mode
  */
 
 import { PALETA_ZONAS } from "./zonificacion/mensajero-zonificacion.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificacion/estandar-zonas.js";
+
+// Paleta Cyberpunk Neón para diferenciar visualmente cada miniruta / clúster
+const PALETA_COLORES_CLUSTERS = [
+    "#00E5FF", // Cyan Neón (GRUPO-01)
+    "#00FF66", // Verde Neón (GRUPO-02)
+    "#FFB300", // Amarillo/Ámbar Neón (GRUPO-03)
+    "#FF3366", // Magenta/Rosa Neón (GRUPO-04)
+    "#9D00FF", // Púrpura Neón (GRUPO-05)
+    "#FF6600"  // Naranja Neón (GRUPO-06)
+];
 
 let coleccionPolilineasActivas = [];
 let directionsRendererActivo = null;
+
+// Exposición global para interoperabilidad PWA
+if (!window.__POLILINEAS_CLUSTERS__) {
+    window.__POLILINEAS_CLUSTERS__ = [];
+}
 
 /**
  * Sanitiza una dirección en texto añadiéndole el contexto geográfico si no lo posee.
@@ -53,17 +69,25 @@ function normalizarPuntoUbicacion(punto) {
 }
 
 /**
- * Limpia el trazado de polilineas y renderers previos en el visor del mapa.
+ * Limpia el trazado de polílineas y renderers previos en el visor del mapa.
  */
 export function limpiarRutaTrazada() {
-    console.log("🧹 [MAPA_RUTAS]: Limpiando polilíneas y trazos previos en visor...");
+    console.log("🧹 [MAPA_RUTAS]: Limpiando minirutas y polílineas previas en visor...");
 
-    // Limpiar polilíneas manuales
+    // Limpiar colección local
     if (Array.isArray(coleccionPolilineasActivas)) {
         coleccionPolilineasActivas.forEach(poly => {
             if (poly && typeof poly.setMap === "function") poly.setMap(null);
         });
         coleccionPolilineasActivas = [];
+    }
+
+    // Limpiar colección global
+    if (Array.isArray(window.__POLILINEAS_CLUSTERS__)) {
+        window.__POLILINEAS_CLUSTERS__.forEach(poly => {
+            if (poly && typeof poly.setMap === "function") poly.setMap(null);
+        });
+        window.__POLILINEAS_CLUSTERS__ = [];
     }
 
     // Limpiar renderers de direcciones activos
@@ -86,10 +110,10 @@ export function limpiarRutaTrazada() {
 }
 
 /**
- * Traza de forma segmentada las rutas aisladas por zona y grupo en el mapa.
- * Garantiza la separación visual entre zonas e interconecta las secuencias optimizadas.
+ * Traza las minirutas divididas en segmentos independientes según su clúster (grupoId).
+ * Garantiza la separación cromática por miniruta y la secuencia entre paradas.
  * 
- * @param {Array<Object>} listaPedidos - Arreglo global de paradas
+ * @param {Array<Object>} listaPedidos - Arreglo global o de zona de paradas
  * @param {string} [zonaFoco=null] - Zona específica para enfocar/aislar opcionalmente
  * @param {google.maps.Map} [mapaInstancia=null] - Instancia del mapa
  */
@@ -106,60 +130,49 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
         return;
     }
 
-    // Si la API de Google Maps DirectionsRenderer está dibujando activamente por carreteras, se respeta
-    if (window.__DIRECTIONS_RENDERER__ && window.__DIRECTIONS_RENDERER__.getMap()) {
-        console.log("ℹ️ [MAPA_RUTAS]: Trazado vial por DirectionsRenderer activo. Preservando render de carretera.");
-        return;
-    }
-
     limpiarRutaTrazada();
 
     if (!mapaTarget || typeof google === "undefined" || !google.maps) {
-        console.warn("⚠️ [MAPA_RUTAS]: Instancia de Google Maps no lista para dibujar polilínea.");
+        console.warn("⚠️ [MAPA_RUTAS]: Instancia de Google Maps no lista para dibujar minirutas.");
         return;
     }
 
-    // 1. Agrupar paradas por zona geográfica
-    const gruposPorZona = {};
+    // 1. Filtrar y agrupar paradas por Zona
+    const targetCanonico = zonaFoco ? estandarizarZonaCanonica(zonaFoco) : null;
+    const paradasFiltradas = targetCanonico
+        ? listaPedidos.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico)
+        : listaPedidos;
 
-    listaPedidos.forEach(p => {
-        if (!p) return;
-        const zKey = (p.zonaKey || p.zona || p.nombreZona || "GENERAL")
-            .toUpperCase()
-            .replace(/^ZONA[_\s]+/i, "")
-            .replace(/_/g, "-");
+    if (paradasFiltradas.length < 2) {
+        console.warn("ℹ️ [MAPA_RUTAS]: Se requieren al menos 2 paradas para dibujar minirutas.");
+        return;
+    }
 
-        if (zonaFoco) {
-            const zFocoLimpio = zonaFoco.toUpperCase().replace(/^ZONA[_\s]+/i, "").replace(/_/g, "-");
-            if (zKey !== zFocoLimpio) return;
+    // 2. Sub-agrupar paradas por su `grupoId` (Miniruta / Clúster)
+    const clustersMap = new Map();
+    paradasFiltradas.forEach((parada, idx) => {
+        // Fallback: si no posee grupoId asignado, agrupar en bloques de 4
+        const grupoKey = parada.grupoId || `GRUPO-${String(Math.ceil((idx + 1) / 4)).padStart(2, "0")}`;
+        if (!clustersMap.has(grupoKey)) {
+            clustersMap.set(grupoKey, []);
         }
-
-        if (!gruposPorZona[zKey]) {
-            gruposPorZona[zKey] = [];
-        }
-        gruposPorZona[zKey].push(p);
+        clustersMap.get(grupoKey).push(parada);
     });
 
-    console.group(`KM [MAPA_RUTAS]: Procesando trayectos independientes ${zonaFoco ? `[Foco: ${zonaFoco}]` : ''}`);
+    console.group(`KM [MAPA_RUTAS]: Procesando ${clustersMap.size} minirutas por clúster ${targetCanonico ? `[Foco: ${targetCanonico}]` : ''}`);
 
-    // 2. Dibujar polilíneas autónomas para cada grupo/zona
-    for (const [keyZona, paradasDeEstaZona] of Object.entries(gruposPorZona)) {
-        if (paradasDeEstaZona.length < 2) {
-            console.log(`ℹ️ [MAPA_RUTAS]: La Zona [${keyZona}] contiene ${paradasDeEstaZona.length} parada(s). No requiere polílinea inter-puntos.`);
-            continue;
-        }
+    let colorIndex = 0;
 
-        // Ordenar paradas estrictamente por su atributo de secuencia numérico
-        paradasDeEstaZona.sort((a, b) => {
+    // 3. Dibujar una Polyline independiente con color único por cada miniruta / clúster
+    clustersMap.forEach((paradasGrupo, grupoId) => {
+        // Ordenar internamente las paradas del clúster por su secuencia
+        paradasGrupo.sort((a, b) => {
             const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
             const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
             return seqA - seqB;
         });
 
-        const infoMeta = (PALETA_ZONAS && PALETA_ZONAS[keyZona]) || (PALETA_ZONAS && PALETA_ZONAS["GENERAL"]) || { color: "#00E5FF" };
-        const colorPolilinea = infoMeta.color || "#00E5FF";
-
-        const pathPuntos = paradasDeEstaZona
+        const pathPuntos = paradasGrupo
             .map(p => {
                 const lat = parseFloat(p.lat || p.latitud || (p.coordenadas && p.coordenadas.lat) || (p.centroide && p.centroide.lat));
                 const lng = parseFloat(p.lng || p.longitud || (p.coordenadas && p.coordenadas.lng) || (p.centroide && p.centroide.lng));
@@ -168,19 +181,24 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
             .filter(Boolean);
 
         if (pathPuntos.length >= 2) {
-            const polyDirecta = new google.maps.Polyline({
+            const colorMiniruta = PALETA_COLORES_CLUSTERS[colorIndex % PALETA_COLORES_CLUSTERS.length];
+
+            const polyMiniruta = new google.maps.Polyline({
                 path: pathPuntos,
                 geodesic: true,
-                strokeColor: colorPolilinea,
-                strokeOpacity: 0.85,
-                strokeWeight: 4,
+                strokeColor: colorMiniruta,
+                strokeOpacity: 0.9,
+                strokeWeight: 5,
                 map: mapaTarget
             });
 
-            coleccionPolilineasActivas.push(polyDirecta);
-            console.log(`✅ [MAPA_RUTAS_OK]: Trayecto directo trazado para Zona [${keyZona}] (${pathPuntos.length} puntos).`);
+            coleccionPolilineasActivas.push(polyMiniruta);
+            window.__POLILINEAS_CLUSTERS__.push(polyMiniruta);
+
+            console.log(` ⚡ [MINIRUTA_OK]: ${grupoId} (${pathPuntos.length} puntos) -> Color: %c${colorMiniruta}`, `color: ${colorMiniruta}; font-weight: bold;`);
+            colorIndex++;
         }
-    }
+    });
 
     console.groupEnd();
 }
@@ -196,3 +214,4 @@ export async function trazarRutaPorZonaAislada(paradasZona, zonaFoco = null) {
 window.trazarPolilineaRuta = trazarPolilineaRuta;
 window.trazarRutaPorZonaAislada = trazarRutaPorZonaAislada;
 window.limpiarRutaTrazada = limpiarRutaTrazada;
+window.limpiarPolilineasMapa = limpiarRutaTrazada;

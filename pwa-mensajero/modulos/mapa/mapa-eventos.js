@@ -88,6 +88,7 @@ export const mapaEventos = {
 
         const btnZoomIn = document.getElementById('btn-zoom-in');
         const btnZoomOut = document.getElementById('btn-zoom-out');
+        const btnRefresh = document.getElementById('btn-refresh-map');
         const btnToggleLock = document.getElementById('btn-toggle-lock');
 
         if (btnZoomIn) {
@@ -101,6 +102,37 @@ export const mapaEventos = {
             btnZoomOut.onclick = (e) => {
                 e.preventDefault();
                 this.ejecutarZoom(-1);
+            };
+        }
+
+        if (btnRefresh) {
+            btnRefresh.onclick = async (e) => {
+                e.preventDefault();
+                console.log("🔄 [MAPA_EVENTOS]: Solicitud de recarga manual activada por el usuario.");
+
+                if (btnRefresh.classList.contains("spinning")) {
+                    console.warn("⚠️ [MAPA_EVENTOS]: Refresco en ejecución. Operación omitida.");
+                    return;
+                }
+
+                btnRefresh.classList.add("spinning");
+                btnRefresh.disabled = true;
+
+                try {
+                    if (typeof window.recargarMapaCompleto === "function") {
+                        await window.recargarMapaCompleto();
+                        console.log("✅ [MAPA_EVENTOS]: Sincronización Local-First del mapa completada.");
+                    } else {
+                        console.error("❌ [MAPA_EVENTOS]: 'window.recargarMapaCompleto' no está definida.");
+                    }
+                } catch (err) {
+                    console.error("❌ [MAPA_EVENTOS]: Error crítico durante la recarga del mapa:", err);
+                } finally {
+                    setTimeout(() => {
+                        btnRefresh.classList.remove("spinning");
+                        btnRefresh.disabled = false;
+                    }, 400);
+                }
             };
         }
 

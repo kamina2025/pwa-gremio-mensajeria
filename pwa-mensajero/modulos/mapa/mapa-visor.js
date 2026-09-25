@@ -1,6 +1,6 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL DEL MAPA (MODO RÁSTER ESTABLE 2D)
- * Ubicación: pwa-mensajero/modulos/mapa/mapa-visor.js
+ * Ubicación: modulos/mapa/mapa-visor.js
  */
 
 import { desplegarZonaMensajeroEnMapa } from "./mapa-mensajero-zonas.js";
@@ -13,7 +13,7 @@ import {
     activarModoSeleccionMapaUI,
     mapaEventos 
 } from "./mapa-eventos.js";
-import { guardarRutaZonificada } from "../mensajero-persistencia.js";
+import { guardarRutaZonificada, obtenerParadasGuardadas } from "../mensajero-persistencia.js";
 
 // Instancias y variables de estado global
 window.mapaMensajero = window.mapaMensajero || null;
@@ -34,13 +34,11 @@ let temporizadorDebounceResize = null;
 export function obtenerCoordenadasValidasParada(parada) {
     if (!parada || typeof parada !== "object") return null;
 
-    // Evaluaciones defensivas para Latitud
     let rawLat = parada.lat ?? parada.latitud ?? parada.latitud_num ?? parada.y ?? parada.lat_num;
     if ((rawLat === undefined || rawLat === null) && parada.coordenadas) {
         rawLat = parada.coordenadas.lat ?? parada.coordenadas.latitud;
     }
 
-    // Evaluaciones defensivas para Longitud
     let rawLng = parada.lng ?? parada.longitud ?? parada.longitud_num ?? parada.x ?? parada.lng_num;
     if ((rawLng === undefined || rawLng === null) && parada.coordenadas) {
         rawLng = parada.coordenadas.lng ?? parada.coordenadas.longitud;
@@ -50,7 +48,6 @@ export function obtenerCoordenadasValidasParada(parada) {
         return null;
     }
 
-    // Convertir strings con comas a formato flotante estándar con puntos
     const latStr = String(rawLat).trim().replace(',', '.');
     const lngStr = String(rawLng).trim().replace(',', '.');
 
@@ -96,6 +93,77 @@ export function refrescarLienzoMapa() {
 }
 
 /**
+ * Consulta IndexedDB, resincroniza la RAM global y fuerza la actualización del canvas y marcadores.
+ * @returns {Promise<boolean>}
+ */
+export async function recargarMapaCompleto() {
+    console.group("🔄 [MAPA_VISOR]: Ejecutando sincronización y refresco Local-First del mapa...");
+
+    try {
+        let paradasFrescas = [];
+        if (typeof obtenerParadasGuardadas === "function") {
+            paradasFrescas = await obtenerParadasGuardadas();
+        }
+
+        if (!Array.isArray(paradasFrescas) || paradasFrescas.length === 0) {
+            paradasFrescas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
+        }
+
+        console.log(`📦 [MAPA_VISOR]: Total de paradas recuperadas para refresco: ${paradasFrescas.length}`);
+
+        // Sincronizar memorias RAM
+        window.__CACHE_PARADAS_MACONDO__ = [...paradasFrescas];
+        window.paradasMemoriaLocal = [...paradasFrescas];
+        window.paradasRutaActiva = [...paradasFrescas];
+        window.pedidosGlobales = [...paradasFrescas];
+
+        const mapa = window.mapaMensajero || window.mapaInstancia;
+
+        if (mapa && typeof google !== "undefined" && google.maps) {
+            // Forzar disparo del evento resize sobre la instancia
+            google.maps.event.trigger(mapa, "resize");
+            console.log("📐 [MAPA_VISOR]: Disparado 'resize' sobre Google Maps.");
+
+            // Actualizar Marcadores y Polilíneas
+            await actualizarPuntosEnMapa(paradasFrescas, 0);
+
+            // Ajustar los límites (fitBounds) si existen coordenadas válidas
+            const bounds = new google.maps.LatLngBounds();
+            let puntosValidos = 0;
+
+            paradasFrescas.forEach((p) => {
+                const coords = obtenerCoordenadasValidasParada(p);
+                if (coords) {
+                    bounds.extend(new google.maps.LatLng(coords.lat, coords.lng));
+                    puntosValidos++;
+                }
+            });
+
+            if (puntosValidos > 0) {
+                mapa.fitBounds(bounds);
+                console.log(`🔍 [MAPA_VISOR]: Bounds re-ajustados para ${puntosValidos} coordenadas.`);
+            }
+        } else {
+            console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible durante el refresco.");
+        }
+
+        // Refrescar acordiones de la UI si la función existe
+        if (typeof window.renderizarParadasZonificadasUI === "function") {
+            await window.renderizarParadasZonificadasUI(paradasFrescas);
+        }
+
+        refrescarLienzoMapa();
+        console.groupEnd();
+        return true;
+
+    } catch (error) {
+        console.error("❌ [MAPA_VISOR]: Error crítico ejecutando recargarMapaCompleto:", error);
+        console.groupEnd();
+        throw error;
+    }
+}
+
+/**
  * Inicializa la instancia de Google Maps en modo 2D estable.
  * @param {string} [idContenedor="mapa-mensajero"] - ID del elemento contenedor
  * @returns {google.maps.Map|null}
@@ -130,7 +198,7 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
         }
 
         const instancia = new google.maps.Map(contenedorMapa, {
-            center: { lat: 3.4516467, lng: -76.5319854 }, // Coordenadas Base Cali
+            center: { lat: 3.4516467, lng: -76.5319854 }, // Base Cali
             zoom: 13,
             disableDefaultUI: true,
             zoomControl: false,
@@ -199,7 +267,7 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
 }
 
 /**
- * Actualiza waypoints, polilínia y marcadores sobre el mapa.
+ * Actualiza waypoints, polilínea y marcadores sobre el mapa.
  * @param {Array<Object>} listaPedidos 
  * @param {number} [indiceActivo=0] 
  */
@@ -272,7 +340,6 @@ export function enfocarParadaEnMapa(parada) {
         return;
     }
 
-    // 1. Intentar extracción directa de coordenadas sanitizadas
     const coords = obtenerCoordenadasValidasParada(parada);
 
     if (coords) {
@@ -284,7 +351,6 @@ export function enfocarParadaEnMapa(parada) {
         return;
     }
 
-    // 2. Fallback por Geocodificación en vivo si la parada solo posee dirección escrita
     const direccionTexto = parada?.direccion || parada?.dir;
     if (direccionTexto && typeof google !== "undefined" && google.maps && google.maps.Geocoder) {
         console.warn(`⚠️ [MAPA_VISOR]: Parada sin coordenadas directas. Geocodificando dirección en vivo: "${direccionTexto}"`);
@@ -299,13 +365,11 @@ export function enfocarParadaEnMapa(parada) {
 
                 console.log(`✅ [MAPA_VISOR]: Dirección geocodificada con éxito -> [Lat: ${latNum}, Lng: ${lngNum}]`);
 
-                // Actualizar atributos de geolocalización en memoria
                 parada.lat = latNum;
                 parada.lng = lngNum;
                 parada.latitud = latNum;
                 parada.longitud = lngNum;
 
-                // Persistir las coordenadas recién obtenidas en IndexedDB para no re-consultar a Google Maps
                 const coleccionActual = window.paradasRutaActiva || window.pedidosGlobales || [];
                 if (Array.isArray(coleccionActual) && coleccionActual.length > 0) {
                     try {
@@ -345,6 +409,7 @@ window.enfocarZonaEnMapa = enfocarZonaEnMapa;
 window.enfocarParadaEnMapa = enfocarParadaEnMapa;
 window.refrescarLienzoMapa = refrescarLienzoMapa;
 window.obtenerInstanciaMapa = obtenerInstanciaMapa;
+window.recargarMapaCompleto = recargarMapaCompleto;
 
 export { 
     ejecutarBusquedaDireccion, 

@@ -20,15 +20,18 @@
         <ul class="cyber-sugerencias-lista" id="sugerencias-paradas-mapa" style="display:none;"></ul>
     </div>
 
-    <!-- 🎛️ CONTROLES VERTICALES FLOTANTES (ZOOM & LOCK) -->
+    <!-- 🎛️ CONTROLES VERTICALES FLOTANTES (ZOOM, REFRESH & LOCK) -->
     <div class="cyber-map-controls" id="cyber-map-controls">
-        <button type="button" class="cyber-btn-map" id="btn-zoom-in" aria-label="Acercar mapa">
+        <button type="button" class="cyber-btn-map" id="btn-zoom-in" title="Acercar (Zoom In)" aria-label="Acercar mapa">
             <span class="cyber-btn-icon">➕</span>
         </button>
-        <button type="button" class="cyber-btn-map" id="btn-zoom-out" aria-label="Alejar mapa">
+        <button type="button" class="cyber-btn-map" id="btn-zoom-out" title="Alejar (Zoom Out)" aria-label="Alejar mapa">
             <span class="cyber-btn-icon">➖</span>
         </button>
-        <button type="button" class="cyber-btn-map" id="btn-toggle-lock" aria-label="Bloquear/Desbloquear mapa" data-locked="false">
+        <button type="button" class="cyber-btn-map cyber-btn-refresh" id="btn-refresh-map" title="Refrescar y Sincronizar Mapa" aria-label="Refrescar mapa">
+            <span class="cyber-btn-icon refresh-icon">🔄</span>
+        </button>
+        <button type="button" class="cyber-btn-map" id="btn-toggle-lock" title="Bloquear / Desbloquear Mapa" aria-label="Bloquear/Desbloquear mapa" data-locked="false">
             <span class="cyber-btn-icon" id="icon-lock-state">🔓</span>
         </button>
     </div>

@@ -5,6 +5,10 @@
 
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
 import { IndexedStore } from "../db/indexed-store.js";
+/**
+ * Habilita el arrastre del pin en el lienzo para reubicación (Acción Este - Mover).
+ */
+import { actualizarParadaEnPlanillaLocal } from "../planilla/planillas-db.js";
 
 // Instancia de persistencia Local-First para operaciones de IndexedDB
 const dbStore = new IndexedStore();
@@ -39,7 +43,7 @@ export function cerrarOverlayActivo() {
 
 /**
  * Normaliza y añade contexto a las direcciones si no incluyen la ciudad base.
- * @param {string} direccion 
+ * @param {string} direccion
  * @returns {string}
  */
 function sanitizarDireccionContexto(direccion) {
@@ -53,14 +57,14 @@ function sanitizarDireccionContexto(direccion) {
 
 /**
  * Invoca el marcador telefónico nativo en dispositivos móviles.
- * @param {string} numeroTelefono 
+ * @param {string} numeroTelefono
  */
-window.iniciarLlamadaAndroid = function(numeroTelefono) {
+window.iniciarLlamadaAndroid = function (numeroTelefono) {
     if (!numeroTelefono || numeroTelefono.trim() === "" || numeroTelefono === "N/A") {
         alert("⚠️ No hay un número de teléfono válido para esta parada.");
         return;
     }
-    const numeroLimpio = numeroTelefono.replace(/[^\d+]/g, '');
+    const numeroLimpio = numeroTelefono.replace(/[^\d+]/g, "");
     window.location.href = `tel:${numeroLimpio}`;
 };
 
@@ -89,9 +93,9 @@ function obtenerClaseMenuRadialOverlay() {
         }
 
         injectStyles() {
-            if (document.getElementById('cyberpunk-menu-styles')) return;
-            const style = document.createElement('style');
-            style.id = 'cyberpunk-menu-styles';
+            if (document.getElementById("cyberpunk-menu-styles")) return;
+            const style = document.createElement("style");
+            style.id = "cyberpunk-menu-styles";
             style.textContent = `
                 .cyberpunk-cross-menu {
                     position: absolute;
@@ -147,8 +151,8 @@ function obtenerClaseMenuRadialOverlay() {
         }
 
         onAdd() {
-            this.container = document.createElement('div');
-            this.container.className = 'cyberpunk-cross-menu';
+            this.container = document.createElement("div");
+            this.container.className = "cyberpunk-cross-menu";
             this.container.innerHTML = `
                 <button type="button" class="cyber-btn cyber-btn-norte" title="Editar Parada" aria-label="Editar">N</button>
                 <button type="button" class="cyber-btn cyber-btn-este" title="Mover Punto" aria-label="Mover">E</button>
@@ -168,20 +172,20 @@ function obtenerClaseMenuRadialOverlay() {
             const bindAction = (selector, actionName, handler) => {
                 const btn = this.container.querySelector(selector);
                 if (btn) {
-                    btn.addEventListener('click', (e) => {
+                    btn.addEventListener("click", (e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         console.log(`📢 [MENU_RADIAL]: Acción ${actionName} seleccionada`);
-                        if (typeof handler === 'function') handler();
+                        if (typeof handler === "function") handler();
                         this.cerrar();
                     });
                 }
             };
 
-            bindAction('.cyber-btn-norte', 'NORTE (Editar)', this.handlers.onEdit);
-            bindAction('.cyber-btn-este', 'ESTE (Mover)', this.handlers.onMove);
-            bindAction('.cyber-btn-sur', 'SUR (Eliminar)', this.handlers.onDelete);
-            bindAction('.cyber-btn-oeste', 'OESTE (Reportar)', this.handlers.onReport);
+            bindAction(".cyber-btn-norte", "NORTE (Editar)", this.handlers.onEdit);
+            bindAction(".cyber-btn-este", "ESTE (Mover)", this.handlers.onMove);
+            bindAction(".cyber-btn-sur", "SUR (Eliminar)", this.handlers.onDelete);
+            bindAction(".cyber-btn-oeste", "OESTE (Reportar)", this.handlers.onReport);
         }
 
         draw() {
@@ -215,8 +219,8 @@ function obtenerClaseMenuRadialOverlay() {
 
 /**
  * Despliega la ventana modal de gestión de parada y evidencias (Acción Oeste - Reportar/Gestionar).
- * @param {Object} pedido 
- * @param {number} indice 
+ * @param {Object} pedido
+ * @param {number} indice
  */
 export function abrirModalGestionParada(pedido, indice) {
     let modalExistente = document.getElementById("modal-gestion-parada-mapa");
@@ -233,7 +237,7 @@ export function abrirModalGestionParada(pedido, indice) {
                 </div>
 
                 <form id="form-gestion-pin-mapa" style="display: flex; flex-direction: column; gap: 14px;">
-                    <input type="hidden" name="id" value="${pedido.id || ''}">
+                    <input type="hidden" name="id" value="${pedido.id || ""}">
 
                     <div>
                         <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 4px;">DESTINATARIO:</label>
@@ -242,13 +246,13 @@ export function abrirModalGestionParada(pedido, indice) {
 
                     <div>
                         <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 4px;">DIRECCIÓN:</label>
-                        <input type="text" id="modal-direccion" value="${pedido.direccion || pedido.dir || ''}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;" />
+                        <input type="text" id="modal-direccion" value="${pedido.direccion || pedido.dir || ""}" style="width: 100%; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;" />
                     </div>
 
                     <div>
                         <label style="color: #8af7b3; font-size: 0.8rem; display: block; margin-bottom: 4px;">TELÉFONO:</label>
                         <div style="display: flex; gap: 8px; align-items: center;">
-                            <input type="text" id="modal-telefono" value="${pedido.telefono || pedido.tel || ''}" style="flex: 1; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;" />
+                            <input type="text" id="modal-telefono" value="${pedido.telefono || pedido.tel || ""}" style="flex: 1; background: #161b22; border: 1px solid #30363d; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;" />
                             <button type="button" onclick="window.iniciarLlamadaAndroid(document.getElementById('modal-telefono').value)" title="Llamar a cliente" style="background: #238636; border: 1px solid #2ea043; color: #fff; padding: 0 14px; min-height: 44px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem;">
                                 📞
                             </button>
@@ -258,9 +262,9 @@ export function abrirModalGestionParada(pedido, indice) {
                     <div>
                         <label style="color: #ffb300; font-size: 0.8rem; display: block; margin-bottom: 4px;">ESTADO DE LA PARADA:</label>
                         <select id="modal-estado" style="width: 100%; background: #161b22; border: 1px solid #ffb300; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;">
-                            <option value="en-camino" ${(pedido.estado || '').toLowerCase() === 'en-camino' ? 'selected' : ''}>EN CAMINO</option>
-                            <option value="entregado" ${(pedido.estado || '').toLowerCase() === 'entregado' ? 'selected' : ''}>ENTREGADO</option>
-                            <option value="no-entregado" ${(pedido.estado || '').toLowerCase() === 'no-entregado' ? 'selected' : ''}>NO ENTREGADO</option>
+                            <option value="en-camino" ${(pedido.estado || "").toLowerCase() === "en-camino" ? "selected" : ""}>EN CAMINO</option>
+                            <option value="entregado" ${(pedido.estado || "").toLowerCase() === "entregado" ? "selected" : ""}>ENTREGADO</option>
+                            <option value="no-entregado" ${(pedido.estado || "").toLowerCase() === "no-entregado" ? "selected" : ""}>NO ENTREGADO</option>
                         </select>
                     </div>
 
@@ -292,7 +296,9 @@ export function abrirModalGestionParada(pedido, indice) {
     document.body.insertAdjacentHTML("beforeend", modalHTML);
 
     const modalElem = document.getElementById("modal-gestion-parada-mapa");
-    const cerrarModal = () => { if (modalElem) modalElem.remove(); };
+    const cerrarModal = () => {
+        if (modalElem) modalElem.remove();
+    };
 
     document.getElementById("btn-cerrar-modal-gestion")?.addEventListener("click", cerrarModal);
     document.getElementById("btn-cancelar-modal-gestion")?.addEventListener("click", cerrarModal);
@@ -329,7 +335,7 @@ export function abrirModalGestionParada(pedido, indice) {
             // Sincronización Remota Saneada
             const baseUrl = obtenerEndpointAPI();
             const urlApi = `${baseUrl}?action=actualizar_parada`;
-            
+
             const payload = {
                 action: "actualizar_parada",
                 accion: "actualizar_parada",
@@ -345,18 +351,21 @@ export function abrirModalGestionParada(pedido, indice) {
             };
 
             fetch(urlApi, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
                 body: JSON.stringify(payload)
-            }).then(async res => {
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || data.error) {
-                    console.warn("⚠️ [MAPA_MARCADORES_SYNC]: Respuesta con advertencia del servidor:", data);
-                } else {
-                    console.log("🌐 [MAPA_MARCADORES_SYNC]: Sincronizado exitosamente con API Backend:", data);
-                }
-            }).catch(err => console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido guardado en almacenamiento local.", err));
-
+            })
+                .then(async (res) => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || data.error) {
+                        console.warn("⚠️ [MAPA_MARCADORES_SYNC]: Respuesta con advertencia del servidor:", data);
+                    } else {
+                        console.log("🌐 [MAPA_MARCADORES_SYNC]: Sincronizado exitosamente con API Backend:", data);
+                    }
+                })
+                .catch((err) =>
+                    console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido guardado en almacenamiento local.", err)
+                );
         } catch (err) {
             console.error("❌ [MAPA_MARCADORES]: Error guardando parada localmente:", err);
         }
@@ -365,14 +374,14 @@ export function abrirModalGestionParada(pedido, indice) {
 
 /**
  * Renderiza la colección de marcadores interactivos en el visor de Google Maps.
- * @param {Array<Object>} listaPedidos 
- * @param {number} indiceActivo 
- * @param {Function} callbackActualizacion 
+ * @param {Array<Object>} listaPedidos
+ * @param {number} indiceActivo
+ * @param {Function} callbackActualizacion
  */
 export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, callbackActualizacion) {
     if (Array.isArray(window.marcadoresRutaMensajero)) {
         window.marcadoresRutaMensajero.forEach((m) => {
-            if (typeof m.setMap === 'function') m.setMap(null);
+            if (typeof m.setMap === "function") m.setMap(null);
         });
     }
     window.marcadoresRutaMensajero = [];
@@ -386,10 +395,10 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
     const geocoder = new google.maps.Geocoder();
 
     listaPedidos.forEach((pedido, idx) => {
-        let estadoCalculado = pedido.estado ? pedido.estado.toLowerCase() : 'asignado';
+        let estadoCalculado = pedido.estado ? pedido.estado.toLowerCase() : "asignado";
 
-        if (idx === indiceActivo && estadoCalculado !== 'entregado' && estadoCalculado !== 'no-entregado') {
-            estadoCalculado = 'en-camino';
+        if (idx === indiceActivo && estadoCalculado !== "entregado" && estadoCalculado !== "no-entregado") {
+            estadoCalculado = "en-camino";
         }
 
         const idUnicoParada = String(pedido.id || pedido.ssc || `#PNT-${idx + 1}`).trim();
@@ -401,7 +410,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             const iconoCyberpunk = crearIconoParadaCyberpunkSVG({
                 estado: estadoCalculado,
                 secuencia: idx + 1,
-                causal: pedido.causal || ''
+                causal: pedido.causal || ""
             });
 
             const marker = new google.maps.Marker({
@@ -412,15 +421,15 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 title: `[STOP #${idx + 1}] ${nombreCliente}`
             });
 
-            marker.set('idParada', idUnicoParada);
-            marker.set('secuencia', idx + 1);
+            marker.set("idParada", idUnicoParada);
+            marker.set("secuencia", idx + 1);
 
             const templateInfo = `
                 <div style="background: #0d1117; color: #fff; padding: 10px; border: 1px solid #00e5ff; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 6px; min-width: 180px;">
                     <div style="color: #00e5ff; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #2d3748; padding-bottom: 2px;">
                         [STOP #${idx + 1}] ${nombreCliente}
                     </div>
-                    <div><span style="color: #8af7b3;">📍 DIR:</span> ${pedido.direccion || pedido.dir || 'N/A'}</div>
+                    <div><span style="color: #8af7b3;">📍 DIR:</span> ${pedido.direccion || pedido.dir || "N/A"}</div>
                     <div><span style="color: #8af7b3;">📞 TEL:</span> ${pedido.telefono || pedido.tel || "N/A"}</div>
                     <div style="margin-top: 4px;">
                         <span style="color: #ffb300;">⚡ ESTADO:</span> 
@@ -473,19 +482,18 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
     });
 }
 
-/**
- * Habilita el arrastre del pin en el lienzo para reubicación (Acción Este - Mover).
- */
+// ... [mantener resto del archivo sin cambios hasta activarArrastreMarcador] ...
+
 function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion) {
     marker.setDraggable(true);
-    const idParada = marker.get('idParada');
+    const idParada = marker.get("idParada");
     console.log("📍 [MAPA_MARCADORES]: Arrastre activado para parada ID:", idParada);
 
-    const listener = marker.addListener('dragend', async (event) => {
+    const listener = marker.addListener("dragend", async (event) => {
         const nuevaLat = event.latLng.lat();
         const nuevaLng = event.latLng.lng();
 
-        // 1. Homologar de forma atómica todas las variantes de nombres de propiedades geográficas
+        // 1. Homologar datos de coordenadas
         pedido.lat = nuevaLat;
         pedido.lng = nuevaLng;
         pedido.latitud = nuevaLat;
@@ -496,20 +504,14 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
         }
         pedido.updated_at = new Date().toISOString();
 
-        // 2. Sincronizar inmediatamente los buffers RAM globales
+        // 2. Sincronizar buffers RAM globales
         const actualizarBufferRAM = (arr) => {
             if (!Array.isArray(arr)) return;
-            const idx = arr.findIndex(p => String(p.id || p.ssc || "").trim() === String(pedido.id || pedido.ssc || idParada).trim());
+            const idx = arr.findIndex(
+                (p) => String(p.id || p.ssc || "").trim() === String(pedido.id || pedido.ssc || idParada).trim()
+            );
             if (idx !== -1) {
-                arr[idx].lat = nuevaLat;
-                arr[idx].lng = nuevaLng;
-                arr[idx].latitud = nuevaLat;
-                arr[idx].longitud = nuevaLng;
-                if (arr[idx].coordenadas && typeof arr[idx].coordenadas === "object") {
-                    arr[idx].coordenadas.lat = nuevaLat;
-                    arr[idx].coordenadas.lng = nuevaLng;
-                }
-                arr[idx].updated_at = pedido.updated_at;
+                arr[idx] = { ...arr[idx], ...pedido };
             }
         };
 
@@ -525,17 +527,25 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
             }
 
             try {
+                // Persistir en store individual de paradas
                 if (typeof dbStore.actualizarParada === "function") {
                     await dbStore.actualizarParada(pedido);
                 } else if (typeof dbStore.guardarRegistro === "function") {
                     await dbStore.guardarRegistro("paradas", pedido);
                 }
-                console.log("💾 [MAPA_MARCADORES]: Parada reubicada y guardada en IndexedDB:", pedido);
+
+                // Persistir en el objeto Planilla correspondiente en IndexedDB
+                await actualizarParadaEnPlanillaLocal(pedido);
+
+                console.log(
+                    "💾 [MAPA_MARCADORES]: Parada reubicada y sincronizada en IndexedDB (Paradas y Planillas):",
+                    pedido
+                );
             } catch (err) {
-                console.error("❌ [MAPA_MARCADORES]: Error al guardar reubicación en IndexedDB:", err);
+                console.error("❌ [MAPA_MARCADORES]: Error al guardar reubicación local:", err);
             }
 
-            // Sincronización Remota Saneada
+            // 3. Sincronización Remota con Backend PHP
             const baseUrl = obtenerEndpointAPI();
             const urlApi = `${baseUrl}?action=actualizar_parada`;
 
@@ -544,6 +554,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                 accion: "actualizar_parada",
                 id: pedido.id || idParada,
                 ssc: pedido.ssc || idParada,
+                planilla_id: pedido.planilla_id || null,
                 lat: nuevaLat,
                 lng: nuevaLng,
                 latitud: nuevaLat,
@@ -553,13 +564,15 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
             };
 
             fetch(urlApi, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
                 body: JSON.stringify(payload)
-            }).then(async res => {
-                const data = await res.json().catch(() => ({}));
-                console.log("🌐 [MAPA_MARCADORES_MOVE_SYNC]: Coordenadas sincronizadas con servidor:", data);
-            }).catch(err => console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido a backend PHP:", err));
+            })
+                .then(async (res) => {
+                    const data = await res.json().catch(() => ({}));
+                    console.log("🌐 [MAPA_MARCADORES_MOVE_SYNC]: Servidor respondió:", data);
+                })
+                .catch((err) => console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido a backend PHP:", err));
 
             if (typeof callbackActualizacion === "function") {
                 callbackActualizacion(pedido);
@@ -586,11 +599,13 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
         console.log("💾 [MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
 
         marker.setMap(null);
-        window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter(m => m !== marker);
+        window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter((m) => m !== marker);
 
         // Actualizar variables de estado RAM globales
         if (Array.isArray(window.__CACHE_PARADAS_MACONDO__)) {
-            window.__CACHE_PARADAS_MACONDO__ = window.__CACHE_PARADAS_MACONDO__.filter(p => String(p.id || p.ssc) !== String(idParada));
+            window.__CACHE_PARADAS_MACONDO__ = window.__CACHE_PARADAS_MACONDO__.filter(
+                (p) => String(p.id || p.ssc) !== String(idParada)
+            );
         }
 
         const baseUrl = obtenerEndpointAPI();
@@ -603,13 +618,17 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
         };
 
         fetch(urlApi, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
             body: JSON.stringify(payload)
-        }).then(async res => {
-            const data = await res.json().catch(() => ({}));
-            console.log("🌐 [MAPA_MARCADORES_DEL_SYNC]: Parada eliminada del servidor remoto:", data);
-        }).catch(err => console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Error eliminando en backend PHP (Offline):", err));
+        })
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                console.log("🌐 [MAPA_MARCADORES_DEL_SYNC]: Parada eliminada del servidor remoto:", data);
+            })
+            .catch((err) =>
+                console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Error eliminando en backend PHP (Offline):", err)
+            );
 
         if (typeof callbackActualizacion === "function") {
             callbackActualizacion();
@@ -621,17 +640,19 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
 
 /**
  * Muta el icono de un marcador según su nuevo estado en tiempo real.
- * @param {string} idParada 
- * @param {string} nuevoEstado 
- * @param {string} [causal=''] 
+ * @param {string} idParada
+ * @param {string} nuevoEstado
+ * @param {string} [causal='']
  */
-export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
+export function mutarMarcadorPorId(idParada, nuevoEstado, causal = "") {
     if (!window.marcadoresRutaMensajero) return;
 
-    const marker = window.marcadoresRutaMensajero.find(m => String(m.get('idParada')).trim() === String(idParada).trim());
+    const marker = window.marcadoresRutaMensajero.find(
+        (m) => String(m.get("idParada")).trim() === String(idParada).trim()
+    );
 
     if (marker) {
-        const sec = marker.get('secuencia') || 1;
+        const sec = marker.get("secuencia") || 1;
         const nuevoIcono = crearIconoParadaCyberpunkSVG({
             estado: nuevoEstado,
             secuencia: sec,
@@ -644,7 +665,7 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = '') {
 }
 
 // BINDING GLOBAL PARA ACCIÓN NORTE (EDITAR)
-window.cargarEdicionDesdePin = function(idParada) {
+window.cargarEdicionDesdePin = function (idParada) {
     console.log("🎯 [MAPA_MARCADORES]: Redirigiendo a edición para parada:", idParada);
     if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/ruta-activa.html");

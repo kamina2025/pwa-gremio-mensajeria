@@ -4,10 +4,7 @@
  */
 
 import { obtenerDB } from '../base-de-datos.js';
-/**
- * Consulta y retorna todas las planillas reportadas registradas en IndexedDB/Local.
- * @returns {Promise<Array>} Lista de planillas guardadas
- */
+
 export async function obtenerPlanillasReportadas() {
     try {
         const db = await obtenerDB();
@@ -25,11 +22,7 @@ export async function obtenerPlanillasReportadas() {
         return backup ? JSON.parse(backup) : [];
     }
 }
-/**
- * Guarda una nueva planilla en IndexedDB.
- * @param {Object} nuevaPlanilla 
- * @returns {Promise<number>} ID asignado
- */
+
 export async function guardarPlanillaReportada(nuevaPlanilla) {
     try {
         const db = await obtenerDB();
@@ -47,5 +40,36 @@ export async function guardarPlanillaReportada(nuevaPlanilla) {
         actual.push(nuevaPlanilla);
         localStorage.setItem("planillas_reportadas_cache", JSON.stringify(actual));
         return Date.now();
+    }
+}
+
+/**
+ * Sincroniza la modificación de una parada dentro del objeto de la planilla activa en IndexedDB.
+ * @param {Object} paradaActualizada 
+ */
+export async function actualizarParadaEnPlanillaLocal(paradaActualizada) {
+    try {
+        const db = await obtenerDB();
+        const tx = db.transaction("planillas", "readwrite");
+        const store = tx.objectStore("planillas");
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+            const planillas = request.result || [];
+            const targetId = String(paradaActualizada.id || paradaActualizada.ssc).trim();
+
+            planillas.forEach(planilla => {
+                if (Array.isArray(planilla.paradas)) {
+                    const idx = planilla.paradas.findIndex(p => String(p.id || p.ssc).trim() === targetId);
+                    if (idx !== -1) {
+                        planilla.paradas[idx] = { ...planilla.paradas[idx], ...paradaActualizada };
+                        store.put(planilla);
+                        console.log(`💾 [Planillas DB]: Parada #${targetId} actualizada dentro de Planilla ID: ${planilla.id}`);
+                    }
+                }
+            });
+        };
+    } catch (err) {
+        console.warn("⚠️ [Planillas DB]: No se pudo actualizar la parada en la planilla local:", err);
     }
 }

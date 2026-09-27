@@ -1,11 +1,11 @@
 /**
- * PROTOCOLO MACONDO - CONTROLADOR DE EVENTOS DE NAVEGACIÓN Y ACCIONES GLOBALES
+ * PROTOCOLO MACONDO - CONTROLADOR DE EVENTOS DE NAVEGACIÓN Y ACCIONES GLOBALES DE RUTAS
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-handlers.js
- * Arquitectura: Local-First / Clustering Sync / Handlers Globales
+ * Arquitectura: Event-Driven / Local-First / Sincronización Atómica
  */
 
 import { calcularRutaAisladaPorZona } from "./rutas-aislamiento.js";
-import { optimizarRutaPorProximidadZona } from "./rutas-optimizacion.js";
+import { optimizarRutaPorProximidadZona, invertirSecuenciaRutaZona } from "./rutas-optimizacion.js";
 import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
@@ -18,7 +18,7 @@ export function registrarHandlersGlobales() {
      * Inicia la navegación táctica e aislamiento de mapa para una zona específica.
      * @param {string} zona - Nombre o clave de la zona objetivo
      */
-    window.iniciarRutaZona = function (zona) {
+    window.iniciarRutaZona = async function (zona) {
         if (!zona) return;
         const targetCanonico = estandarizarZonaCanonica(zona);
         console.log(`► [MENSAJERO_RUTAS]: Iniciar Ruta ejecutado para Zona: ${zona} -> '${targetCanonico}'`);
@@ -26,15 +26,15 @@ export function registrarHandlersGlobales() {
         localStorage.setItem("zona_activa_operacion", targetCanonico);
 
         if (typeof window.navegarA === "function") {
-            window.navegarA("vistas/ruta/mapa-activa.html", { zona: targetCanonico });
-            setTimeout(() => {
+            await window.navegarA("vistas/ruta/mapa-activa.html", { zona: targetCanonico });
+            requestAnimationFrame(() => {
                 if (typeof calcularRutaAisladaPorZona === "function") {
                     calcularRutaAisladaPorZona(targetCanonico);
                 }
-            }, 300);
+            });
         } else if (typeof window.alternarVistaPestaña === "function") {
-            window.alternarVistaPestaña("mapa-fullscreen-container");
-            setTimeout(() => calcularRutaAisladaPorZona(targetCanonico), 300);
+            await window.alternarVistaPestaña("mapa-fullscreen-container");
+            requestAnimationFrame(() => calcularRutaAisladaPorZona(targetCanonico));
         } else {
             const basePath = window.location.origin;
             window.location.href = `${basePath}/vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(targetCanonico)}`;
@@ -95,6 +95,20 @@ export function registrarHandlersGlobales() {
     };
 
     /**
+     * Invierte la secuencia de recorrido para una zona específica.
+     * @param {string} zona - Nombre o clave de la zona
+     */
+    window.invertirSecuenciaZona = async function (zona) {
+        if (!zona) return;
+        const targetCanonico = estandarizarZonaCanonica(zona);
+        console.log(`🔄 [MENSAJERO_RUTAS]: Invertir secuencia solicitada para Zona: ${targetCanonico}`);
+        
+        if (typeof invertirSecuenciaRutaZona === "function") {
+            return await invertirSecuenciaRutaZona(targetCanonico);
+        }
+    };
+
+    /**
      * Redirige al módulo de generación y descarga de planillas operativas.
      * @param {string} zona - Nombre de la zona a planillar
      */
@@ -147,67 +161,78 @@ export function registrarHandlersGlobales() {
      * @param {string|number} direccion - Direccion: 'arriba', -1, 'abajo', 1
      * @param {string} zonaNombre - Nombre de la zona contenedor
      */
-    window.moverParadaManual = async function (paradaId, direccion, zonaNombre) {
+    window.reordenarParadaManual = async function (paradaId, direccion, zonaNombre) {
         if (!paradaId) return;
         const delta = (direccion === "arriba" || direccion === -1) ? -1 : 1;
         const targetCanonico = estandarizarZonaCanonica(zonaNombre);
-        console.log(`>>> [REORDER_MANUAL]: Mover parada ${paradaId} (delta: ${delta}) en zona: ${targetCanonico}`);
+        console.log(`>>> [REORDER_MANUAL]: Mover parada #${paradaId} (delta: ${delta}) en zona: ${targetCanonico}`);
 
         let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
         
+        if (!todasLasParadas || todasLasParadas.length === 0) return;
+
         // 1. Filtrar paradas de la zona objetivo y ordenarlas por secuencia
         let paradasZona = todasLasParadas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
-        paradasZona.sort((a, b) => (a.secuenciaZona || a.secuencia || 0) - (b.secuenciaZona || b.secuencia || 0));
+        paradasZona.sort((a, b) => parseInt(a.secuenciaZona || a.secuencia || 0, 10) - parseInt(b.secuenciaZona || b.secuencia || 0, 10));
 
-        const idxActual = paradasZona.findIndex(p => String(p.id || p.scc || p.ssc) === String(paradaId));
+        const idxActual = paradasZona.findIndex(p => String(p.id || p.scc || p.ssc).trim() === String(paradaId).trim());
         if (idxActual === -1) return;
 
         const idxNuevo = idxActual + delta;
         if (idxNuevo < 0 || idxNuevo >= paradasZona.length) return; // Límites alcanzados
 
         // 2. Intercambiar posiciones en el arreglo
-        const temp = paradasZona[idxActual];
-        paradasZona[idxActual] = paradasZona[idxNuevo];
-        paradasZona[idxNuevo] = temp;
+        const itemMover = paradasZona.splice(idxActual, 1)[0];
+        paradasZona.splice(idxNuevo, 0, itemMover);
 
-        // 3. Re-asignar secuenciaZona y grupoId de forma coordinada
-        paradasZona.forEach((p, index) => {
-            const nuevaSecuencia = index + 1;
-            p.secuenciaZona = nuevaSecuencia;
-            p.secuencia = nuevaSecuencia;
-            p.orden = nuevaSecuencia;
-
-            // Re-clustering automático en bloques de 4
-            const numGrupo = Math.ceil(nuevaSecuencia / 4);
-            p.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
+        // 3. Re-asignar secuenciaZona y grupoId de forma coordinada (Bloques de 4)
+        const TAMANO_CLUSTER = 4;
+        paradasZona.forEach((p, idx) => {
+            const seq = idx + 1;
+            p.secuenciaZona = seq;
+            p.secuencia = seq;
+            p.orden = seq;
+            p.grupoId = `GRUPO-${Math.ceil(seq / TAMANO_CLUSTER).toString().padStart(2, "0")}`;
             p.updated_at = new Date().toISOString();
         });
 
         // 4. Reintegrar cambios a la colección global
-        const mapaActualizados = new Map(paradasZona.map(p => [String(p.id || p.scc || p.ssc), p]));
-        const listaGlobalSincronizada = todasLasParadas.map(p => {
-            const key = String(p.id || p.scc || p.ssc);
+        const mapaActualizados = new Map(paradasZona.map(p => [String(p.id || p.scc || p.ssc).trim(), p]));
+        const listaGlobalActualizada = todasLasParadas.map(p => {
+            const key = String(p.id || p.scc || p.ssc).trim();
             return mapaActualizados.has(key) ? mapaActualizados.get(key) : p;
         });
 
+        listaGlobalActualizada.sort((a, b) => {
+            const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
+            const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
+            return seqA - seqB;
+        });
+
         // 5. Persistir y actualizar memorias RAM
-        await guardarRutaZonificada(listaGlobalSincronizada);
-        window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalSincronizada];
-        window.paradasMemoriaLocal = [...listaGlobalSincronizada];
-        window.paradasRutaActiva = [...listaGlobalSincronizada];
+        await guardarRutaZonificada(listaGlobalActualizada);
+        window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
+        window.paradasMemoriaLocal = [...listaGlobalActualizada];
+        window.paradasRutaActiva = [...listaGlobalActualizada];
+        window.pedidosGlobales = [...listaGlobalActualizada];
 
         // 6. Redibujar trazado y refrescar la UI del acordeón
         if (typeof window.trazarPolilineaRuta === "function") {
-            window.trazarPolilineaRuta(listaGlobalSincronizada, targetCanonico);
+            window.trazarPolilineaRuta(listaGlobalActualizada, targetCanonico);
         }
 
         if (typeof window.renderizarParadasZonificadasUI === "function") {
-            await window.renderizarParadasZonificadasUI(listaGlobalSincronizada);
+            await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
         }
     };
+
+    // Alias de compatibilidad global
+    window.moverParadaManual = window.reordenarParadaManual;
 
     console.log("🟢 [RUTAS_HANDLERS]: Handlers globales de rutas inicializados correctamente.");
 }
 
-// Ejecución automática al cargar el módulo ES6
-registrarHandlersGlobales();
+// Auto-inicialización de bindings en window
+if (typeof window !== "undefined") {
+    registrarHandlersGlobales();
+}

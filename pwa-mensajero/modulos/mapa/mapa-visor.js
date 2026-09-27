@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL DEL MAPA (MODO RÁSTER ESTABLE 2D)
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-visor.js
- * Arquitectura: Google Maps SDK / Local-First / Orden Persistente
+ * Arquitectura: Google Maps SDK / Local-First / Orden Persistente / Telemetría GPS / Cyberpunk Dark Mode
  */
 
 import { desplegarZonaMensajeroEnMapa } from "./mapa-mensajero-zonas.js";
@@ -19,7 +19,7 @@ import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificac
 
 // Instancias y variables de estado global
 window.mapaMensajero = window.mapaMensajero || null;
-window.mapaInstancia = window.mapaInstancia || null;
+window.mapaInstancia = window.mapaInstancia || null; // Alias Singleton
 window.renderRutasMensajero = window.renderRutasMensajero || null;
 window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
 window.infoWindowMensajero = window.infoWindowMensajero || null;
@@ -27,6 +27,8 @@ window.pendientesParaRenderizar = window.pendientesParaRenderizar || null;
 
 let observadorResizeContenedor = null;
 let temporizadorDebounceResize = null;
+let watcherGpsId = null;
+let marcadorGpsMensajero = null;
 const KEY_ULTIMA_PARADA = 'macondo_ultima_parada_id';
 
 /**
@@ -113,12 +115,14 @@ export async function recargarMapaCompleto() {
 
         console.log(`📦 [MAPA_VISOR]: Total de paradas recuperadas para refresco: ${paradasFrescas.length}`);
 
+        // ORDENACIÓN ESTRICTA: Respetar la secuencia exacta guardada por el usuario
         paradasFrescas.sort((a, b) => {
             const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
             const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
             return seqA - seqB;
         });
 
+        // Sincronizar memorias RAM
         window.__CACHE_PARADAS_MACONDO__ = [...paradasFrescas];
         window.paradasMemoriaLocal = [...paradasFrescas];
         window.paradasRutaActiva = [...paradasFrescas];
@@ -129,14 +133,18 @@ export async function recargarMapaCompleto() {
         const targetCanonico = estandarizarZonaCanonica(zonaActiva);
 
         if (mapa && typeof google !== "undefined" && google.maps) {
+            // Forzar disparo del evento resize sobre la instancia
             google.maps.event.trigger(mapa, "resize");
             console.log("📐 [MAPA_VISOR]: Disparado 'resize' sobre Google Maps.");
 
+            // Actualizar Marcadores y Minirutas por Clúster
             await actualizarPuntosEnMapa(paradasFrescas, 0);
 
+            // Filtrar paradas de la zona activa para fitBounds enfocado
             const paradasDeZona = paradasFrescas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
             const listaParaBounds = paradasDeZona.length > 0 ? paradasDeZona : paradasFrescas;
 
+            // Ajustar los límites (fitBounds)
             const bounds = new google.maps.LatLngBounds();
             let puntosValidos = 0;
 
@@ -156,6 +164,7 @@ export async function recargarMapaCompleto() {
             console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible durante el refresco.");
         }
 
+        // Refrescar acordeones de la UI si la función existe
         if (typeof window.renderizarParadasZonificadasUI === "function") {
             await window.renderizarParadasZonificadasUI(paradasFrescas);
         }
@@ -206,7 +215,7 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
         }
 
         const instancia = new google.maps.Map(contenedorMapa, {
-            center: { lat: 3.4516467, lng: -76.5319854 },
+            center: { lat: 3.4516467, lng: -76.5319854 }, // Cali, Colombia
             zoom: 13,
             disableDefaultUI: true,
             zoomControl: false,
@@ -265,6 +274,9 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
             window.pendientesParaRenderizar = null;
             actualizarPuntosEnMapa(listaPedidos, indiceActivo);
         }
+
+        // Inicializar sensor de posición GPS
+        inicializarSeguimientoGPS();
 
         return instancia;
 
@@ -374,7 +386,7 @@ export function enfocarParadaEnMapa(paradaOrId) {
     const coords = obtenerCoordenadasValidasParada(parada);
 
     if (coords) {
-        console.log(`🎯 [MAPA_VISOR]: Enfocando posición en mapa -> [Lat: ${coords.lat}, Lng: ${coords.lng}]`);
+        console.log(`🎯 [MAPA_VISOR]: Enfocando posición en mapa -> [Lat: ${coords.lat}, Lng:${coords.lng}]`);
         const centroObjetivo = new google.maps.LatLng(coords.lat, coords.lng);
         mapa.panTo(centroObjetivo);
         mapa.setZoom(17);
@@ -394,7 +406,7 @@ export function enfocarParadaEnMapa(paradaOrId) {
                 const latNum = loc.lat();
                 const lngNum = loc.lng();
 
-                console.log(`✅ [MAPA_VISOR]: Dirección geocodificada con éxito -> [Lat: ${latNum}, Lng: ${lngNum}]`);
+                console.log(`✅ [MAPA_VISOR]: Dirección geocodificada con éxito -> [Lat: ${latNum}, Lng:${lngNum}]`);
 
                 parada.lat = latNum;
                 parada.lng = lngNum;
@@ -406,6 +418,7 @@ export function enfocarParadaEnMapa(paradaOrId) {
                     try {
                         await guardarRutaZonificada(coleccionActual);
                         
+                        // Sincronizar todas las memorias RAM
                         window.__CACHE_PARADAS_MACONDO__ = [...coleccionActual];
                         window.paradasMemoriaLocal = [...coleccionActual];
                         window.paradasRutaActiva = [...coleccionActual];
@@ -472,6 +485,104 @@ export function obtenerInstanciaMapa() {
     return window.mapaMensajero || window.mapaInstancia || null;
 }
 
+/**
+ * Dibuja o actualiza la posición del punto GPS en el mapa.
+ */
+function renderizarUbicacionGpsEnMapa(lat, lng) {
+    const mapa = window.mapaMensajero || window.mapaInstancia;
+    if (!mapa || typeof google === "undefined" || !google.maps) return;
+
+    const posLatLng = new google.maps.LatLng(lat, lng);
+    window.posicionActualMensajero = { lat, lng };
+
+    if (!marcadorGpsMensajero) {
+        // Icono SVG Neón con borde blanco y punto Cyan Neón
+        const iconoGpsSvg = {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 9,
+            fillColor: "#00e5ff",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 3
+        };
+
+        marcadorGpsMensajero = new google.maps.Marker({
+            position: posLatLng,
+            map: mapa,
+            title: "Mi Ubicación (GPS)",
+            icon: iconoGpsSvg,
+            zIndex: 99999
+        });
+
+        console.log(`📍 [MAPA_GPS]: Marcador GPS creado exitosamente en [${lat.toFixed(5)},${lng.toFixed(5)}]`);
+    } else {
+        marcadorGpsMensajero.setPosition(posLatLng);
+    }
+}
+
+/**
+ * Inicializa la lectura continua de coordenadas del dispositivo y dibuja el marcador neón del mensajero.
+ * Incluye fallback automático si el navegador deniega el permiso GPS (Local / localhost / HTTP).
+ */
+export function inicializarSeguimientoGPS() {
+    const mapa = window.mapaMensajero || window.mapaInstancia;
+    if (!mapa || typeof google === "undefined" || !google.maps) {
+        console.warn("⚠️ [MAPA_GPS]: Mapa no listo. Reintentando activación de GPS en 1s...");
+        setTimeout(inicializarSeguimientoGPS, 1000);
+        return;
+    }
+
+    if (!("geolocation" in navigator)) {
+        console.warn("⚠️ [MAPA_GPS]: Geolocalización no soportada. Activando ubicación estimada de fallback.");
+        activarFallbackUbicacionGPS();
+        return;
+    }
+
+    if (watcherGpsId !== null) {
+        navigator.geolocation.clearWatch(watcherGpsId);
+    }
+
+    console.log("🛰️ [MAPA_GPS]: Activando sensor de posición continua (watchPosition)...");
+
+    watcherGpsId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            renderizarUbicacionGpsEnMapa(lat, lng);
+        },
+        (error) => {
+            console.warn(`⚠️ [MAPA_GPS]: Error o permiso denegado capturando señal GPS (${error.code}):${error.message}`);
+            activarFallbackUbicacionGPS();
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 5000,
+            timeout: 10000
+        }
+    );
+}
+
+/**
+ * Establece una posición estimada de fallback cerca del primer punto de la ruta activa o Cali
+ * cuando el usuario bloquea el permiso GPS en PC / navegador.
+ */
+function activarFallbackUbicacionGPS() {
+    const paradas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+    let lat = 3.442708;
+    let lng = -76.493357;
+
+    if (Array.isArray(paradas) && paradas.length > 0) {
+        const coords = obtenerCoordenadasValidasParada(paradas[0]);
+        if (coords) {
+            lat = coords.lat + 0.0015; // Ligeramente desplazado para visibilidad
+            lng = coords.lng - 0.0015;
+        }
+    }
+
+    console.log(`📍 [MAPA_GPS_FALLBACK]: Usando coordenada estimada de operador [Lat: ${lat}, Lng:${lng}]`);
+    renderizarUbicacionGpsEnMapa(lat, lng);
+}
+
 // BINDINGS GLOBALES EN WINDOW
 window.obtenerCoordenadasValidasParada = obtenerCoordenadasValidasParada;
 window.inicializarMapaMensajero = inicializarMapaMensajero;
@@ -483,6 +594,7 @@ window.refrescarLienzoMapa = refrescarLienzoMapa;
 window.obtenerInstanciaMapa = obtenerInstanciaMapa;
 window.recargarMapaCompleto = recargarMapaCompleto;
 window.ejecutarRefrescoLocalMapa = recargarMapaCompleto;
+window.inicializarSeguimientoGPS = inicializarSeguimientoGPS;
 
 export { 
     ejecutarBusquedaDireccion, 

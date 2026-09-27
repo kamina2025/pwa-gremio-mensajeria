@@ -21,7 +21,7 @@ let coleccionPolilineasActivas = [];
 let directionsRendererActivo = null;
 
 // Exposición global para interoperabilidad PWA
-if (!window.__POLILINEAS_CLUSTERS__) {
+if (typeof window !== "undefined" && !window.__POLILINEAS_CLUSTERS__) {
     window.__POLILINEAS_CLUSTERS__ = [];
 }
 
@@ -49,8 +49,11 @@ function normalizarPuntoUbicacion(punto) {
     if (typeof google !== "undefined" && google.maps && punto instanceof google.maps.LatLng) return punto;
 
     if (typeof punto === "object") {
-        const lat = parseFloat(punto.lat || punto.latitud || (punto.ubicacion && punto.ubicacion.lat) || (punto.centroide && punto.centroide.lat));
-        const lng = parseFloat(punto.lng || punto.longitud || (punto.ubicacion && punto.ubicacion.lng) || (punto.centroide && punto.centroide.lng));
+        const rawLat = punto.lat ?? punto.latitud ?? (punto.ubicacion && punto.ubicacion.lat) ?? (punto.centroide && punto.centroide.lat);
+        const rawLng = punto.lng ?? punto.longitud ?? (punto.ubicacion && punto.ubicacion.lng) ?? (punto.centroide && punto.centroide.lng);
+
+        const lat = parseFloat(String(rawLat).replace(',', '.'));
+        const lng = parseFloat(String(rawLng).replace(',', '.'));
         
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
             return new google.maps.LatLng(lat, lng);
@@ -74,7 +77,7 @@ function normalizarPuntoUbicacion(punto) {
 export function limpiarRutaTrazada() {
     console.log("🧹 [MAPA_RUTAS]: Limpiando minirutas y polílineas previas en visor...");
 
-    // Limpiar colección local
+    // Limpiar colección local de polílineas
     if (Array.isArray(coleccionPolilineasActivas)) {
         coleccionPolilineasActivas.forEach(poly => {
             if (poly && typeof poly.setMap === "function") poly.setMap(null);
@@ -83,7 +86,7 @@ export function limpiarRutaTrazada() {
     }
 
     // Limpiar colección global
-    if (Array.isArray(window.__POLILINEAS_CLUSTERS__)) {
+    if (typeof window !== "undefined" && Array.isArray(window.__POLILINEAS_CLUSTERS__)) {
         window.__POLILINEAS_CLUSTERS__.forEach(poly => {
             if (poly && typeof poly.setMap === "function") poly.setMap(null);
         });
@@ -96,15 +99,17 @@ export function limpiarRutaTrazada() {
         directionsRendererActivo = null;
     }
 
-    if (window.__DIRECTIONS_RENDERER__ && typeof window.__DIRECTIONS_RENDERER__.setMap === "function") {
-        window.__DIRECTIONS_RENDERER__.setMap(null);
-    }
+    if (typeof window !== "undefined") {
+        if (window.__DIRECTIONS_RENDERER__ && typeof window.__DIRECTIONS_RENDERER__.setMap === "function") {
+            window.__DIRECTIONS_RENDERER__.setMap(null);
+        }
 
-    if (window.renderRutasMensajero && typeof window.renderRutasMensajero.setDirections === "function") {
-        try {
-            window.renderRutasMensajero.setDirections({ routes: [] });
-        } catch (e) {
-            // Limpieza silenciosa
+        if (window.renderRutasMensajero && typeof window.renderRutasMensajero.setDirections === "function") {
+            try {
+                window.renderRutasMensajero.setDirections({ routes: [] });
+            } catch (e) {
+                // Limpieza silenciosa
+            }
         }
     }
 }
@@ -119,10 +124,12 @@ export function limpiarRutaTrazada() {
  */
 export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaInstancia = null) {
     const mapaTarget = mapaInstancia 
-        || window.mapaVisorInstancia 
-        || window.mapaMensajero 
-        || window.mapaInstanciaGlobal 
-        || (window.renderRutasMensajero && window.renderRutasMensajero.getMap());
+        || (typeof window !== "undefined" && (
+            window.mapaVisorInstancia 
+            || window.mapaMensajero 
+            || window.mapaInstanciaGlobal 
+            || (window.renderRutasMensajero && window.renderRutasMensajero.getMap())
+        ));
 
     if (!listaPedidos || !Array.isArray(listaPedidos) || listaPedidos.length < 1) {
         console.warn("⚠️ [MAPA_RUTAS]: Se requiere al menos una parada para procesar trazado.");
@@ -137,7 +144,7 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
         return;
     }
 
-    // 1. Filtrar y agrupar paradas por Zona
+    // 1. Filtrar paradas por Zona
     const targetCanonico = zonaFoco ? estandarizarZonaCanonica(zonaFoco) : null;
     const paradasFiltradas = targetCanonico
         ? listaPedidos.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico)
@@ -174,8 +181,12 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
 
         const pathPuntos = paradasGrupo
             .map(p => {
-                const lat = parseFloat(p.lat || p.latitud || (p.coordenadas && p.coordenadas.lat) || (p.centroide && p.centroide.lat));
-                const lng = parseFloat(p.lng || p.longitud || (p.coordenadas && p.coordenadas.lng) || (p.centroide && p.centroide.lng));
+                const rawLat = p.lat ?? p.latitud ?? (p.coordenadas && p.coordenadas.lat) ?? (p.centroide && p.centroide.lat);
+                const rawLng = p.lng ?? p.longitud ?? (p.coordenadas && p.coordenadas.lng) ?? (p.centroide && p.centroide.lng);
+
+                const lat = parseFloat(String(rawLat).replace(',', '.'));
+                const lng = parseFloat(String(rawLng).replace(',', '.'));
+
                 return (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) ? new google.maps.LatLng(lat, lng) : null;
             })
             .filter(Boolean);
@@ -193,7 +204,9 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
             });
 
             coleccionPolilineasActivas.push(polyMiniruta);
-            window.__POLILINEAS_CLUSTERS__.push(polyMiniruta);
+            if (typeof window !== "undefined" && Array.isArray(window.__POLILINEAS_CLUSTERS__)) {
+                window.__POLILINEAS_CLUSTERS__.push(polyMiniruta);
+            }
 
             console.log(` ⚡ [MINIRUTA_OK]: ${grupoId} (${pathPuntos.length} puntos) -> Color: %c${colorMiniruta}`, `color: ${colorMiniruta}; font-weight: bold;`);
             colorIndex++;
@@ -211,7 +224,9 @@ export async function trazarRutaPorZonaAislada(paradasZona, zonaFoco = null) {
 }
 
 // BINDINGS GLOBALES EN WINDOW
-window.trazarPolilineaRuta = trazarPolilineaRuta;
-window.trazarRutaPorZonaAislada = trazarRutaPorZonaAislada;
-window.limpiarRutaTrazada = limpiarRutaTrazada;
-window.limpiarPolilineasMapa = limpiarRutaTrazada;
+if (typeof window !== "undefined") {
+    window.trazarPolilineaRuta = trazarPolilineaRuta;
+    window.trazarRutaPorZonaAislada = trazarRutaPorZonaAislada;
+    window.limpiarRutaTrazada = limpiarRutaTrazada;
+    window.limpiarPolilineasMapa = limpiarRutaTrazada;
+}

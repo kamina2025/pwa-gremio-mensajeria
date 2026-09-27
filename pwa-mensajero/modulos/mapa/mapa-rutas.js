@@ -20,9 +20,11 @@ const PALETA_COLORES_CLUSTERS = [
 let coleccionPolilineasActivas = [];
 let directionsRendererActivo = null;
 
-// Instancias globales de navegación interna
+// Instancias y estados globales de navegación interna
 window.directionsRendererPWA = window.directionsRendererPWA || null;
 window.directionsServicePWA = window.directionsServicePWA || null;
+window.paradaObjetivoNavegacion = window.paradaObjetivoNavegacion || null;
+window.rutaNavegacionPuntosActiva = window.rutaNavegacionPuntosActiva || [];
 
 // Exposición global para interoperabilidad PWA
 if (typeof window !== "undefined" && !window.__POLILINEAS_CLUSTERS__) {
@@ -221,14 +223,27 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
 }
 
 /**
- * Traza la ruta de viaje navegable en tiempo real desde la posición GPS actual 
- * del mensajero hasta la parada destino directamente dentro de la PWA.
- * @param {Object} paradaDestino - Parada seleccionada como objetivo de viaje
+ * Traza y actualiza dinámicamente la ruta de navegación navegable por calles en tiempo real
+ * desde la posición GPS actual del mensajero hasta la parada objetivo.
+ * Extrae y guarda en memoria el array de coordenadas viales reales (overview_path) para el simulador.
+ * 
+ * @param {Object} [paradaDestino] - Parada seleccionada como objetivo (Opcional si ya existe en memoria global)
+ * @param {boolean} [centrarVista=true] - Si es false, no altera la cámara/zoom del usuario durante el movimiento
  */
-export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
+export async function trazarRutaNavegacionInternaGPS(paradaDestino = null, centrarVista = true) {
     const mapa = window.mapaMensajero || window.mapaInstancia;
     if (!mapa || typeof google === "undefined" || !google.maps) {
         console.error("❌ [NAVEGACION_PWA]: Instancia del mapa no disponible.");
+        return;
+    }
+
+    if (paradaDestino) {
+        window.paradaObjetivoNavegacion = paradaDestino;
+    }
+
+    const objetivo = window.paradaObjetivoNavegacion;
+    if (!objetivo) {
+        console.warn("⚠️ [NAVEGACION_PWA]: No hay una parada objetivo activa asignada.");
         return;
     }
 
@@ -240,7 +255,7 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
                     window.posicionActualMensajero = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                    trazarRutaNavegacionInternaGPS(paradaDestino);
+                    trazarRutaNavegacionInternaGPS(objetivo, centrarVista);
                 },
                 (err) => console.error("❌ [NAVEGACION_PWA]: Error obteniendo GPS actual:", err),
                 { enableHighAccuracy: true, timeout: 8000 }
@@ -251,7 +266,7 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
 
     // 2. Obtener coordenadas de destino
     const destCoords = typeof window.obtenerCoordenadasValidasParada === "function"
-        ? window.obtenerCoordenadasValidasParada(paradaDestino)
+        ? window.obtenerCoordenadasValidasParada(objetivo)
         : null;
 
     if (!destCoords) {
@@ -259,9 +274,9 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
         return;
     }
 
-    console.log(`🧭 [NAVEGACION_PWA]: Trazando viaje interno -> Origen: [${origenCoords.lat}, ${origenCoords.lng}] -> Destino: [${destCoords.lat}, ${destCoords.lng}]`);
+    console.log(`🧭 [NAVEGACION_PWA]: Trazando viaje interno -> Origen: [${origenCoords.lat.toFixed(5)}, ${origenCoords.lng.toFixed(5)}] -> Destino: [${destCoords.lat.toFixed(5)}, ${destCoords.lng.toFixed(5)}]`);
 
-    // 3. Inicializar servicios de Google Maps Directions
+    // 3. Inicializar o actualizar servicios de Google Maps Directions
     if (!window.directionsServicePWA) {
         window.directionsServicePWA = new google.maps.DirectionsService();
     }
@@ -269,7 +284,8 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
     if (!window.directionsRendererPWA) {
         window.directionsRendererPWA = new google.maps.DirectionsRenderer({
             map: mapa,
-            suppressMarkers: true, // Preserva los pines tácticos neón existentes
+            suppressMarkers: true, // Preserva los pines tácticos neón
+            preserveViewport: !centrarVista, // Mantiene el zoom fijado por el usuario en movimiento
             polylineOptions: {
                 strokeColor: "#FF007F", // Rosa Magenta Cyberpunk
                 strokeOpacity: 0.95,
@@ -279,6 +295,7 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
         });
     } else {
         window.directionsRendererPWA.setMap(mapa);
+        window.directionsRendererPWA.setOptions({ preserveViewport: !centrarVista });
     }
 
     const request = {
@@ -290,9 +307,17 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
     window.directionsServicePWA.route(request, (result, status) => {
         if (status === google.maps.DirectionsStatus.OK) {
             window.directionsRendererPWA.setDirections(result);
-            console.log("✅ [NAVEGACION_PWA]: Ruta de viaje trazada exitosamente en el lienzo PWA.");
-            
-            // Renderizar botón de cancelación/limpieza
+
+            // EXTRAER PUNTOS VIALES REALES PARA LA SIMULACIÓN PASO A PASO POR CALLES
+            if (result.routes && result.routes[0] && result.routes[0].overview_path) {
+                window.rutaNavegacionPuntosActiva = result.routes[0].overview_path.map(pt => ({
+                    lat: pt.lat(),
+                    lng: pt.lng()
+                }));
+                console.log(`🛣️ [NAVEGACION_PWA]: Extraídos ${window.rutaNavegacionPuntosActiva.length} vértices viales de la ruta real.`);
+            }
+
+            console.log("✅ [NAVEGACION_PWA]: Ruta de viaje por calles actualizada exitosamente en el lienzo PWA.");
             mostrarBotonLimpiarRutaNavegacion();
         } else {
             console.error("❌ [NAVEGACION_PWA]: Fallo al calcular la ruta de viaje por calles:", status);
@@ -301,9 +326,11 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
 }
 
 /**
- * Limpia la línea de navegación activa del mapa PWA.
+ * Limpia la línea de navegación activa del mapa PWA y borra la parada objetivo y el path vial de memoria.
  */
 export function limpiarRutaNavegacionGPS() {
+    window.paradaObjetivoNavegacion = null;
+    window.rutaNavegacionPuntosActiva = [];
     if (window.directionsRendererPWA) {
         window.directionsRendererPWA.setMap(null);
         console.log("🧹 [NAVEGACION_PWA]: Ruta de viaje removida del lienzo del mapa.");

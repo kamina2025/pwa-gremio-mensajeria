@@ -19,7 +19,7 @@ import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificac
 
 // Instancias y variables de estado global
 window.mapaMensajero = window.mapaMensajero || null;
-window.mapaInstancia = window.mapaInstancia || null; // Alias Singleton
+window.mapaInstancia = window.mapaInstancia || null;
 window.renderRutasMensajero = window.renderRutasMensajero || null;
 window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
 window.infoWindowMensajero = window.infoWindowMensajero || null;
@@ -27,6 +27,7 @@ window.pendientesParaRenderizar = window.pendientesParaRenderizar || null;
 
 let observadorResizeContenedor = null;
 let temporizadorDebounceResize = null;
+const KEY_ULTIMA_PARADA = 'macondo_ultima_parada_id';
 
 /**
  * Extrae y valida coordenadas numéricas de un objeto parada soportando múltiples esquemas de datos.
@@ -112,14 +113,12 @@ export async function recargarMapaCompleto() {
 
         console.log(`📦 [MAPA_VISOR]: Total de paradas recuperadas para refresco: ${paradasFrescas.length}`);
 
-        // ORDENACIÓN ESTRICTA: Respetar la secuencia exacta guardada por el usuario
         paradasFrescas.sort((a, b) => {
             const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
             const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
             return seqA - seqB;
         });
 
-        // Sincronizar memorias RAM
         window.__CACHE_PARADAS_MACONDO__ = [...paradasFrescas];
         window.paradasMemoriaLocal = [...paradasFrescas];
         window.paradasRutaActiva = [...paradasFrescas];
@@ -133,14 +132,11 @@ export async function recargarMapaCompleto() {
             google.maps.event.trigger(mapa, "resize");
             console.log("📐 [MAPA_VISOR]: Disparado 'resize' sobre Google Maps.");
 
-            // Actualizar Marcadores y Minirutas por Clúster
             await actualizarPuntosEnMapa(paradasFrescas, 0);
 
-            // Filtrar paradas de la zona activa para fitBounds enfocado
             const paradasDeZona = paradasFrescas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
             const listaParaBounds = paradasDeZona.length > 0 ? paradasDeZona : paradasFrescas;
 
-            // Ajustar los límites (fitBounds)
             const bounds = new google.maps.LatLngBounds();
             let puntosValidos = 0;
 
@@ -160,7 +156,6 @@ export async function recargarMapaCompleto() {
             console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible durante el refresco.");
         }
 
-        // Refrescar acordeones de la UI si la función existe
         if (typeof window.renderizarParadasZonificadasUI === "function") {
             await window.renderizarParadasZonificadasUI(paradasFrescas);
         }
@@ -211,7 +206,7 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
         }
 
         const instancia = new google.maps.Map(contenedorMapa, {
-            center: { lat: 3.4516467, lng: -76.5319854 }, // Base Cali
+            center: { lat: 3.4516467, lng: -76.5319854 },
             zoom: 13,
             disableDefaultUI: true,
             zoomControl: false,
@@ -281,41 +276,18 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
 
 /**
  * Actualiza waypoints, minirutas por clúster y marcadores sobre el mapa.
- * Preserva el orden persistido en IndexedDB.
- * @param {Array<Object>} [listaPedidos=null] 
+ * @param {Array<Object>} listaPedidos 
  * @param {number} [indiceActivo=0] 
  */
-export async function actualizarPuntosEnMapa(listaPedidos = null, indiceActivo = 0) {
+export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo = 0) {
     const mapa = window.mapaMensajero || window.mapaInstancia;
     if (!mapa || typeof google === "undefined" || !google.maps) {
         window.pendientesParaRenderizar = { listaPedidos, indiceActivo };
         return;
     }
 
-    let paradas = listaPedidos;
-    if (!Array.isArray(paradas) || paradas.length === 0) {
-        paradas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
-    }
-
-    if (!Array.isArray(paradas) || paradas.length === 0) {
-        console.warn("⚠️ [MAPA_VISOR]: No hay paradas para mostrar en el mapa.");
-        return;
-    }
-
-    // PRESERVACIÓN ESTRICTA DEL ORDEN PERSISTIDO
-    paradas.sort((a, b) => {
-        const seqA = parseInt(a.secuenciaZona ?? a.orden ?? a.secuencia ?? 0, 10);
-        const seqB = parseInt(b.secuenciaZona ?? b.orden ?? b.secuencia ?? 0, 10);
-        return seqA - seqB;
-    });
-
-    // Sincronizar cachés RAM
-    window.__CACHE_PARADAS_MACONDO__ = structuredClone(paradas);
-    window.paradasMemoriaLocal = structuredClone(paradas);
-    window.paradasRutaActiva = structuredClone(paradas);
-
-    const zonaDetectada = localStorage.getItem("zona_activa_operacion") || (paradas.length > 0 
-        ? (paradas[0]?.zonaKey || paradas[0]?.zona || "GENERAL") 
+    const zonaDetectada = localStorage.getItem("zona_activa_operacion") || (Array.isArray(listaPedidos) && listaPedidos.length > 0 
+        ? (listaPedidos[0]?.zonaKey || listaPedidos[0]?.zona || "GENERAL") 
         : "TODAS");
 
     const targetCanonico = estandarizarZonaCanonica(zonaDetectada);
@@ -325,16 +297,16 @@ export async function actualizarPuntosEnMapa(listaPedidos = null, indiceActivo =
     }
 
     if (typeof trazarPolilineaRuta === "function") {
-        trazarPolilineaRuta(paradas, targetCanonico);
+        trazarPolilineaRuta(listaPedidos, targetCanonico);
     }
 
     if (typeof renderizarMarcadoresInteractivos === "function") {
-        renderizarMarcadoresInteractivos(paradas, indiceActivo);
+        renderizarMarcadoresInteractivos(listaPedidos, indiceActivo);
     }
 }
 
 /**
- * Enfoca una zona ajustando sus límites geográficos (fitBounds).
+ * Enfoca una zona ajustando sus límites geográficos (FitBounds).
  * @param {Array<Object>} paradasZona 
  */
 export function enfocarZonaEnMapa(paradasZona) {
@@ -366,9 +338,8 @@ export function enfocarZonaEnMapa(paradasZona) {
 }
 
 /**
- * Centra y acerca suavemente la cámara a una parada específica (vía objeto o identificador).
- * Incluye fallback por dirección de texto con auto-guardado en IndexedDB.
- * @param {Object|string} paradaOrId - Objeto o ID de la parada
+ * Centra y acerca la cámara a una parada específica actualizando la clave local de última parada.
+ * @param {Object|string} paradaOrId 
  */
 export function enfocarParadaEnMapa(paradaOrId) {
     const mapa = window.mapaMensajero || window.mapaInstancia;
@@ -388,6 +359,17 @@ export function enfocarParadaEnMapa(paradaOrId) {
     }
 
     if (!parada) return;
+
+    // Actualizar clave global de última parada cliqueada/enfocada
+    const idTargetLocal = String(parada.id || parada.scc || parada.ssc || "").trim();
+    if (idTargetLocal) {
+        try {
+            localStorage.setItem(KEY_ULTIMA_PARADA, idTargetLocal);
+            console.log(`💾 [MAPA_VISOR]: 'macondo_ultima_parada_id' actualizado -> ${idTargetLocal}`);
+        } catch (err) {
+            console.warn("⚠️ Error guardando id de última parada:", err);
+        }
+    }
 
     const coords = obtenerCoordenadasValidasParada(parada);
 
@@ -424,13 +406,12 @@ export function enfocarParadaEnMapa(paradaOrId) {
                     try {
                         await guardarRutaZonificada(coleccionActual);
                         
-                        // Sincronizar memorias RAM
                         window.__CACHE_PARADAS_MACONDO__ = [...coleccionActual];
                         window.paradasMemoriaLocal = [...coleccionActual];
                         window.paradasRutaActiva = [...coleccionActual];
                         window.pedidosGlobales = [...coleccionActual];
 
-                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc || parada.scc} persistidas en IndexedDB y RAM.`);
+                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc} persistidas en IndexedDB y RAM.`);
                     } catch (err) {
                         console.warn("⚠️ [MAPA_VISOR]: No se pudo auto-guardar la coordenada en IndexedDB:", err);
                     }
@@ -450,30 +431,17 @@ export function enfocarParadaEnMapa(paradaOrId) {
 }
 
 /**
- * Centra la cámara en la parada seleccionada por SCC y resalta visualmente todos
- * los marcadores pertenecientes a su mismo Grupo Principal / Clúster.
- * Búsqueda DOM flexible e insensible a mayúsculas/minúsculas.
- * @param {Object} parada - Objeto de la parada localizada por SCC
+ * Centra la cámara en la parada seleccionada por SCC y resalta visualmente los marcadores del mismo clúster.
+ * @param {Object} parada 
  */
 export function enfocarYResaltarGrupoSCC(parada) {
-    const mapa = window.mapaMensajero || window.mapaInstanciaGlobal || window.mapaInstancia;
     if (!parada) return;
 
-    // 1. Centrado táctico de la cámara
-    const coords = obtenerCoordenadasValidasParada(parada);
-    if (coords && mapa && typeof google !== "undefined" && google.maps) {
-        mapa.panTo(new google.maps.LatLng(coords.lat, coords.lng));
-        mapa.setZoom(17);
-        console.log(`🎯 [MAPA_VISOR]: Cámara enfocada en SCC [${parada.scc || parada.ssc || 'N/A'}] -> Lat: ${coords.lat}, Lng: ${coords.lng}`);
-    } else {
-        enfocarParadaEnMapa(parada);
-    }
+    enfocarParadaEnMapa(parada);
 
-    // 2. Resaltado Neón Multimodal sobre marcadores del mismo clúster/grupo en el DOM
     const grupoBuscado = String(parada.grupoId || parada.grupo || parada.cluster || "").trim();
     if (!grupoBuscado) return;
 
-    // Escaneo flexible de selectores
     const marcadoresDOM = document.querySelectorAll(".cyber-pin-marker, [data-grupo], [data-grupo-id], [data-cluster]");
     let contadorResaltados = 0;
 

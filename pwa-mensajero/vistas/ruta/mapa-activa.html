@@ -32,7 +32,7 @@
         <ul id="sugerencias-paradas-mapa" class="cyber-sugerencias-lista" style="display: none;"></ul>
     </div>
 
-    <!-- 🎛️ CONTROLES VERTICALES FLOTANTES (ZOOM, REFRESH & LOCK) -->
+    <!-- 🎛️ CONTROLES VERTICALES FLOTANTES (ZOOM, REFRESH, LOCK & ENFOQUE GRUPO) -->
     <div class="cyber-map-controls" id="cyber-map-controls">
         <button type="button" class="cyber-btn-map" id="btn-zoom-in" title="Acercar (Zoom In)" aria-label="Acercar mapa">
             <span class="cyber-btn-icon">➕</span>
@@ -42,6 +42,9 @@
         </button>
         <button type="button" class="cyber-btn-map cyber-btn-refresh" id="btn-refresh-map" title="Refrescar y Sincronizar Mapa Local-First" aria-label="Refrescar mapa">
             <span class="cyber-btn-icon refresh-icon">🔄</span>
+        </button>
+        <button type="button" class="cyber-btn-map" id="btn-enfocar-ultimo-grupo" title="Enfocar Última Parada del Grupo" aria-label="Enfocar última parada del grupo">
+            <span class="cyber-btn-icon">🎯</span>
         </button>
         <button type="button" class="cyber-btn-map" id="btn-toggle-lock" title="Bloquear / Desbloquear Mapa" aria-label="Bloquear/Desbloquear mapa" data-locked="false">
             <span class="cyber-btn-icon" id="icon-lock-state">🔓</span>

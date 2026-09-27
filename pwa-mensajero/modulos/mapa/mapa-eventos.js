@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - EVENTOS, BUSCADOR MULTIMODAL Y ESCÁNER TÁCTICO SCC
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-eventos.js
- * Arquitectura: Google Maps SDK / Local-First / BarcodeDetector / Android Secure Context
+ * Arquitectura: Google Maps SDK / Local-First / BarcodeDetector / Universal Stop Focus
  */
 
 import { crearIconoParadaRadarSVG } from "./mapa-iconos.js";
@@ -10,6 +10,7 @@ import { enfocarParadaEnMapa, recargarMapaCompleto, enfocarYResaltarGrupoSCC } f
 import { obtenerParadasGuardadas } from "../mensajero-persistencia.js";
 
 const KEY_PERSISTENCIA_LOCK = 'map_interaction_locked';
+const KEY_ULTIMA_PARADA = 'macondo_ultima_parada_id';
 
 let modoCrearParadaActivo = false;
 let mediaStreamCamara = null;
@@ -51,7 +52,6 @@ function obtenerIdUnicoParada(p) {
 function clasificarIntencionBusqueda(query) {
     const qNorm = normalizarTextoBusqueda(query);
 
-    // Detección estricta de orden de parada solo si viene antecedido por # o la palabra STOP
     const patronStopExplicito = /^(?:#\s*|stop\s+)(\d+)$/i;
     const matchStop = qNorm.match(patronStopExplicito);
 
@@ -63,7 +63,6 @@ function clasificarIntencionBusqueda(query) {
         };
     }
 
-    // Clasificación Multimodal Unificada (SCC / Secuencia / Cliente / Dirección)
     return {
         tipo: 'MULTIMODAL',
         valorLimpio: qNorm,
@@ -84,6 +83,7 @@ export const mapaEventos = {
         const btnToggleLock = document.getElementById('btn-toggle-lock');
         const btnEscanear = document.getElementById('btn-escanear-scc');
         const btnCerrarScanner = document.getElementById('btn-cerrar-escanner');
+        const btnEnfocarUltimaParada = document.getElementById('btn-enfocar-ultimo-grupo') || document.getElementById('btn-enfocar-ultima-parada');
 
         if (btnZoomIn) {
             btnZoomIn.onclick = (e) => {
@@ -130,6 +130,49 @@ export const mapaEventos = {
                     }, 400);
                 }
             };
+        }
+
+        // 🎯 BOTÓN DE ENFOQUE RÁPIDO: ENFOCAR CUALQUIER ÚLTIMA PARADA CLIQUEADA/SELECCIONADA (INDEPENDIENTE DE GRUPO)
+        if (btnEnfocarUltimaParada) {
+            const manejarEnfoqueUltimaParada = async (e) => {
+                if (e) e.preventDefault();
+                console.log("🎯 [MAPA_EVENTOS]: Solicitud de enfoque rápido sobre la última parada cliqueada...");
+
+                const paradas = await this.obtenerColeccionParadas();
+                if (!Array.isArray(paradas) || paradas.length === 0) {
+                    console.warn("⚠️ [MAPA_EVENTOS]: No hay paradas en memoria/DB para enfocar.");
+                    return;
+                }
+
+                // 1. Intentar recuperar por ID la última parada seleccionada cliqueada por el usuario
+                const idUltimaGuardada = localStorage.getItem(KEY_ULTIMA_PARADA);
+                let paradaObjetivo = null;
+
+                if (idUltimaGuardada) {
+                    paradaObjetivo = paradas.find(p => obtenerIdUnicoParada(p) === String(idUltimaGuardada).trim());
+                }
+
+                // 2. Fallback: Si no hay registro previo de clic, tomar la última parada activa de la lista
+                if (!paradaObjetivo) {
+                    paradaObjetivo = paradas[paradas.length - 1];
+                }
+
+                if (paradaObjetivo) {
+                    console.log(`🎯 [MAPA_EVENTOS]: Enfocando cámara en la parada -> ID: ${obtenerIdUnicoParada(paradaObjetivo)} | Stop #${paradaObjetivo.secuenciaZona || paradaObjetivo.secuencia || 'N/A'}`);
+                    
+                    // Si la parada tiene grupo asociado usamos el resalte de clúster, de lo contrario enfocamos la parada directo
+                    if (paradaObjetivo.grupoId || paradaObjetivo.grupo) {
+                        enfocarYResaltarGrupoSCC(paradaObjetivo);
+                    } else {
+                        enfocarParadaEnMapa(paradaObjetivo);
+                    }
+
+                    this.mostrarTarjetaDetalle(paradaObjetivo);
+                }
+            };
+
+            btnEnfocarUltimaParada.addEventListener("click", manejarEnfoqueUltimaParada);
+            btnEnfocarUltimaParada.addEventListener("touchend", manejarEnfoqueUltimaParada);
         }
 
         if (btnToggleLock) {
@@ -256,7 +299,6 @@ export const mapaEventos = {
                 return sec === intencion.numeroStop;
             }).map(p => ({ ...p, _categoriaBusqueda: 'STOP' }));
         } else {
-            // Evaluación Multimodo Flexible
             resultados = paradas.filter((p, idx) => {
                 const sccVal = normalizarTextoBusqueda(p.scc || p.ssc || p.id_scc || p.codigo_scc || "");
                 const clienteVal = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
@@ -329,7 +371,8 @@ export const mapaEventos = {
         listaSugerencias.style.display = "block";
 
         listaSugerencias.querySelectorAll(".cyber-sugerencia-item").forEach((item) => {
-            item.addEventListener("click", () => {
+            const seleccionar = (e) => {
+                if (e) e.preventDefault();
                 const type = item.getAttribute("data-type");
                 if (type === "parada") {
                     const id = item.getAttribute("data-id");
@@ -341,16 +384,29 @@ export const mapaEventos = {
                     this.ejecutarGeocodificacionDireccion(queryOriginal);
                 }
                 listaSugerencias.style.display = "none";
-            });
+            };
+
+            item.addEventListener("click", seleccionar);
+            item.addEventListener("touchend", seleccionar);
         });
     },
 
     seleccionarParadaBuscada(parada) {
-        console.log("⚡ [MAPA_EVENTOS]: Parada seleccionada en búsqueda SCC:", parada);
+        console.log("⚡ [MAPA_EVENTOS]: Parada seleccionada:", parada);
 
-        if (typeof enfocarYResaltarGrupoSCC === "function") {
+        // Al seleccionar cualquier parada la registramos como la última cliqueada
+        const uid = obtenerIdUnicoParada(parada);
+        if (uid) {
+            try {
+                localStorage.setItem(KEY_ULTIMA_PARADA, uid);
+            } catch (err) {
+                console.warn("⚠️ Error guardando última parada cliqueada:", err);
+            }
+        }
+
+        if (parada.grupoId || parada.grupo) {
             enfocarYResaltarGrupoSCC(parada);
-        } else if (typeof enfocarParadaEnMapa === "function") {
+        } else {
             enfocarParadaEnMapa(parada);
         }
 
@@ -414,8 +470,8 @@ export const mapaEventos = {
         const elemTel = document.getElementById("card-stop-telefono");
 
         if (elemSec) elemSec.textContent = `#STOP ${sec}`;
-        if (elemGrupo) elemGrupo.textContent = parada.grupoId || "GRUPO-01";
-        if (elemSubgrupo) elemSubgrupo.textContent = parada.subgrupoId || "SUB-001";
+        if (elemGrupo) elemGrupo.textContent = parada.grupoId || "GRUPO --";
+        if (elemSubgrupo) elemSubgrupo.textContent = parada.subgrupoId || "SUB --";
         if (elemSCC) elemSCC.textContent = `SCC: ${parada.scc || parada.ssc || 'N/A'}`;
         if (elemEst) elemEst.textContent = (parada.estado || "ASIGNADO").toUpperCase();
         if (elemDest) elemDest.textContent = nombreCliente;
@@ -474,13 +530,17 @@ export const mapaEventos = {
         }).join("");
 
         contenedor.querySelectorAll(".btn-parada-cercana").forEach(btn => {
-            btn.addEventListener("click", () => {
+            const seleccionar = (e) => {
+                if (e) e.preventDefault();
                 const id = btn.getAttribute("data-id");
                 const destino = paradas.find(p => obtenerIdUnicoParada(p) === id);
                 if (destino) {
                     this.seleccionarParadaBuscada(destino);
                 }
-            });
+            };
+
+            btn.addEventListener("click", seleccionar);
+            btn.addEventListener("touchend", seleccionar);
         });
     },
 
@@ -495,7 +555,6 @@ export const mapaEventos = {
         if (!modal || !video) return;
         modal.style.display = "flex";
 
-        // 1. Verificación de Contexto Seguro Web API
         const esContextoSeguro = window.isSecureContext || window.location.protocol === "https:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
         if (!esContextoSeguro) {
@@ -513,7 +572,6 @@ export const mapaEventos = {
 
         if (txtStatus) txtStatus.textContent = "⏳ Solicitando acceso a la cámara...";
 
-        // 2. Fallback progresivo para perfiles de cámara en Android
         const perfilesCamara = [
             { video: { facingMode: { ideal: "environment" } } },
             { video: { facingMode: "environment" } },
@@ -552,7 +610,6 @@ export const mapaEventos = {
 
         if (txtStatus) txtStatus.textContent = "🔍 Apunte la cámara hacia el código de barras o QR...";
 
-        // 3. Integración con la API BarcodeDetector
         if ("BarcodeDetector" in window) {
             try {
                 const detector = new BarcodeDetector({ formats: ["code_128", "qr_code", "ean_13", "code_39"] });
@@ -574,7 +631,7 @@ export const mapaEventos = {
                             return;
                         }
                     } catch (err) {
-                        // Reintento silencioso en siguiente frame
+                        // Reintento en siguiente frame
                     }
                     animFrameScanner = requestAnimationFrame(escaneoLoop);
                 };

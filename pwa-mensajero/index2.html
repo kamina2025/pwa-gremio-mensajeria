@@ -1,3 +1,4 @@
+<!-- Ruta: pwa-mensajero/index2.html -->
 <!doctype html>
 <html lang="es">
     <head>
@@ -26,6 +27,18 @@
         <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
+        <!-- Ruta: pwa-mensajero/index2.html -->
+        <!-- LIBRERÍAS EXTERNAS PARA GENERACIÓN DE CANVAS Y PDF (SIN RESTRICCIÓN SRI) -->
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"></script>
+
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"></script>
+
         <!-- Puente para exposición global de la callback de Google Maps -->
         <script>
             console.log("🚀 [INDEX2]: Inicializando puente de callback Google Maps");
@@ -40,12 +53,12 @@
     <body>
         <!-- Cabecera Principal (Header Grid Area) -->
         <header class="header-principal">
-            <button id="toggle-menu-btn" class="nav-btn">
-                <i class="fa-solid fa-bars"></i>
+            <button id="toggle-menu-btn" class="nav-btn" type="button">
+                <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 <span>_MENU</span>
             </button>
             <div class="logo">RUNNER</div>
-            <button id="install-btn" class="nav-btn">_INSTALAR_PWA</button>
+            <button id="install-btn" class="nav-btn" type="button">_INSTALAR_PWA</button>
         </header>
 
         <!-- Contenedor Principal del Dashboard (Grid de 2 Columnas) -->
@@ -99,7 +112,7 @@
         </div>
 
         <!-- CONTENEDOR DE BARRA INFERIOR FLOTANTE A NIVEL RAÍZ -->
-        <nav id="contenedor-menu" class="barra-inferior-global"></nav>
+        <nav id="contenedor-menu" class="barra-inferior-global" aria-label="Navegación inferior"></nav>
 
         <!-- PORTALES DE UI CYBERPUNK (Toasts & Modales de Proceso) -->
         <div id="cyber-toast-container" class="cyber-toast-container" aria-live="polite" aria-atomic="true"></div>

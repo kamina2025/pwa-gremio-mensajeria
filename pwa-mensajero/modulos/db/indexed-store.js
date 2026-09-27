@@ -4,18 +4,23 @@
  */
 
 export class IndexedStore {
-  constructor(dbName = 'PWA_Mensajero_DB', storeName = 'paradas_rutas') {
+  /**
+   * @param {string} dbName - Nombre unificado de la base de datos
+   * @param {string} defaultStore - Store predeterminado para paradas
+   */
+  constructor(dbName = 'PWA_Mensajero_DB', defaultStore = 'paradas_rutas') {
     this.dbName = dbName;
-    this.storeName = storeName;
+    this.defaultStore = defaultStore;
+    this.dbVersion = 2; // Sincronizado para evitar VersionError en Chromium
   }
 
   /**
-   * Abre o crea la conexión con la base de datos IndexedDB unificada.
+   * Abre o actualiza la conexión con IndexedDB.
    * @returns {Promise<IDBDatabase>}
    */
   async openDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, 1);
+      const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = () => {
         console.error('❌ [INDEXED_STORE]: Error al abrir IndexedDB:', request.error);
@@ -26,70 +31,88 @@ export class IndexedStore {
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
-        if (!db.objectStoreNames.contains(this.storeName)) {
-          // KeyPath 'id' para identificación única de cada parada
-          const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
+
+        // 1. Store Principal de Paradas y Rutas
+        if (!db.objectStoreNames.contains('paradas_rutas')) {
+          const store = db.createObjectStore('paradas_rutas', { keyPath: 'id' });
           store.createIndex('secuencia', 'secuencia', { unique: false });
           store.createIndex('estado', 'estado', { unique: false });
           store.createIndex('sincronizado', 'sincronizado', { unique: false });
-          console.log(`📦 [INDEXED_STORE]: ObjectStore '${this.storeName}' creado exitosamente.`);
+          console.log("📦 [INDEXED_STORE]: Store 'paradas_rutas' creado.");
+        }
+
+        // 2. Store de Planillas Reportadas
+        if (!db.objectStoreNames.contains('planillas')) {
+          db.createObjectStore('planillas', { keyPath: 'id' });
+          console.log("📦 [INDEXED_STORE]: Store 'planillas' creado.");
+        }
+
+        // 3. Store para Archivos Binarios PDF (Ahorro de RAM en Android)
+        if (!db.objectStoreNames.contains('planillas_pdf')) {
+          db.createObjectStore('planillas_pdf', { keyPath: 'id' });
+          console.log("📦 [INDEXED_STORE]: Store 'planillas_pdf' creado.");
+        }
+
+        // 4. Store para Cola de Sincronización Offline
+        if (!db.objectStoreNames.contains('sincronizacion_pendiente')) {
+          db.createObjectStore('sincronizacion_pendiente', { keyPath: 'id', autoIncrement: true });
+          console.log("📦 [INDEXED_STORE]: Store 'sincronizacion_pendiente' creado.");
         }
       };
     });
   }
 
   /**
-   * Obtiene la colección completa de paradas guardadas en la base local.
+   * Recupera todos los registros de un ObjectStore determinado.
+   * @param {string} [storeOpcional]
    * @returns {Promise<Array<Object>>}
    */
-  async obtenerParadas() {
+  async obtenerParadas(storeOpcional) {
+    const targetStore = storeOpcional || this.defaultStore;
     const db = await this.openDB();
+
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readonly');
-      const store = tx.objectStore(this.storeName);
+      const tx = db.transaction(targetStore, 'readonly');
+      const store = tx.objectStore(targetStore);
       const request = store.getAll();
 
       request.onsuccess = () => {
         const resultados = request.result || [];
-        console.log(`📦 [INDEXED_STORE]: ${resultados.length} parada(s) obtenida(s) localmente.`);
+        console.log(`📦 [INDEXED_STORE]: ${resultados.length} registro(s) obtenido(s) de '${targetStore}'.`);
         resolve(resultados);
       };
 
       request.onerror = () => {
-        console.error('❌ [INDEXED_STORE]: Error al obtener paradas:', request.error);
+        console.error(`❌ [INDEXED_STORE]: Error al consultar '${targetStore}':`, request.error);
         reject(request.error);
       };
     });
   }
 
-  /**
-   * Alias de compatibilidad para recuperar la colección completa de paradas.
-   * @returns {Promise<Array<Object>>}
-   */
+  /** Alias de compatibilidad */
   async obtenerTodasParadas() {
-    return this.obtenerParadas();
+    return this.obtenerParadas(this.defaultStore);
   }
 
-  /**
-   * Alias genérico de compatibilidad con la API Key-Value/Storage.
-   * @param {string} [storeOpcional] 
-   * @returns {Promise<Array<Object>>}
-   */
+  /** Alias genérico para compatibilidad con la API Key-Value Storage */
   async getAll(storeOpcional) {
-    return this.obtenerParadas();
+    return this.obtenerParadas(storeOpcional);
   }
 
   /**
-   * Obtiene una parada específica por su identificador único ID.
-   * @param {string|number} id 
+   * Obtiene un registro individual por su identificador primario.
+   * @param {string|number} id
+   * @param {string} [storeOpcional]
    * @returns {Promise<Object|null>}
    */
-  async obtenerParadaPorId(id) {
+  async obtenerParadaPorId(id, storeOpcional) {
+    const targetStore = storeOpcional || this.defaultStore;
     const db = await this.openDB();
+
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readonly');
-      const store = tx.objectStore(this.storeName);
-      const request = store.get(id);
+      const tx = db.transaction(targetStore, 'readonly');
+      const store = tx.objectStore(targetStore);
+      const request = store.get(String(id));
 
       request.onsuccess = () => resolve(request.result || null);
       request.onerror = () => reject(request.error);
@@ -97,135 +120,194 @@ export class IndexedStore {
   }
 
   /**
-   * Inserta o actualiza un registro individual de parada en IndexedDB.
-   * @param {Object} parada 
+   * Inserta o actualiza un registro individual.
+   * @param {Object} registro
+   * @param {string} [storeOpcional]
    * @returns {Promise<boolean>}
    */
-  async actualizarParada(parada) {
-    if (!parada) return false;
+  async actualizarParada(registro, storeOpcional) {
+    if (!registro) return false;
+    const targetStore = storeOpcional || this.defaultStore;
 
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
+      const tx = db.transaction(targetStore, 'readwrite');
+      const store = tx.objectStore(targetStore);
 
-      // Normalizar estructura del objeto antes de guardar
-      const copiaParada = { ...parada };
-      
-      // Garantizar la presencia del atributo id para el KeyPath
-      if (!copiaParada.id) {
-        copiaParada.id = copiaParada.ssc || `#PNT-${copiaParada.secuencia || copiaParada.orden || Date.now()}`;
+      const copia = { ...registro };
+
+      if (!copia.id) {
+        copia.id = String(
+          copia.ssc || 
+          copia.idParada || 
+          `#PNT-${copia.secuencia || copia.orden || Date.now()}`
+        );
+      } else {
+        copia.id = String(copia.id);
       }
 
-      // Metadata Local-First
-      copiaParada.sincronizado = 0;
-      copiaParada.updated_at = new Date().toISOString();
+      if (copia.sincronizado === undefined) {
+        copia.sincronizado = 0;
+      }
+      copia.updated_at = new Date().toISOString();
 
-      const request = store.put(copiaParada);
+      const request = store.put(copia);
 
       request.onsuccess = () => {
-        console.log(`💾 [INDEXED_STORE]: Parada '${copiaParada.id}' guardada/actualizada con éxito.`);
+        console.log(`💾 [INDEXED_STORE]: Registro '${copia.id}' guardado en '${targetStore}'.`);
         resolve(true);
       };
 
       request.onerror = () => {
-        console.error(`❌ [INDEXED_STORE]: Error al actualizar la parada '${copiaParada.id}':`, request.error);
+        console.error(`❌ [INDEXED_STORE]: Error al actualizar '${copia.id}' en '${targetStore}':`, request.error);
         reject(request.error);
       };
     });
   }
 
-  /**
-   * Alias genérico para guardar o actualizar un registro.
-   * @param {string} storeName - Nombre del store (opcional)
-   * @param {Object} registro 
-   * @returns {Promise<boolean>}
-   */
+  /** Alias genérico para guardar un registro */
   async guardarRegistro(storeName, registro) {
-    return this.actualizarParada(registro);
+    return this.actualizarParada(registro, storeName || this.defaultStore);
   }
 
   /**
-   * Guarda o reemplaza de forma masiva un arreglo de paradas en una sola transacción.
-   * @param {Array<Object>} listaParadas 
+   * Persiste un archivo PDF en formato Blob dentro del store 'planillas_pdf'.
+   * @param {string|number} idPlanilla
+   * @param {Blob} blobArchivo
    * @returns {Promise<boolean>}
    */
-  async guardarColeccionParadas(listaParadas) {
-    if (!Array.isArray(listaParadas) || listaParadas.length === 0) return false;
+  async guardarPdfBlob(idPlanilla, blobArchivo) {
+    try {
+      const db = await this.openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('planillas_pdf', 'readwrite');
+        const store = tx.objectStore('planillas_pdf');
+
+        const registro = {
+          id: String(idPlanilla),
+          blob: blobArchivo,
+          created_at: new Date().toISOString()
+        };
+
+        const request = store.put(registro);
+        request.onsuccess = () => resolve(true);
+        request.onerror = (e) => reject(e.target.error);
+      });
+    } catch (err) {
+      console.warn("⚠️ [INDEXED_STORE]: No se pudo guardar el Blob PDF en IndexedDB:", err);
+      return false;
+    }
+  }
+
+  /**
+   * Recupera un Blob PDF previamente almacenado.
+   * @param {string|number} idPlanilla
+   * @returns {Promise<Blob|null>}
+   */
+  async obtenerPdfBlob(idPlanilla) {
+    try {
+      const db = await this.openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('planillas_pdf', 'readonly');
+        const store = tx.objectStore('planillas_pdf');
+        const request = store.get(String(idPlanilla));
+
+        request.onsuccess = () => resolve(request.result ? request.result.blob : null);
+        request.onerror = (e) => reject(e.target.error);
+      });
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /**
+   * Reemplaza masivamente una colección de registros en una transacción atómica.
+   * @param {Array<Object>} listaRegistros
+   * @param {string} [storeOpcional]
+   * @returns {Promise<boolean>}
+   */
+  async guardarColeccionParadas(listaRegistros, storeOpcional) {
+    if (!Array.isArray(listaRegistros)) return false;
+    const targetStore = storeOpcional || this.defaultStore;
 
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
+      const tx = db.transaction(targetStore, 'readwrite');
+      const store = tx.objectStore(targetStore);
 
-      // Limpiar datos previos en la colección para sobrescritura atómica
       store.clear();
 
-      listaParadas.forEach((parada, index) => {
-        const item = { ...parada };
-        if (!item.id) {
-          item.id = item.ssc || `#PNT-${item.secuencia || item.orden || index + 1}`;
+      listaRegistros.forEach((item, index) => {
+        const copia = { ...item };
+        if (!copia.id) {
+          copia.id = String(copia.ssc || `#PNT-${copia.secuencia || copia.orden || index + 1}`);
+        } else {
+          copia.id = String(copia.id);
         }
-        item.updated_at = new Date().toISOString();
-        store.put(item);
+        copia.updated_at = new Date().toISOString();
+        store.put(copia);
       });
 
       tx.oncomplete = () => {
-        console.log(`✅ [INDEXED_STORE]: Sincronizadas ${listaParadas.length} paradas en IndexedDB.`);
+        console.log(`✅ [INDEXED_STORE]: Sincronizados ${listaRegistros.length} registros en '${targetStore}'.`);
         resolve(true);
       };
 
       tx.onerror = () => {
-        console.error('❌ [INDEXED_STORE]: Error en la transacción masiva:', tx.error);
+        console.error(`❌ [INDEXED_STORE]: Error en la transacción masiva sobre '${targetStore}':`, tx.error);
         reject(tx.error);
       };
     });
   }
 
   /**
-   * Elimina un registro de parada por su identificador clave.
-   * @param {string|number} id 
+   * Elimina un registro por su clave identificadora.
+   * @param {string|number} id
+   * @param {string} [storeOpcional]
    * @returns {Promise<boolean>}
    */
-  async eliminarParada(id) {
+  async eliminarParada(id, storeOpcional) {
+    const targetStore = storeOpcional || this.defaultStore;
     const db = await this.openDB();
+
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
-      const request = store.delete(id);
+      const tx = db.transaction(targetStore, 'readwrite');
+      const store = tx.objectStore(targetStore);
+      const request = store.delete(String(id));
 
       request.onsuccess = () => {
-        console.log(`🗑️ [INDEXED_STORE]: Parada '${id}' eliminada de la base local.`);
+        console.log(`🗑️ [INDEXED_STORE]: Registro '${id}' eliminado de '${targetStore}'.`);
         resolve(true);
       };
 
       request.onerror = () => {
-        console.error(`❌ [INDEXED_STORE]: Error al eliminar la parada '${id}':`, request.error);
+        console.error(`❌ [INDEXED_STORE]: Error al eliminar '${id}' de '${targetStore}':`, request.error);
         reject(request.error);
       };
     });
   }
 
-  /**
-   * Alias de compatibilidad para eliminación.
-   */
+  /** Alias genérico para eliminación */
   async eliminarRegistro(storeName, id) {
-    return this.eliminarParada(id);
+    return this.eliminarParada(id, storeName || this.defaultStore);
   }
 
   /**
-   * Limpia completamente todos los registros del ObjectStore de paradas.
+   * Limpia completamente un ObjectStore.
+   * @param {string} [storeOpcional]
    * @returns {Promise<boolean>}
    */
-  async limpiarStore() {
+  async limpiarStore(storeOpcional) {
+    const targetStore = storeOpcional || this.defaultStore;
     const db = await this.openDB();
+
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(this.storeName, 'readwrite');
-      const store = tx.objectStore(this.storeName);
+      const tx = db.transaction(targetStore, 'readwrite');
+      const store = tx.objectStore(targetStore);
       const request = store.clear();
 
       request.onsuccess = () => {
-        console.log(`🧹 [INDEXED_STORE]: ObjectStore '${this.storeName}' vaciado correctamente.`);
+        console.log(`🧹 [INDEXED_STORE]: ObjectStore '${targetStore}' vaciado correctamente.`);
         resolve(true);
       };
 

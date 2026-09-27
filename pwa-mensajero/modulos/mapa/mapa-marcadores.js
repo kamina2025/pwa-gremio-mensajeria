@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - GESTOR DE MARCADORES, INFOWINDOWS Y MENÚ ORBITAL CYBERPUNK
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
- * Arquitectura: Google Maps OverlayView / Local-First / Orbital UI
+ * Arquitectura: Google Maps OverlayView / Local-First / Orbital UI / GPS Navigation
  */
 
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
@@ -68,8 +68,43 @@ window.iniciarLlamadaAndroid = function (numeroTelefono) {
 };
 
 /**
- * Fabrica dinámicamente la clase MenuRadialOverlay con geometría Orbital Cyberpunk
- * garantizando que google.maps.OverlayView esté definido al momento de instanciar.
+ * Lanza la generación de ruta de viaje en tiempo real DENTRO DE LA PWA
+ * desde la ubicación GPS actual del mensajero hasta la parada destino.
+ * @param {Object} parada - Objeto de la parada objetivo
+ */
+export function iniciarViajeNavegacionGPS(parada) {
+    if (!parada) {
+        console.warn("⚠️ [MAPA_NAVEGACION]: Parada inválida para iniciar viaje.");
+        return;
+    }
+
+    console.log(`🚀 [MAPA_NAVEGACION]: Iniciando navegación interna para la parada: #${parada.id || parada.ssc}`);
+
+    if (typeof window.trazarRutaNavegacionInternaGPS === "function") {
+        window.trazarRutaNavegacionInternaGPS(parada);
+    } else {
+        console.warn("⚠️ [MAPA_NAVEGACION]: Módulo 'trazarRutaNavegacionInternaGPS' no encontrado. Ejecutando fallback externo.");
+        
+        const coordsDestino = typeof window.obtenerCoordenadasValidasParada === "function"
+            ? window.obtenerCoordenadasValidasParada(parada)
+            : null;
+
+        if (coordsDestino) {
+            const { lat, lng } = coordsDestino;
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`, "_blank");
+        }
+    }
+}
+/**
+ * Evento del Menú Orbital al hacer clic en el botón 'Viajar'
+ */
+export function manejarAccionOrbitalViajar(paradaSeleccionada) {
+    console.log(`🚀 [MENU_ORBITAL]: Acción 'VIAJAR' activada para parada -> #${paradaSeleccionada.id || paradaSeleccionada.ssc}`);
+    iniciarViajeNavegacionGPS(paradaSeleccionada);
+}
+
+/**
+ * Fabrica dinámicamente la clase MenuRadialOverlay con geometría Orbital Cyberpunk.
  * @returns {Function|null}
  */
 function obtenerClaseMenuRadialOverlay() {
@@ -179,7 +214,7 @@ function obtenerClaseMenuRadialOverlay() {
                     color: #0d1117;
                     box-shadow: 0 0 16px #39ff14;
                 }
-                /* DISPOSICIÓN RADIAL DE 8 NODOS EN ANILLO RADIANICO (R=58px) */
+                /* DISPOSICIÓN RADIAL DE 8 NODOS (R=58px) */
                 .cyber-btn-norte    { top: 17px;  left: 57px; }  /* 0deg */
                 .cyber-btn-noreste  { top: 34px;  left: 98px; }  /* 45deg */
                 .cyber-btn-este     { top: 75px;  left: 115px;}  /* 90deg */
@@ -198,13 +233,13 @@ function obtenerClaseMenuRadialOverlay() {
             this.container.innerHTML = `
                 <div class="orbital-ring-bg"></div>
                 <button type="button" class="cyber-btn cyber-btn-norte" title="Editar Parada (N)" aria-label="Editar">✏️</button>
-                <button type="button" class="cyber-btn cyber-btn-noreste amber" title="Subir / Mover en Secuencia (NE)" aria-label="Secuencia">▲</button>
+                <button type="button" class="cyber-btn cyber-btn-noreste amber" title="Subir en Secuencia (NE)" aria-label="Secuencia">▲</button>
                 <button type="button" class="cyber-btn cyber-btn-este" title="Mover Punto Geodésico (E)" aria-label="Mover">📍</button>
                 <button type="button" class="cyber-btn cyber-btn-sudeste green" title="Llamar Cliente (SE)" aria-label="Llamar">📞</button>
                 <button type="button" class="cyber-btn cyber-btn-sur danger" title="Eliminar Parada (S)" aria-label="Eliminar">🗑️</button>
                 <button type="button" class="cyber-btn cyber-btn-suroeste" title="Copiar Coordenadas (SO)" aria-label="Copiar">📋</button>
                 <button type="button" class="cyber-btn cyber-btn-oeste amber" title="Reportar Novedad / Evidencias (O)" aria-label="Reportar">📷</button>
-                <button type="button" class="cyber-btn cyber-btn-noroeste green" title="Navegar Google Maps (NO)" aria-label="GPS">🧭</button>
+                <button type="button" class="cyber-btn cyber-btn-noroeste green" title="Viajar con GPS (NO)" aria-label="Viajar">🧭</button>
             `;
             this.attachEvents();
             const panes = this.getPanes();
@@ -236,7 +271,7 @@ function obtenerClaseMenuRadialOverlay() {
             bindAction(".cyber-btn-sur", "SUR (Eliminar)", this.handlers.onDelete);
             bindAction(".cyber-btn-suroeste", "SUROESTE (Copiar GPS)", this.handlers.onCopyGPS);
             bindAction(".cyber-btn-oeste", "OESTE (Reportar/Evidencias)", this.handlers.onReport);
-            bindAction(".cyber-btn-noroeste", "NOROESTE (Abrir GPS External)", this.handlers.onExternalNav);
+            bindAction(".cyber-btn-noroeste", "NOROESTE (Viajar GPS)", this.handlers.onExternalNav);
         }
 
         draw() {
@@ -269,7 +304,7 @@ function obtenerClaseMenuRadialOverlay() {
 }
 
 /**
- * Despliega la ventana modal de gestión de parada y evidencias (Acción Oeste - Reportar/Gestionar).
+ * Despliega la ventana modal de gestión de parada y evidencias.
  * @param {Object} pedido
  * @param {number} indice
  */
@@ -483,8 +518,12 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 title: `[STOP #${idx + 1}] ${nombreCliente}`
             });
 
+            // Asignar metadatos tácticos al marcador
+            const grupoAsignado = String(pedido.grupoId || pedido.grupo || pedido.cluster || "").trim();
             marker.set("idParada", idUnicoParada);
             marker.set("secuencia", idx + 1);
+            marker.set("grupoId", grupoAsignado);
+            marker.set("cluster", grupoAsignado);
 
             const templateInfo = `
                 <div style="background: #0d1117; color: #fff; padding: 10px; border: 1px solid #00e5ff; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 6px; min-width: 180px;">
@@ -543,11 +582,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                         navigator.clipboard.writeText(`${lat}, ${lng}`).then(() => alert(`📋 Coordenadas copiadas: ${lat}, ${lng}`));
                     },
                     onReport: () => abrirModalGestionParada(pedido, idx + 1),
-                    onExternalNav: () => {
-                        const lat = pedido.lat || marker.getPosition().lat();
-                        const lng = pedido.lng || marker.getPosition().lng();
-                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, "_blank");
-                    }
+                    onExternalNav: () => iniciarViajeNavegacionGPS(pedido)
                 });
 
                 window.overlayMenuActivo.setMap(mapa);
@@ -572,7 +607,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 }
 
 /**
- * Habilita el arrastre del pin en el mapa para reubicación geodésica (Acción Este).
+ * Habilita el arrastre del pin en el mapa para reubicación geodésica.
  */
 function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion) {
     marker.setDraggable(true);
@@ -583,7 +618,6 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
         const nuevaLat = event.latLng.lat();
         const nuevaLng = event.latLng.lng();
 
-        // 1. Homologar datos de coordenadas en el objeto
         pedido.lat = nuevaLat;
         pedido.lng = nuevaLng;
         pedido.latitud = nuevaLat;
@@ -594,7 +628,6 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
         }
         pedido.updated_at = new Date().toISOString();
 
-        // 2. Sincronizar buffers RAM globales
         const actualizarBufferRAM = (arr) => {
             if (!Array.isArray(arr)) return;
             const idx = arr.findIndex(
@@ -627,7 +660,6 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                 console.error("❌ [MAPA_MARCADORES]: Error al guardar reubicación local:", err);
             }
 
-            // 3. Sincronización Remota con Backend PHP o Cola Offline
             const baseUrl = obtenerEndpointAPI();
             const urlApi = `${baseUrl}?action=actualizar_parada`;
 
@@ -669,7 +701,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 }
 
 /**
- * Elimina la parada local y remotamente (Acción Sur - Eliminar).
+ * Elimina la parada local y remotamente.
  */
 async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
     if (!confirm(`¿Eliminar la parada ${idParada} del mapa y registro local?`)) return;
@@ -721,9 +753,6 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
 
 /**
  * Muta el icono de un marcador según su nuevo estado en tiempo real.
- * @param {string} idParada
- * @param {string} nuevoEstado
- * @param {string} [causal='']
  */
 export function mutarMarcadorPorId(idParada, nuevoEstado, causal = "") {
     if (!window.marcadoresRutaMensajero) return;
@@ -772,4 +801,6 @@ if (typeof window !== "undefined") {
     window.mutarMarcadorPorId = mutarMarcadorPorId;
     window.abrirModalGestionParada = abrirModalGestionParada;
     window.cerrarOverlayActivo = cerrarOverlayActivo;
+    window.iniciarViajeNavegacionGPS = iniciarViajeNavegacionGPS;
+    window.manejarAccionOrbitalViajar = manejarAccionOrbitalViajar;
 }

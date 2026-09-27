@@ -1,7 +1,7 @@
 /**
- * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO Y MINIRUTAS POR CLÚSTER
+ * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO, MINIRUTAS Y NAVEGACIÓN GPS INTRAMURAL
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-rutas.js
- * Arquitectura: Google Maps JavaScript API / Local-First / Cyberpunk Dark Mode
+ * Arquitectura: Google Maps JavaScript API / Directions API / Local-First / Cyberpunk Dark Mode
  */
 
 import { PALETA_ZONAS } from "./zonificacion/mensajero-zonificacion.js";
@@ -19,6 +19,10 @@ const PALETA_COLORES_CLUSTERS = [
 
 let coleccionPolilineasActivas = [];
 let directionsRendererActivo = null;
+
+// Instancias globales de navegación interna
+window.directionsRendererPWA = window.directionsRendererPWA || null;
+window.directionsServicePWA = window.directionsServicePWA || null;
 
 // Exposición global para interoperabilidad PWA
 if (typeof window !== "undefined" && !window.__POLILINEAS_CLUSTERS__) {
@@ -217,6 +221,115 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
 }
 
 /**
+ * Traza la ruta de viaje navegable en tiempo real desde la posición GPS actual 
+ * del mensajero hasta la parada destino directamente dentro de la PWA.
+ * @param {Object} paradaDestino - Parada seleccionada como objetivo de viaje
+ */
+export async function trazarRutaNavegacionInternaGPS(paradaDestino) {
+    const mapa = window.mapaMensajero || window.mapaInstancia;
+    if (!mapa || typeof google === "undefined" || !google.maps) {
+        console.error("❌ [NAVEGACION_PWA]: Instancia del mapa no disponible.");
+        return;
+    }
+
+    // 1. Obtener coordenadas de origen (GPS Mensajero)
+    let origenCoords = window.posicionActualMensajero;
+    if (!origenCoords || !origenCoords.lat || !origenCoords.lng) {
+        console.warn("⚠️ [NAVEGACION_PWA]: Posición GPS actual no detectada. Intentando capturar ubicación...");
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    window.posicionActualMensajero = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    trazarRutaNavegacionInternaGPS(paradaDestino);
+                },
+                (err) => console.error("❌ [NAVEGACION_PWA]: Error obteniendo GPS actual:", err),
+                { enableHighAccuracy: true, timeout: 8000 }
+            );
+            return;
+        }
+    }
+
+    // 2. Obtener coordenadas de destino
+    const destCoords = typeof window.obtenerCoordenadasValidasParada === "function"
+        ? window.obtenerCoordenadasValidasParada(paradaDestino)
+        : null;
+
+    if (!destCoords) {
+        console.error("❌ [NAVEGACION_PWA]: La parada seleccionada no tiene coordenadas válidas.");
+        return;
+    }
+
+    console.log(`🧭 [NAVEGACION_PWA]: Trazando viaje interno -> Origen: [${origenCoords.lat}, ${origenCoords.lng}] -> Destino: [${destCoords.lat}, ${destCoords.lng}]`);
+
+    // 3. Inicializar servicios de Google Maps Directions
+    if (!window.directionsServicePWA) {
+        window.directionsServicePWA = new google.maps.DirectionsService();
+    }
+
+    if (!window.directionsRendererPWA) {
+        window.directionsRendererPWA = new google.maps.DirectionsRenderer({
+            map: mapa,
+            suppressMarkers: true, // Preserva los pines tácticos neón existentes
+            polylineOptions: {
+                strokeColor: "#FF007F", // Rosa Magenta Cyberpunk
+                strokeOpacity: 0.95,
+                strokeWeight: 7,
+                zIndex: 99999
+            }
+        });
+    } else {
+        window.directionsRendererPWA.setMap(mapa);
+    }
+
+    const request = {
+        origin: new google.maps.LatLng(origenCoords.lat, origenCoords.lng),
+        destination: new google.maps.LatLng(destCoords.lat, destCoords.lng),
+        travelMode: google.maps.TravelMode.DRIVING
+    };
+
+    window.directionsServicePWA.route(request, (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK) {
+            window.directionsRendererPWA.setDirections(result);
+            console.log("✅ [NAVEGACION_PWA]: Ruta de viaje trazada exitosamente en el lienzo PWA.");
+            
+            // Renderizar botón de cancelación/limpieza
+            mostrarBotonLimpiarRutaNavegacion();
+        } else {
+            console.error("❌ [NAVEGACION_PWA]: Fallo al calcular la ruta de viaje por calles:", status);
+        }
+    });
+}
+
+/**
+ * Limpia la línea de navegación activa del mapa PWA.
+ */
+export function limpiarRutaNavegacionGPS() {
+    if (window.directionsRendererPWA) {
+        window.directionsRendererPWA.setMap(null);
+        console.log("🧹 [NAVEGACION_PWA]: Ruta de viaje removida del lienzo del mapa.");
+    }
+    const btnLimpiar = document.getElementById("btn-limpiar-navegacion-pwa");
+    if (btnLimpiar) btnLimpiar.remove();
+}
+
+/**
+ * Muestra un botón flotante neón para cancelar el modo viaje en la PWA.
+ */
+function mostrarBotonLimpiarRutaNavegacion() {
+    let btnExistente = document.getElementById("btn-limpiar-navegacion-pwa");
+    if (btnExistente) return;
+
+    const btnHTML = `
+        <button id="btn-limpiar-navegacion-pwa" 
+                onclick="window.limpiarRutaNavegacionGPS()" 
+                style="position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%); z-index: 99999; background: #0d1117; border: 2px solid #ff3366; color: #ff3366; padding: 10px 18px; border-radius: 20px; font-family: 'Fira Code', monospace; font-size: 0.82rem; font-weight: bold; box-shadow: 0 0 15px rgba(255, 51, 102, 0.4); cursor: pointer; display: flex; align-items: center; gap: 8px;">
+            <span>❌ CANCELAR VIAJE GPS</span>
+        </button>
+    `;
+    document.body.insertAdjacentHTML("beforeend", btnHTML);
+}
+
+/**
  * Alias de compatibilidad global para el trazado exclusivo por zona.
  */
 export async function trazarRutaPorZonaAislada(paradasZona, zonaFoco = null) {
@@ -227,6 +340,8 @@ export async function trazarRutaPorZonaAislada(paradasZona, zonaFoco = null) {
 if (typeof window !== "undefined") {
     window.trazarPolilineaRuta = trazarPolilineaRuta;
     window.trazarRutaPorZonaAislada = trazarRutaPorZonaAislada;
+    window.trazarRutaNavegacionInternaGPS = trazarRutaNavegacionInternaGPS;
+    window.limpiarRutaNavegacionGPS = limpiarRutaNavegacionGPS;
     window.limpiarRutaTrazada = limpiarRutaTrazada;
     window.limpiarPolilineasMapa = limpiarRutaTrazada;
 }

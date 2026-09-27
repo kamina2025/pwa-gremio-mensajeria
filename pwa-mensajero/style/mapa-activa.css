@@ -793,3 +793,22 @@
         font-size: 0.78rem;
     }
 }
+/* Botón Táctico de Navegación "VIAJAR" en Menú Orbital */
+.btn-orbital-viajar {
+    background: rgba(13, 17, 23, 0.95);
+    border: 1.5px solid var(--neon-cyan, #00e5ff);
+    color: var(--neon-cyan, #00e5ff);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-orbital-viajar:active {
+    transform: scale(1.1);
+    background: var(--neon-cyan, #00e5ff);
+    color: #0d1117;
+    box-shadow: 0 0 20px var(--neon-cyan, #00e5ff);
+}
+
+.btn-orbital-viajar svg {
+    filter: drop-shadow(0 0 4px var(--neon-cyan, #00e5ff));
+}

@@ -19,14 +19,14 @@
         "ssc": "273061",
         "estado": "no-entregado",
         "destinatario": "STELLA TERRANOVA",
-        "direccion": "Cra. 25a # 71-69, Lleras Restrepo, Cali, Valle del Cauca, Colombia",
+        "direccion": "Cl. 74 #26-29, Cali, Valle del Cauca, Colombia",
         "telefono": "3152096676",
-        "lat": 3.4393716139271486,
-        "lng": -76.49144679364015,
-        "updated_at": "2026-09-25 06:08:46",
+        "lat": 3.4396714802075494,
+        "lng": -76.47985965069581,
+        "updated_at": "2026-09-27 05:53:49",
         "planilla_id": null,
-        "latitud": 3.4393716139271486,
-        "longitud": -76.49144679364015
+        "latitud": 3.4396714802075494,
+        "longitud": -76.47985965069581
     },
     {
         "action": "actualizar_parada",
@@ -39,7 +39,10 @@
         "latitud": 3.432279922415112,
         "longitud": -76.49534221691893,
         "direccion": "Cra. 26m #7109, El Pondaje, Cali, Valle del Cauca, Colombia",
-        "updated_at": "2026-09-25 06:09:10"
+        "updated_at": "2026-09-27 05:52:44",
+        "estado": "entregado",
+        "destinatario": "PAOLA VERONICA LUNA MONTANO",
+        "telefono": "3148736120"
     },
     {
         "action": "actualizar_parada",
@@ -52,6 +55,48 @@
         "latitud": 3.4360209998189566,
         "longitud": -76.49791563491821,
         "direccion": "Cra. 26i # 50-59, Nueva Floresta, Cali, Valle del Cauca, Colombia",
-        "updated_at": "2026-09-25 06:31:54"
+        "updated_at": "2026-09-27 05:52:52",
+        "estado": "entregado",
+        "destinatario": "BELARMINA GONZALEZ CASTRO",
+        "telefono": "3178803536"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-3810",
+        "ssc": "220997",
+        "planilla_id": null,
+        "estado": "no-entregado",
+        "destinatario": "MONFREDY VELEZ TRUJILLO",
+        "direccion": "cra 24b 42-05 asturia",
+        "telefono": "3137377747",
+        "lat": 3.4381017,
+        "lng": -76.5026415,
+        "updated_at": "2026-09-27 05:52:58"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-7354",
+        "ssc": "256296",
+        "planilla_id": null,
+        "estado": "no-entregado",
+        "destinatario": "JIMMY JOSE GALVIS RIVERA",
+        "direccion": "CRR 28 A 54 37 b\/ sindical",
+        "telefono": "3116622536",
+        "lat": 3.4310755,
+        "lng": -76.5010627,
+        "updated_at": "2026-09-27 05:53:03"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-1921",
+        "ssc": "260966",
+        "planilla_id": null,
+        "estado": "entregado",
+        "destinatario": "IRIS YANETH ZUNIGA TABARES",
+        "direccion": "Cra. 28j #2837, Villanueva, Cali,",
+        "telefono": "3218650622",
+        "lat": 3.4295692,
+        "lng": -76.5088352,
+        "updated_at": "2026-09-27 05:53:11"
     }
 ]

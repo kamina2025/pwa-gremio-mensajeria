@@ -1,13 +1,13 @@
 /**
- * PROTOCOLO MACONDO - OPTIMIZADOR DE RUTAS, PROXIMIDAD E INVERSIÓN
+ * PROTOCOLO MACONDO - OPTIMIZADOR DE RUTAS POR PROXIMIDAD Y REORDENAMIENTO
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-optimizacion.js
- * Arquitectura: Local-First / Clustering (Min 2 / Max 4) / SCC & Subgrupos por Dirección / Inversión de Sentido
+ * Arquitectura: Local-First / Nearest Neighbor con Punto Inicial y Final Fijados / Sincronización en RAM e IndexedDB
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
 import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
-import { calcularDistanciaHaversine, calcularCentroide } from "../mapa/zonificacion/geo-utils.js";
+import { calcularDistanciaHaversine } from "../mapa/zonificacion/geo-utils.js";
 
 /**
  * Extrae o construye un identificador único para una parada dada.
@@ -17,20 +17,6 @@ import { calcularDistanciaHaversine, calcularCentroide } from "../mapa/zonificac
 function obtenerIdUnicoParada(p) {
   if (!p) return "";
   return String(p.id || p.scc || p.ssc || p.idParada || p.id_parada || "").trim();
-}
-
-/**
- * Normaliza cadenas de dirección física para asegurar comparaciones exactas.
- * @param {string} dir 
- * @returns {string}
- */
-function normalizarDireccion(dir) {
-  if (!dir) return "";
-  return String(dir)
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, " ");
 }
 
 /**
@@ -52,202 +38,81 @@ function obtenerCoordenadasValidas(p) {
 }
 
 /**
- * Recalcula atómicamente secuencias numéricas y clústeres en bloques de 4 elementos.
- * @param {Array<Object>} paradasZonaOrdenadas 
- * @returns {Array<Object>}
+ * Reordena las paradas mediante Vecino Más Cercano (Nearest Neighbor),
+ * respetando estrictamente la parada de Inicio y Fin fijadas si existen.
+ * 
+ * @param {Array<Object>} paradas - Lista de paradas de la zona
+ * @param {Object|null} inicioFix - Parada fijada como origen
+ * @param {Object|null} finFix - Parada fijada como destino
+ * @returns {Array<Object>} Paradas reordenadas
  */
-function recalcularSecuenciasYClusteres(paradasZonaOrdenadas) {
-  const TAMANO_CLUSTER = 4;
-  return paradasZonaOrdenadas.map((p, idx) => {
-    const nuevoNumero = idx + 1;
-    const numGrupo = Math.ceil(nuevoNumero / TAMANO_CLUSTER);
-    
-    p.secuenciaZona = nuevoNumero;
-    p.orden = nuevoNumero;
-    p.secuencia = nuevoNumero;
-    p.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
-    p.updated_at = new Date().toISOString();
-    return p;
-  });
-}
+function reordenarPorProximidadNearestNeighbor(paradas, inicioFix = null, finFix = null) {
+  if (!paradas || paradas.length <= 1) return paradas;
 
-/**
- * PASO 1: Tratamiento de SCCs e Identificación de Subgrupos por Dirección Física.
- * @param {Array<Object>} paradasZona - Arreglo de paradas de la zona
- * @returns {Array<Object>} Lista de Nodos Subgrupo estructurados
- */
-function procesarSubgruposYDirecciones(paradasZona) {
-  console.log("🔍 [OPTIMIZADOR]: Paso 1 - Fusión SCC y Subagrupamiento por Dirección...");
+  let pend = [...paradas];
+  let resultado = [];
 
-  // 1A. Regla SCC Identificador (Fusionar registros con el mismo SCC)
-  const mapaSCC = new Map();
-  const paradasIndependientes = [];
-
-  paradasZona.forEach(p => {
-    const sccVal = String(p.scc || p.ssc || p.id_scc || "").trim();
-    if (sccVal && sccVal !== "0" && sccVal !== "null" && sccVal !== "undefined") {
-      if (!mapaSCC.has(sccVal)) {
-        mapaSCC.set(sccVal, { ...p });
-      } else {
-        const existente = mapaSCC.get(sccVal);
-        existente.observaciones = `${existente.observaciones || ''} | ${p.observaciones || ''}`.trim();
-        existente.paquetes_consolidados = (existente.paquetes_consolidados || 1) + 1;
-      }
-    } else {
-      paradasIndependientes.push({ ...p });
+  // 1. Extraer punto inicial si fue fijado por el usuario
+  let inicio = null;
+  if (inicioFix) {
+    const idIni = obtenerIdUnicoParada(inicioFix);
+    const idx = pend.findIndex(p => obtenerIdUnicoParada(p) === idIni);
+    if (idx !== -1) {
+      inicio = pend.splice(idx, 1)[0];
     }
-  });
-
-  const listaUnificadaSCC = [...mapaSCC.values(), ...paradasIndependientes];
-
-  // 1B. Subagrupamiento por Dirección Identica (Distinto SCC)
-  const mapaDirecciones = new Map();
-
-  listaUnificadaSCC.forEach(p => {
-    const dirClave = normalizarDireccion(p.direccion || p.direccion_entrega || p.dir);
-    if (!dirClave) {
-      const keyUnica = `sin_dir_${obtenerIdUnicoParada(p) || Math.random()}`;
-      mapaDirecciones.set(keyUnica, [p]);
-    } else {
-      if (!mapaDirecciones.has(dirClave)) {
-        mapaDirecciones.set(dirClave, []);
-      }
-      mapaDirecciones.get(dirClave).push(p);
-    }
-  });
-
-  // 1C. Generar Nodos Subgrupo con Centroide Geográfico
-  const subgruposResultantes = [];
-  let subgrupoCounter = 1;
-
-  mapaDirecciones.forEach((items, dirKey) => {
-    const centroide = calcularCentroide(items);
-    const subgrupoId = `SUB-${subgrupoCounter.toString().padStart(3, "0")}`;
-    subgrupoCounter++;
-
-    subgruposResultantes.push({
-      subgrupoId,
-      direccionNormalizada: dirKey,
-      esSubgrupoMultiples: items.length > 1,
-      centroide,
-      paradas: items.map((p, idx) => ({
-        ...p,
-        subgrupoId,
-        ordenEnSubgrupo: idx + 1
-      }))
-    });
-  });
-
-  console.log(`✅ [OPTIMIZADOR]: ${subgruposResultantes.length} subgrupos creados a partir de ${paradasZona.length} registros.`);
-  return subgruposResultantes;
-}
-
-/**
- * PASO 2: Clustering por Proximidad (Mínimo 2 / Máximo 4 paradas/subgrupos por clúster).
- * @param {Array<Object>} subgrupos - Lista de subgrupos estructurados
- * @returns {Array<Array<Object>>} Colección de clústeres agrupados
- */
-function crearClustersProximidad(subgrupos) {
-  console.log("🧩 [OPTIMIZADOR]: Paso 2 - Clustering por proximidad (Min 2 / Max 4)...");
-  let pendientes = [...subgrupos];
-  const clusters = [];
-
-  while (pendientes.length > 0) {
-    if (pendientes.length === 1) {
-      if (clusters.length > 0 && clusters[clusters.length - 1].length < 4) {
-        clusters[clusters.length - 1].push(pendientes.pop());
-      } else if (clusters.length > 0) {
-        const ultimoCluster = clusters.pop();
-        pendientes.push(...ultimoCluster);
-        const c1 = pendientes.splice(0, 3);
-        clusters.push(c1);
-        clusters.push(pendientes);
-        pendientes = [];
-      } else {
-        clusters.push([pendientes.pop()]);
-      }
-      break;
-    }
-
-    const pivote = pendientes.shift();
-    const coordsPivote = pivote.centroide;
-    const clusterActual = [pivote];
-
-    pendientes.sort((a, b) => {
-      const dA = calcularDistanciaHaversine(coordsPivote.lat, coordsPivote.lng, a.centroide.lat, a.centroide.lng);
-      const dB = calcularDistanciaHaversine(coordsPivote.lat, coordsPivote.lng, b.centroide.lat, b.centroide.lng);
-      return dA - dB;
-    });
-
-    const tamanoDeseado = Math.min(3, pendientes.length);
-    const cercanos = pendientes.splice(0, tamanoDeseado);
-    clusterActual.push(...cercanos);
-
-    clusters.push(clusterActual);
   }
 
-  console.log(`✅ [OPTIMIZADOR]: ${clusters.length} clusters generados exitosamente.`);
-  return clusters;
-}
-
-/**
- * PASO 3 & 4: Enrutamiento Nearest Neighbor e Indexación de Secuencias Finales.
- * @param {Array<Array<Object>>} clusters - Clústeres formados
- * @returns {Array<Object>} Lista plana ordenada de paradas con secuencias actualizadas
- */
-function enrotrarSecuenciaFinal(clusters) {
-  console.log("🚀 [OPTIMIZADOR]: Paso 3 - Enrutando secuencia óptima (Nearest Neighbor)...");
-  
-  const clustersPendientes = [...clusters];
-  let clusterActual = clustersPendientes.shift();
-  const clustersOrdenados = [clusterActual];
-
-  while (clustersPendientes.length > 0) {
-    const centroideActual = calcularCentroide(clusterActual.map(sub => sub.centroide));
-    let idxCercano = 0;
-    let distMinima = Infinity;
-
-    clustersPendientes.forEach((cl, idx) => {
-      const centroideTarget = calcularCentroide(cl.map(sub => sub.centroide));
-      const d = calcularDistanciaHaversine(centroideActual.lat, centroideActual.lng, centroideTarget.lat, centroideTarget.lng);
-      if (d < distMinima) {
-        distMinima = d;
-        idxCercano = idx;
-      }
-    });
-
-    clusterActual = clustersPendientes.splice(idxCercano, 1)[0];
-    clustersOrdenados.push(clusterActual);
+  // 2. Extraer punto final si fue fijado por el usuario
+  let fin = null;
+  if (finFix) {
+    const idFin = obtenerIdUnicoParada(finFix);
+    const idx = pend.findIndex(p => obtenerIdUnicoParada(p) === idFin);
+    if (idx !== -1) {
+      fin = pend.splice(idx, 1)[0];
+    }
   }
 
-  const listaFinalEnrutada = [];
-  let secuenciaGlobal = 1;
+  // Si no hay inicio fijado, tomar el primer ítem disponible como origen
+  if (!inicio && pend.length > 0) {
+    inicio = pend.shift();
+  }
 
-  clustersOrdenados.forEach((cluster, idxCluster) => {
-    const grupoId = `GRUPO-${(idxCluster + 1).toString().padStart(2, "0")}`;
+  if (inicio) resultado.push(inicio);
 
-    cluster.forEach(subgrupo => {
-      subgrupo.paradas.forEach(parada => {
-        const paradaEnrutada = {
-          ...parada,
-          grupoId,
-          subgrupoId: subgrupo.subgrupoId,
-          secuenciaZona: secuenciaGlobal,
-          secuencia: secuenciaGlobal,
-          orden: secuenciaGlobal,
-          updated_at: new Date().toISOString()
-        };
-        listaFinalEnrutada.push(paradaEnrutada);
-        secuenciaGlobal++;
-      });
-    });
-  });
+  // 3. Iterar por proximidad (Nearest Neighbor) para los puntos intermedios
+  let actual = inicio;
+  while (pend.length > 0) {
+    const coordsActual = obtenerCoordenadasValidas(actual);
+    let mejorIdx = 0;
 
-  return listaFinalEnrutada;
+    if (coordsActual) {
+      let menorDistancia = Infinity;
+      for (let i = 0; i < pend.length; i++) {
+        const coordsCand = obtenerCoordenadasValidas(pend[i]);
+        if (coordsCand) {
+          const dist = calcularDistanciaHaversine(coordsActual.lat, coordsActual.lng, coordsCand.lat, coordsCand.lng);
+          if (dist < menorDistancia) {
+            menorDistancia = dist;
+            mejorIdx = i;
+          }
+        }
+      }
+    }
+
+    actual = pend.splice(mejorIdx, 1)[0];
+    resultado.push(actual);
+  }
+
+  // 4. Agregar el punto final fijado al cierre del recorrido
+  if (fin) {
+    resultado.push(fin);
+  }
+
+  return resultado;
 }
 
 /**
- * Invierte el orden secuencial de enrutamiento para una zona (Inversión de Sentido).
+ * Invierte el orden secuencial de enrutamiento para una zona.
  * @param {string} zonaKeyInput - Clave o nombre de la zona a invertir
  * @returns {Promise<Array<Object>>} Lista global de paradas actualizada
  */
@@ -277,8 +142,17 @@ export async function invertirSecuenciaRutaZona(zonaKeyInput) {
   paradasZona.sort((a, b) => (parseInt(a.secuenciaZona || a.secuencia || 0, 10)) - (parseInt(b.secuenciaZona || b.secuencia || 0, 10)));
   paradasZona.reverse();
 
-  // Recalcular secuencias y clústeres atómicamente
-  paradasZona = recalcularSecuenciasYClusteres(paradasZona);
+  // Reasignar secuencias numéricas y clústeres
+  const TAMANO_CLUSTER = 4;
+  paradasZona.forEach((p, idx) => {
+    const nuevoNumero = idx + 1;
+    const numGrupo = Math.ceil(nuevoNumero / TAMANO_CLUSTER);
+    p.secuenciaZona = nuevoNumero;
+    p.orden = nuevoNumero;
+    p.secuencia = nuevoNumero;
+    p.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
+    p.updated_at = new Date().toISOString();
+  });
 
   const mapaNuevosOrdenes = new Map();
   paradasZona.forEach((p) => {
@@ -290,12 +164,6 @@ export async function invertirSecuenciaRutaZona(zonaKeyInput) {
     return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
   });
 
-  listaGlobalActualizada.sort((a, b) => {
-    const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
-    const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
-    return seqA - seqB;
-  });
-
   // Persistencia e integración Local-First
   await guardarRutaZonificada(listaGlobalActualizada);
   window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
@@ -304,32 +172,22 @@ export async function invertirSecuenciaRutaZona(zonaKeyInput) {
   window.pedidosGlobales = [...listaGlobalActualizada];
 
   console.log(`✅ [INVERSOR_RUTA]: Secuencia invertida para ${paradasZona.length} paradas.`);
-
-  // Actualizar polilinea y UI
-  if (typeof window.trazarPolilineaRuta === "function") {
-    window.trazarPolilineaRuta(listaGlobalActualizada, targetCanonico);
-  } else if (typeof window.actualizarPuntosEnMapa === "function") {
-    window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
-  }
-
-  if (typeof window.renderizarParadasZonificadasUI === "function") {
-    await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
-  }
-
   console.groupEnd();
   return listaGlobalActualizada;
 }
 
 /**
- * Función Principal de Optimización por Zona.
+ * Función Principal de Optimización por Zona con Soporte para Inicio y Fin Fijados.
+ * 
  * @param {string} zonaKeyInput - Nombre o clave de la zona
+ * @param {Object|null} [paradaInicioFix=null] - Parada fijada como origen
+ * @param {Object|null} [paradaFinFix=null] - Parada fijada como destino
  * @returns {Promise<Array<Object>>} Lista de paradas enrutadas
  */
-export async function optimizarRutaPorProximidadZona(zonaKeyInput) {
+export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioFix = null, paradaFinFix = null) {
   if (!zonaKeyInput) return [];
 
   const targetCanonico = estandarizarZonaCanonica(zonaKeyInput);
-
   console.group(`⚡ [OPTIMIZADOR_PROXIMIDAD]: Ejecutando para Zona '${targetCanonico}'`);
 
   let todasLasParadas = await obtenerParadasGuardadas();
@@ -339,47 +197,40 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput) {
 
   let paradasZona = todasLasParadas.filter((p) => p && obtenerZonaParadaCanonica(p) === targetCanonico);
 
-  if (paradasZona.length === 0) {
-    console.warn("ℹ️ [OPTIMIZADOR_PROXIMIDAD]: Insuficientes paradas en la zona.");
+  if (paradasZona.length <= 1) {
+    console.warn("ℹ️ [OPTIMIZADOR_PROXIMIDAD]: Insuficientes paradas en la zona para optimizar.");
     console.groupEnd();
     return paradasZona;
   }
 
-  const subgrupos = procesarSubgruposYDirecciones(paradasZona);
-  const clusters = crearClustersProximidad(subgrupos);
-  const paradasZonaEnrutadas = enrotrarSecuenciaFinal(clusters);
+  // 1. Ejecutar algoritmo Nearest Neighbor respetando Inicio/Fin fijados
+  const paradasZonaEnrutadas = reordenarPorProximidadNearestNeighbor(paradasZona, paradaInicioFix, paradaFinFix);
 
-  const mapaNuevosOrdenes = new Map();
-  paradasZonaEnrutadas.forEach(p => {
-    mapaNuevosOrdenes.set(obtenerIdUnicoParada(p), p);
+  // 2. Reasignar números de secuencia numéricos estrictos (1, 2, 3...) y grupos por bloque de 4
+  const TAMANO_CLUSTER = 4;
+  paradasZonaEnrutadas.forEach((parada, idx) => {
+    const nuevaSecuencia = idx + 1;
+    const numGrupo = Math.ceil(nuevaSecuencia / TAMANO_CLUSTER);
+    parada.secuenciaZona = nuevaSecuencia;
+    parada.orden = nuevaSecuencia;
+    parada.secuencia = nuevaSecuencia;
+    parada.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
+    parada.updated_at = new Date().toISOString();
   });
 
+  // 3. Reemplazar y actualizar en la colección global completa
+  const mapaNuevosOrdenes = new Map(paradasZonaEnrutadas.map(p => [obtenerIdUnicoParada(p), p]));
   let listaGlobalActualizada = todasLasParadas.map(p => {
     const idUnico = obtenerIdUnicoParada(p);
     return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
   });
 
-  listaGlobalActualizada.sort((a, b) => {
-    const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
-    const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
-    return seqA - seqB;
-  });
-
+  // 4. Guardar en almacenamiento local y sincronizar memorias RAM
   await guardarRutaZonificada(listaGlobalActualizada);
   window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
   window.paradasMemoriaLocal = [...listaGlobalActualizada];
   window.paradasRutaActiva = [...listaGlobalActualizada];
   window.pedidosGlobales = [...listaGlobalActualizada];
-
-  if (typeof window.trazarPolilineaRuta === "function") {
-    window.trazarPolilineaRuta(paradasZonaEnrutadas, targetCanonico);
-  } else if (typeof window.actualizarPuntosEnMapa === "function") {
-    window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
-  }
-
-  if (typeof window.renderizarParadasZonificadasUI === "function") {
-    await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
-  }
 
   console.log("✅ [OPTIMIZADOR_PROXIMIDAD]: Secuencia ordenada, agrupada y persistida exitosamente.");
   console.groupEnd();

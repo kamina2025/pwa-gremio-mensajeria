@@ -232,5 +232,57 @@
         "lat": 3.438508,
         "lng": -76.496583,
         "updated_at": "2026-09-27 06:52:46"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-9924",
+        "ssc": "228702",
+        "planilla_id": null,
+        "estado": "entregado",
+        "destinatario": "PAOLA ANDREA MONDRAGON CERQUERA",
+        "direccion": "CR 24 B 33 B -106 P-1SANTA MONICA",
+        "telefono": "3155316735",
+        "lat": 3.435892,
+        "lng": -76.51018499999999,
+        "updated_at": "2026-09-28 08:41:02"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-4635",
+        "ssc": "234698",
+        "planilla_id": null,
+        "estado": "entregado",
+        "destinatario": "MIGUEL IGNACIO TRUJILLO NUNEZ",
+        "direccion": "Calle 33C NO 24D 08 PISO 3",
+        "telefono": "3175659070",
+        "lat": 3.4344948,
+        "lng": -76.5096038,
+        "updated_at": "2026-09-28 08:41:24"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-6708",
+        "ssc": "220997",
+        "planilla_id": null,
+        "estado": "entregado",
+        "destinatario": "MONFREDY VELEZ TRUJILLO",
+        "direccion": "cra 24b 42-05 asturia",
+        "telefono": "3137377747",
+        "lat": 3.4381017,
+        "lng": -76.5026415,
+        "updated_at": "2026-09-28 08:41:50"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-2379",
+        "ssc": "235720",
+        "planilla_id": null,
+        "estado": "en-camino",
+        "destinatario": "ELMER SUAREZ PEREA",
+        "direccion": "Calle 49 n 24c 32 fenalco kennedy",
+        "telefono": "3117233010",
+        "lat": 3.437841,
+        "lng": -76.499838,
+        "updated_at": "2026-09-28 08:42:10"
     }
 ]

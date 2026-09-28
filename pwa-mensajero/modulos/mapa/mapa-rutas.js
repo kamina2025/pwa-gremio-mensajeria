@@ -1,13 +1,13 @@
 /**
- * PROTOCOLO MACONDO - SUBSISTEMA MAPA: TRAZADO ANIMADO SIN SOLAPAMIENTO DE TRAMOS
+ * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO, MINIRUTAS Y NAVEGACIÓN GPS INTRAMURAL
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-rutas.js
- * Arquitectura: Google Maps JavaScript API / Directions API / rAF Animation / Cyberpunk Dark Mode
+ * Arquitectura: Google Maps JavaScript API / Directions API / Local-First / Cyberpunk Dark Mode
  */
 
 import { PALETA_ZONAS } from "./zonificacion/mensajero-zonificacion.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificacion/estandar-zonas.js";
 
-// Paleta Cyberpunk Neón para diferenciar visualmente cada miniruta / clúster
+// Paleta Cyberpunk Neón para diferenciar visualmente cada clúster / grupo
 const PALETA_COLORES_CLUSTERS = [
     "#00E5FF", // Cyan Neón (GRUPO-01)
     "#00FF66", // Verde Neón (GRUPO-02)
@@ -17,9 +17,13 @@ const PALETA_COLORES_CLUSTERS = [
     "#FF6600"  // Naranja Neón (GRUPO-06)
 ];
 
-// Cache local de polílineas y control de animación rAF
+const COLOR_CONECTOR_INTERGRUPAL = "#d2a8ff"; // Morado para enlaces entre clústeres
+
+// Cache local de polílineas y estados
 let coleccionPolilineasActivas = [];
 let polylineVialNavegacion = null;
+let animacionPasoId = null;
+let offsetBarberPoleActual = 0;
 
 let polilineasCache = {
     tramoActivo: null,
@@ -27,11 +31,15 @@ let polilineasCache = {
     tramosIntergrupales: []
 };
 
-let animacionEspiralId = null;
-let offsetEspiralActual = 0;
+// --- WATCHDOG: Observador de Estado para Restauración Automática ---
+let ultimaMapaInstancia = null;
+let ultimaListaGruposCache = null;
+let ultimoHashPendientes = "";
+let navegadorActivoPrevio = false;
 
 // Instancias y estados globales de navegación interna
 if (typeof window !== "undefined") {
+    window.directionsRendererPWA = window.directionsRendererPWA || null;
     window.directionsServicePWA = window.directionsServicePWA || null;
     window.paradaObjetivoNavegacion = window.paradaObjetivoNavegacion || null;
     window.rutaNavegacionPuntosActiva = window.rutaNavegacionPuntosActiva || [];
@@ -42,47 +50,62 @@ if (typeof window !== "undefined") {
 }
 
 /**
- * Detiene el bucle de animación rAF de la espiral neón.
+ * Predicado global para evaluar estáticamente si una parada requiere enrutamiento visible.
  */
-function detenerAnimacionEspiral() {
-    if (animacionEspiralId) {
-        cancelAnimationFrame(animacionEspiralId);
-        animacionEspiralId = null;
+const esParadaPendiente = (p) => {
+    if (!p) return false;
+    if (p.completada === true || p.completada === "true" || p.completada === 1 || p.completada === "1") return false;
+    
+    const estadoActual = String(p.estado || "").toLowerCase().trim();
+    const estadosCerrados = ["completado", "entregado", "fallido", "novedad"];
+    
+    return !estadosCerrados.includes(estadoActual);
+};
+
+/**
+ * Genera una huella digital rápida para detectar mutaciones de estado en las paradas pendientes.
+ */
+function generarHashPendientesActual() {
+    if (!ultimaListaGruposCache) return "";
+    const pendientes = [];
+    ultimaListaGruposCache.forEach(grupo => {
+        pendientes.push(...(grupo || []).filter(esParadaPendiente));
+    });
+    return pendientes.map(p => p.id || p.ssc || p.direccion).join("|");
+}
+
+/**
+ * Detiene la animación activa del patrón de barras del tramo navegable Cyan.
+ */
+function detenerAnimacionBarberPole() {
+    if (animacionPasoId) {
+        cancelAnimationFrame(animacionPasoId);
+        animacionPasoId = null;
     }
 }
 
 /**
- * Inicia la animación fluida estilo "Barber Pole" (Poste de Barbería) a lo largo de la Polyline.
- * @param {google.maps.Polyline} polylineActiva 
+ * Inicia el bucle de animación dinámico continuo para desplazar las barras de barbería en el tramo de navegación activa.
  */
-function iniciarAnimacionEspiralRuta(polylineActiva) {
-    detenerAnimacionEspiral();
+function iniciarAnimacionBarberPole(polyline) {
+    detenerAnimacionBarberPole();
 
     function pasoAnimacion() {
-        if (!polylineActiva || !polylineActiva.getMap()) {
-            detenerAnimacionEspiral();
-            return;
+        if (!polyline || typeof polyline.getMap !== "function" || !polyline.getMap()) return;
+        offsetBarberPoleActual = (offsetBarberPoleActual + 0.3) % 100;
+
+        const icons = polyline.get("icons");
+        if (icons && icons[0]) {
+            icons[0].offset = `${offsetBarberPoleActual}%`;
+            polyline.set("icons", icons);
         }
-
-        // Avance suave a velocidad controlada (0.25% por cuadro)
-        offsetEspiralActual = (offsetEspiralActual + 0.25) % 100;
-
-        const iconConfig = polylineActiva.get("icons");
-        if (iconConfig && iconConfig[0]) {
-            iconConfig[0].offset = offsetEspiralActual + "%";
-            polylineActiva.set("icons", iconConfig);
-        }
-
-        animacionEspiralId = requestAnimationFrame(pasoAnimacion);
+        animacionPasoId = requestAnimationFrame(pasoAnimacion);
     }
-
-    animacionEspiralId = requestAnimationFrame(pasoAnimacion);
+    animacionPasoId = requestAnimationFrame(pasoAnimacion);
 }
 
 /**
  * Sanitiza una dirección en texto añadiéndole el contexto geográfico si no lo posee.
- * @param {string} direccion - Dirección cruda
- * @returns {string} Dirección sanitizada
  */
 function sanitizarDireccionContexto(direccion) {
     if (!direccion || typeof direccion !== "string") return "Cali, Colombia";
@@ -95,47 +118,48 @@ function sanitizarDireccionContexto(direccion) {
 
 /**
  * Extrae y valida un objeto google.maps.LatLng desde cualquier estructura de datos de parada.
- * @param {Object} punto 
- * @returns {google.maps.LatLng|null}
  */
 function extraerLatLngValido(punto) {
     if (!punto) return null;
-    if (typeof google !== "undefined" && google.maps && punto instanceof google.maps.LatLng) {
-        return punto;
-    }
+    if (typeof google !== "undefined" && google.maps && punto instanceof google.maps.LatLng) return punto;
 
     const rawLat = punto.lat ?? punto.latitud ?? (punto.coordenadas && punto.coordenadas.lat) ?? (punto.ubicacion && punto.ubicacion.lat) ?? (punto.centroide && punto.centroide.lat);
     const rawLng = punto.lng ?? punto.longitud ?? (punto.coordenadas && punto.coordenadas.lng) ?? (punto.ubicacion && punto.ubicacion.lng) ?? (punto.centroide && punto.centroide.lng);
 
     if (rawLat === undefined || rawLng === undefined || rawLat === null || rawLng === null) return null;
-
     const lat = parseFloat(String(rawLat).replace(',', '.'));
     const lng = parseFloat(String(rawLng).replace(',', '.'));
 
     if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0 && typeof google !== "undefined" && google.maps) {
         return new google.maps.LatLng(lat, lng);
     }
-
     return null;
 }
 
 /**
- * Limpia el trazado de polílineas, bucles de animación y trazados viales previos.
+ * Limpia únicamente la ruta Cyan de navegación GPS y resetea las variables de objetivo.
  */
-export function limpiarRutaTrazada() {
-    detenerAnimacionEspiral();
-
-    console.log("🧹 [MAPA_RUTAS]: Limpiando minirutas, animaciones espirales y polílineas previas...");
-
-    // 1. Limpiar caché de trazados dinámicos
-    if (polilineasCache.tramoActivo) {
-        if (typeof polilineasCache.tramoActivo.setMap === "function") polilineasCache.tramoActivo.setMap(null);
-        polilineasCache.tramoActivo = null;
-    }
+export function limpiarRutaNavegacionGPS() {
+    detenerAnimacionBarberPole();
+    window.paradaObjetivoNavegacion = null;
+    window.rutaNavegacionPuntosActiva = [];
 
     if (polylineVialNavegacion) {
         if (typeof polylineVialNavegacion.setMap === "function") polylineVialNavegacion.setMap(null);
         polylineVialNavegacion = null;
+    }
+
+    const btnLimpiar = document.getElementById("btn-limpiar-navegacion-pwa");
+    if (btnLimpiar) btnLimpiar.remove();
+}
+
+/**
+ * Limpia EXCLUSIVAMENTE los tramos estáticos del mapa. No afecta ni destruye la navegación GPS Cyan.
+ */
+export function limpiarRutaTrazada() {
+    if (polilineasCache.tramoActivo) {
+        if (typeof polilineasCache.tramoActivo.setMap === "function") polilineasCache.tramoActivo.setMap(null);
+        polilineasCache.tramoActivo = null;
     }
 
     polilineasCache.tramosFaltantes.forEach(p => {
@@ -148,7 +172,6 @@ export function limpiarRutaTrazada() {
     });
     polilineasCache.tramosIntergrupales = [];
 
-    // 2. Limpiar colección local por clúster
     if (Array.isArray(coleccionPolilineasActivas)) {
         coleccionPolilineasActivas.forEach(poly => {
             if (poly && typeof poly.setMap === "function") poly.setMap(null);
@@ -156,393 +179,304 @@ export function limpiarRutaTrazada() {
         coleccionPolilineasActivas = [];
     }
 
-    // 3. Limpiar colección global
     if (typeof window !== "undefined" && Array.isArray(window.__POLILINEAS_CLUSTERS__)) {
         window.__POLILINEAS_CLUSTERS__.forEach(poly => {
             if (poly && typeof poly.setMap === "function") poly.setMap(null);
         });
         window.__POLILINEAS_CLUSTERS__ = [];
     }
-
-    if (typeof window !== "undefined" && window.directionsRendererPWA) {
-        window.directionsRendererPWA.setMap(null);
-    }
 }
 
 /**
- * Renderiza dinámicamente los trazados diferenciados por estado y grupos:
- * - Tramo activo: Cyan (#00e5ff) con franjas en espiral "Barber Pole" animadas.
- * - Tramos faltantes: Amarillo (#ffb300) con franjas estáticas (excluyendo el tramo activo actual).
- * - Tramos inter-grupales: Morado (#d2a8ff) conector entre bloques.
- * 
- * @param {google.maps.Map} mapaInstancia 
- * @param {{lat: number, lng: number}|null} posUbicacionMensajero 
- * @param {Array<Array<Object>>} listaGruposParadas 
- * @param {Object|null} paradaSeleccionada 
+ * Consulta la Directions API de Google Maps para obtener la geometría exacta por las calles.
  */
-export function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMensajero, listaGruposParadas = [], paradaSeleccionada = null) {
+function obtenerPuntosRutaCalle(origen, destino) {
+    return new Promise((resolve) => {
+        if (!origen || !destino) return resolve([]);
+        if (!window.directionsServicePWA && typeof google !== "undefined" && google.maps) {
+            window.directionsServicePWA = new google.maps.DirectionsService();
+        }
+        if (!window.directionsServicePWA) return resolve([origen, destino]);
+
+        const request = {
+            origin: origen,
+            destination: destino,
+            travelMode: google.maps.TravelMode.DRIVING
+        };
+
+        window.directionsServicePWA.route(request, (result, status) => {
+            if ((status === google.maps.DirectionsStatus.OK || status === "OK") && result && result.routes && result.routes[0]) {
+                resolve(result.routes[0].overview_path || [origen, destino]);
+            } else {
+                resolve([origen, destino]);
+            }
+        });
+    });
+}
+
+/**
+ * Renderiza dinámicamente los trazados conectando linealmente los nodos pendientes y el ancla de origen actual.
+ */
+export async function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMensajero, listaGruposParadas = [], paradaSeleccionada = null) {
     if (!mapaInstancia || typeof google === "undefined" || !google.maps) return;
 
     limpiarRutaTrazada();
 
-    console.group("🌀 [MAPA_RUTAS]: Dibujando trazados dinámicos efecto Barber Pole...");
-
-    const esParadaFinalizada = paradaSeleccionada && (paradaSeleccionada.completada || paradaSeleccionada.entregado || paradaSeleccionada.estado === "completado");
-    const tieneNavegacionVialActiva = Array.isArray(window.rutaNavegacionPuntosActiva) && window.rutaNavegacionPuntosActiva.length > 0;
-
-    // 1. DIBUJAR TRAMO ACTIVO DIRECTO SOLO SI NO HAY RUTA VIAL POR CALLES EN CURSO
-    if (posUbicacionMensajero && paradaSeleccionada && !esParadaFinalizada && !tieneNavegacionVialActiva) {
-        const destLatLng = extraerLatLngValido(paradaSeleccionada);
-
-        if (destLatLng) {
-            const rutaActivaCoords = [
-                new google.maps.LatLng(posUbicacionMensajero.lat, posUbicacionMensajero.lng),
-                destLatLng
-            ];
-
-            const simboloBarberPoleAnimado = {
-                path: "M -3,-6 L 3,6",
-                strokeColor: "#00e5ff",
-                strokeOpacity: 1,
-                strokeWeight: 4,
-                scale: 1.5
-            };
-
-            polilineasCache.tramoActivo = new google.maps.Polyline({
-                path: rutaActivaCoords,
-                geodesic: true,
-                strokeColor: "#00e5ff",
-                strokeOpacity: 0.3,
-                strokeWeight: 7,
-                icons: [{
-                    icon: simboloBarberPoleAnimado,
-                    offset: "0%",
-                    repeat: "12px"
-                }],
-                zIndex: 99999,
-                map: mapaInstancia
-            });
-
-            iniciarAnimacionEspiralRuta(polilineasCache.tramoActivo);
-            console.log(`⚡ [TRAMO_ACTIVO_OK]: Azul Cyan (#00e5ff) estilo Barber Pole animado -> Parada: ${paradaSeleccionada.id || paradaSeleccionada.ssc}`);
-        }
-    } else if (tieneNavegacionVialActiva) {
-        console.log(`⚡ [TRAMO_ACTIVO_OK]: Ruta navegable activa por calles reales en Azul Cyan (#00e5ff). Omitiendo traza geodésica secundaria.`);
+    // Proteger Caché para el Watchdog
+    if (listaGruposParadas && listaGruposParadas.length > 0) {
+        ultimaMapaInstancia = mapaInstancia;
+        ultimaListaGruposCache = listaGruposParadas;
+        ultimoHashPendientes = generarHashPendientesActual();
+    } else {
+        return; 
     }
 
-    // 2. DIBUJAR TRAMOS FALTANTES EN AMARILLO (#ffb300) SIN SOLAPAR CON EL TRAMO ACTIVO
-    const simboloBarberPoleEstatico = {
-        path: "M -3,-6 L 3,6",
-        strokeColor: "#ffb300",
-        strokeOpacity: 1,
-        strokeWeight: 3,
-        scale: 1.3
-    };
+    console.group("🌀 [MAPA_RUTAS]: Trazando rutas viales contiguas (Ancla -> Paradas Pendientes)...");
 
-    const targetParadaActivaId = paradaSeleccionada ? (paradaSeleccionada.id || paradaSeleccionada.ssc) : null;
+    const promesasTrazados = [];
+    const nodosPendientesLineales = [];
 
+    // 1. Extraer todas las paradas pendientes en orden
     for (let gIdx = 0; gIdx < listaGruposParadas.length; gIdx++) {
-        const grupoActual = listaGruposParadas[gIdx] || [];
-        const paradasFaltantes = grupoActual.filter(p => p && !p.completada && !p.entregado && p.estado !== "completado");
+        const paradasPendientesEnGrupo = (listaGruposParadas[gIdx] || []).filter(esParadaPendiente);
+        paradasPendientesEnGrupo.forEach(parada => {
+            nodosPendientesLineales.push({ parada: parada, grupoIndex: gIdx });
+        });
+    }
 
-        for (let i = 0; i < paradasFaltantes.length - 1; i++) {
-            const pA = paradasFaltantes[i];
-            const pB = paradasFaltantes[i + 1];
+    // 2. Anclar el inicio de la ruta a la posición actual para no perder el tramo hacia la próxima parada
+    if (nodosPendientesLineales.length > 0) {
+        let anclaOrigen = null;
+        let indexGrupoAncla = nodosPendientesLineales[0].grupoIndex;
 
-            const idA = pA ? (pA.id || pA.ssc) : null;
-            const idB = pB ? (pB.id || pB.ssc) : null;
-
-            // Omitir trazado amarillo si coincide con el origen-destino del tramo activo en navegación GPS
-            if (tieneNavegacionVialActiva && targetParadaActivaId && (idA === targetParadaActivaId || idB === targetParadaActivaId)) {
-                continue;
+        // Prioridad A: Posición GPS Actual
+        if (posUbicacionMensajero && posUbicacionMensajero.lat && posUbicacionMensajero.lng) {
+            anclaOrigen = new google.maps.LatLng(posUbicacionMensajero.lat, posUbicacionMensajero.lng);
+        } else {
+            // Prioridad B: Buscar en el historial la parada más reciente completada para enlazar
+            let ultimaCompletada = null;
+            for (let gIdx = listaGruposParadas.length - 1; gIdx >= 0; gIdx--) {
+                const grupo = listaGruposParadas[gIdx] || [];
+                for (let i = grupo.length - 1; i >= 0; i--) {
+                    if (!esParadaPendiente(grupo[i])) {
+                        ultimaCompletada = grupo[i];
+                        break;
+                    }
+                }
+                if (ultimaCompletada) break;
             }
-
-            const latLngA = extraerLatLngValido(pA);
-            const latLngB = extraerLatLngValido(pB);
-
-            if (latLngA && latLngB) {
-                const polyFaltante = new google.maps.Polyline({
-                    path: [latLngA, latLngB],
-                    geodesic: true,
-                    strokeColor: "#ffb300",
-                    strokeOpacity: 0.25,
-                    strokeWeight: 5,
-                    icons: [{
-                        icon: simboloBarberPoleEstatico,
-                        offset: "0",
-                        repeat: "12px"
-                    }],
-                    map: mapaInstancia
-                });
-                polilineasCache.tramosFaltantes.push(polyFaltante);
+            if (ultimaCompletada) {
+                anclaOrigen = extraerLatLngValido(ultimaCompletada);
             }
         }
 
-        if (gIdx < listaGruposParadas.length - 1) {
-            const grupoSiguiente = listaGruposParadas[gIdx + 1] || [];
-            const ultimaParadaGrupoActual = paradasFaltantes[paradasFaltantes.length - 1] || grupoActual[grupoActual.length - 1];
-            const primeraParadaGrupoSig = grupoSiguiente.find(p => p && !p.completada && !p.entregado && p.estado !== "completado") || grupoSiguiente[0];
-
-            if (ultimaParadaGrupoActual && primeraParadaGrupoSig) {
-                const latLngA = extraerLatLngValido(ultimaParadaGrupoActual);
-                const latLngB = extraerLatLngValido(primeraParadaGrupoSig);
-
-                if (latLngA && latLngB) {
-                    const polyInter = new google.maps.Polyline({
-                        path: [latLngA, latLngB],
-                        geodesic: true,
-                        strokeColor: "#d2a8ff",
-                        strokeOpacity: 0.85,
-                        strokeWeight: 4,
-                        map: mapaInstancia
+        if (anclaOrigen) {
+            const latLngPrimerNodo = extraerLatLngValido(nodosPendientesLineales[0].parada);
+            if (latLngPrimerNodo) {
+                const diffLat = Math.abs(anclaOrigen.lat() - latLngPrimerNodo.lat());
+                const diffLng = Math.abs(anclaOrigen.lng() - latLngPrimerNodo.lng());
+                
+                // Solo inyectar el ancla si el mensajero no está exactamente pisando la misma coordenada
+                if (diffLat > 0.0001 || diffLng > 0.0001) {
+                    nodosPendientesLineales.unshift({
+                        parada: anclaOrigen,
+                        grupoIndex: indexGrupoAncla // Mantiene el color del primer clúster a visitar
                     });
-                    polilineasCache.tramosIntergrupales.push(polyInter);
                 }
             }
         }
     }
 
+    // 3. Dibujar vectores entre nodos sucesivos
+    for (let i = 0; i < nodosPendientesLineales.length - 1; i++) {
+        const nodoOrigen = nodosPendientesLineales[i];
+        const nodoDestino = nodosPendientesLineales[i + 1];
+
+        const latLngA = extraerLatLngValido(nodoOrigen.parada);
+        const latLngB = extraerLatLngValido(nodoDestino.parada);
+
+        if (latLngA && latLngB) {
+            const esMismoGrupo = nodoOrigen.grupoIndex === nodoDestino.grupoIndex;
+            const colorTramo = esMismoGrupo ? "#ffb300" : COLOR_CONECTOR_INTERGRUPAL;
+            const opacidadTramo = esMismoGrupo ? 0.35 : 0.45;
+
+            const simboloBarberPoleEstatico = {
+                path: "M -3,-6 L 3,6",
+                strokeColor: colorTramo,
+                strokeOpacity: 0.8,
+                strokeWeight: 3,
+                scale: 1.4
+            };
+
+            promesasTrazados.push(
+                obtenerPuntosRutaCalle(latLngA, latLngB).then(pathCalle => {
+                    const polyTramo = new google.maps.Polyline({
+                        path: pathCalle,
+                        geodesic: true,
+                        strokeColor: colorTramo,
+                        strokeOpacity: opacidadTramo,
+                        strokeWeight: 5,
+                        icons: [{
+                            icon: simboloBarberPoleEstatico,
+                            offset: "0",
+                            repeat: "12px"
+                        }],
+                        zIndex: esMismoGrupo ? 900 : 950,
+                        map: mapaInstancia
+                    });
+                    
+                    if (esMismoGrupo) {
+                        polilineasCache.tramosFaltantes.push(polyTramo);
+                    } else {
+                        polilineasCache.tramosIntergrupales.push(polyTramo);
+                    }
+                })
+            );
+        }
+    }
+
+    await Promise.all(promesasTrazados);
+    console.log(`✅ [MAPA_RUTAS]: ${promesasTrazados.length} segmentos atenuados desplegados exitosamente.`);
     console.groupEnd();
 }
 
 /**
- * Traza las minirutas divididas en segmentos independientes según su clúster (grupoId).
- * 
- * @param {Array<Object>} listaPedidos - Arreglo global o de zona de paradas
- * @param {string} [zonaFoco=null] - Zona específica para enfocar/aislar opcionalmente
- * @param {google.maps.Map} [mapaInstancia=null] - Instancia del mapa
+ * Traza las minirutas por clúster sobre las calles de la ciudad.
  */
 export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaInstancia = null) {
-    const mapaTarget = mapaInstancia 
-        || (typeof window !== "undefined" && (
-            window.mapaVisorInstancia 
-            || window.mapaMensajero 
-            || window.mapaInstanciaGlobal 
-            || (window.renderRutasMensajero && window.renderRutasMensajero.getMap())
-        ));
+    const mapaTarget = mapaInstancia || (typeof window !== "undefined" && (window.mapaVisorInstancia || window.mapaMensajero || window.mapaInstanciaGlobal || (window.renderRutasMensajero && window.renderRutasMensajero.getMap())));
 
     if (!listaPedidos || !Array.isArray(listaPedidos) || listaPedidos.length < 1) {
-        console.warn("⚠️ [MAPA_RUTAS]: Se requiere al menos una parada para procesar trazado.");
         limpiarRutaTrazada();
         return;
     }
-
-    limpiarRutaTrazada();
-
-    if (!mapaTarget || typeof google === "undefined" || !google.maps) {
-        console.warn("⚠️ [MAPA_RUTAS]: Instancia de Google Maps no lista para dibujar minirutas.");
-        return;
-    }
+    if (!mapaTarget || typeof google === "undefined" || !google.maps) return;
 
     const targetCanonico = zonaFoco ? estandarizarZonaCanonica(zonaFoco) : null;
-    const paradasFiltradas = targetCanonico
-        ? listaPedidos.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico)
-        : listaPedidos;
+    const paradasFiltradas = targetCanonico ? listaPedidos.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico) : listaPedidos;
 
-    if (paradasFiltradas.length < 2) {
-        console.warn("ℹ️ [MAPA_RUTAS]: Se requieren al menos 2 paradas para dibujar minirutas.");
-        return;
-    }
+    if (paradasFiltradas.length < 2) return;
 
     const clustersMap = new Map();
     paradasFiltradas.forEach((parada, idx) => {
         const grupoKey = parada.grupoId || `GRUPO-${String(Math.ceil((idx + 1) / 4)).padStart(2, "0")}`;
-        if (!clustersMap.has(grupoKey)) {
-            clustersMap.set(grupoKey, []);
-        }
+        if (!clustersMap.has(grupoKey)) clustersMap.set(grupoKey, []);
         clustersMap.get(grupoKey).push(parada);
     });
 
-    console.group(`KM [MAPA_RUTAS]: Procesando ${clustersMap.size} minirutas por clúster ${targetCanonico ? `[Foco: ${targetCanonico}]` : ''}`);
-
-    let colorIndex = 0;
-
-    clustersMap.forEach((paradasGrupo, grupoId) => {
-        paradasGrupo.sort((a, b) => {
-            const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
-            const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
-            return seqA - seqB;
+    const listaGruposOrdenados = Array.from(clustersMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([_, paradas]) => {
+            return paradas.sort((a, b) => {
+                const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
+                const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
+                return seqA - seqB;
+            });
         });
 
-        const pathPuntos = paradasGrupo
-            .map(p => extraerLatLngValido(p))
-            .filter(Boolean);
+    const posMensajero = window.posicionActualMensajero || null;
+    const paradaTarget = window.paradaObjetivoNavegacion || paradasFiltradas.find(esParadaPendiente) || paradasFiltradas[0];
 
-        if (pathPuntos.length >= 2) {
-            const colorMiniruta = PALETA_COLORES_CLUSTERS[colorIndex % PALETA_COLORES_CLUSTERS.length];
-
-            const polyMiniruta = new google.maps.Polyline({
-                path: pathPuntos,
-                geodesic: true,
-                strokeColor: colorMiniruta,
-                strokeOpacity: 0.9,
-                strokeWeight: 5,
-                map: mapaTarget
-            });
-
-            coleccionPolilineasActivas.push(polyMiniruta);
-            if (typeof window !== "undefined" && Array.isArray(window.__POLILINEAS_CLUSTERS__)) {
-                window.__POLILINEAS_CLUSTERS__.push(polyMiniruta);
-            }
-
-            console.log(` ⚡ [MINIRUTA_OK]: ${grupoId} (${pathPuntos.length} puntos) -> Color: %c${colorMiniruta}`, `color: ${colorMiniruta}; font-weight: bold;`);
-            colorIndex++;
-        }
-    });
-
-    console.groupEnd();
+    await dibujarTrazadosSecuenciales(mapaTarget, posMensajero, listaGruposOrdenados, paradaTarget);
 }
 
 /**
- * Traza la ruta navegable por calles reales con animación suave estilo "Barber Pole".
- * Dibuja EXCLUSIVAMENTE en Azul Cyan (#00e5ff) sin solapamientos.
- * 
- * @param {Object} [paradaDestino] - Parada seleccionada como objetivo
- * @param {boolean} [centrarVista=true] - Mantiene o centra la cámara del usuario
+ * Traza la ruta navegable por calles reales en Azul Cyan (#00e5ff) aislando temporalmente las estáticas.
  */
 export async function trazarRutaNavegacionInternaGPS(paradaDestino = null, centrarVista = true) {
     const mapa = window.mapaMensajero || window.mapaInstancia || window.mapaInstanciaGlobal;
-    if (!mapa || typeof google === "undefined" || !google.maps) {
-        console.error("❌ [NAVEGACION_PWA]: Instancia del mapa no disponible.");
-        return;
-    }
+    if (!mapa || typeof google === "undefined" || !google.maps) return;
+
+    limpiarRutaTrazada(); // Se ocultan intencionalmente los conectores estáticos para priorizar la navegación.
 
     if (paradaDestino) window.paradaObjetivoNavegacion = paradaDestino;
-
     const objetivo = window.paradaObjetivoNavegacion;
-    if (!objetivo) {
-        console.warn("⚠️ [NAVEGACION_PWA]: No hay una parada objetivo activa asignada.");
-        return;
-    }
+    if (!objetivo) return;
 
-    // 1. Obtener coordenadas de origen (GPS Mensajero)
     let origenCoords = window.posicionActualMensajero;
     if (!origenCoords || !origenCoords.lat || !origenCoords.lng) {
-        console.warn("⚠️ [NAVEGACION_PWA]: Posición GPS actual no detectada. Intentando capturar ubicación...");
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
                     window.posicionActualMensajero = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                     trazarRutaNavegacionInternaGPS(objetivo, centrarVista);
                 },
-                (err) => console.error("❌ [NAVEGACION_PWA]: Error obteniendo GPS actual:", err),
-                { enableHighAccuracy: true, timeout: 8000 }
+                (err) => {}, { enableHighAccuracy: true, timeout: 8000 }
             );
             return;
         }
     }
 
-    // 2. Obtener coordenadas de destino
     const destLatLng = extraerLatLngValido(objetivo);
-    if (!destLatLng) {
-        console.error("❌ [NAVEGACION_PWA]: La parada seleccionada no tiene coordenadas válidas.");
-        return;
-    }
+    if (!destLatLng) return;
 
-    console.log(`🧭 [NAVEGACION_PWA]: Trazando viaje interno por calles en Azul Cyan (#00e5ff) -> Origen: [${origenCoords.lat.toFixed(5)}, ${origenCoords.lng.toFixed(5)}] -> Destino: [${destLatLng.lat().toFixed(5)}, ${destLatLng.lng().toFixed(5)}]`);
+    const origenLatLng = new google.maps.LatLng(origenCoords.lat, origenCoords.lng);
+    const pathVial = await obtenerPuntosRutaCalle(origenLatLng, destLatLng);
 
-    // 3. Consultar servicio de rutas de Google Maps
-    if (!window.directionsServicePWA) {
-        window.directionsServicePWA = new google.maps.DirectionsService();
-    }
+    if (pathVial && pathVial.length > 0) {
+        window.rutaNavegacionPuntosActiva = pathVial.map(pt => ({ lat: pt.lat(), lng: pt.lng() }));
 
-    const request = {
-        origin: new google.maps.LatLng(origenCoords.lat, origenCoords.lng),
-        destination: destLatLng,
-        travelMode: google.maps.TravelMode.DRIVING
-    };
+        if (polylineVialNavegacion) polylineVialNavegacion.setMap(null);
 
-    window.directionsServicePWA.route(request, (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK || status === "OK") {
-            if (result.routes && result.routes[0] && result.routes[0].overview_path) {
-                const pathVial = result.routes[0].overview_path;
+        const simboloBarberPoleAnimado = {
+            path: "M -3,-6 L 3,6",
+            strokeColor: "#00e5ff",
+            strokeOpacity: 1,
+            strokeWeight: 4,
+            scale: 1.5
+        };
 
-                window.rutaNavegacionPuntosActiva = pathVial.map(pt => ({ lat: pt.lat(), lng: pt.lng() }));
+        polylineVialNavegacion = new google.maps.Polyline({
+            path: pathVial,
+            geodesic: true,
+            strokeColor: "#00e5ff",
+            strokeOpacity: 0.9,
+            strokeWeight: 7,
+            icons: [{ icon: simboloBarberPoleAnimado, offset: "0%", repeat: "12px" }],
+            zIndex: 99999,
+            map: mapa
+        });
 
-                // Limpiar traza previa
-                if (polylineVialNavegacion) {
-                    polylineVialNavegacion.setMap(null);
-                }
+        iniciarAnimacionBarberPole(polylineVialNavegacion);
 
-                // Símbolo SVG efecto Barber Pole (poste de barbería)
-                const simboloBarberPoleAnimado = {
-                    path: "M -3,-6 L 3,6",
-                    strokeColor: "#00e5ff",
-                    strokeOpacity: 1,
-                    strokeWeight: 4,
-                    scale: 1.5
-                };
-
-                // Crear Polyline propia animable en Cyan Neón por calles reales
-                polylineVialNavegacion = new google.maps.Polyline({
-                    path: pathVial,
-                    geodesic: true,
-                    strokeColor: "#00e5ff",
-                    strokeOpacity: 0.3,
-                    strokeWeight: 7,
-                    icons: [{
-                        icon: simboloBarberPoleAnimado,
-                        offset: "0%",
-                        repeat: "12px"
-                    }],
-                    zIndex: 99999,
-                    map: mapa
-                });
-
-                // Activar animación suave estilo Barber Pole
-                iniciarAnimacionEspiralRuta(polylineVialNavegacion);
-
-                if (centrarVista) {
-                    const bounds = new google.maps.LatLngBounds();
-                    pathVial.forEach(pt => bounds.extend(pt));
-                    mapa.fitBounds(bounds);
-                }
-
-                console.log(`🌀 [NAVEGACION_PWA]: Traza vial en Cyan (#00e5ff) con animación Barber Pole desplegada (${pathVial.length} puntos).`);
-                mostrarBotonLimpiarRutaNavegacion();
-            }
-        } else {
-            console.error("❌ [NAVEGACION_PWA]: Fallo al calcular la ruta de viaje por calles:", status);
+        if (centrarVista) {
+            const bounds = new google.maps.LatLngBounds();
+            pathVial.forEach(pt => bounds.extend(pt));
+            mapa.fitBounds(bounds);
         }
-    });
-}
-
-/**
- * Limpia la línea de navegación activa del mapa PWA y cancela la animación.
- */
-export function limpiarRutaNavegacionGPS() {
-    detenerAnimacionEspiral();
-    window.paradaObjetivoNavegacion = null;
-    window.rutaNavegacionPuntosActiva = [];
-
-    if (polylineVialNavegacion) {
-        polylineVialNavegacion.setMap(null);
-        polylineVialNavegacion = null;
     }
-
-    const btnLimpiar = document.getElementById("btn-limpiar-navegacion-pwa");
-    if (btnLimpiar) btnLimpiar.remove();
 }
 
 /**
- * Muestra un botón flotante neón para cancelar el modo viaje en la PWA.
+ * WATCHDOG PRINCIPAL: Bucle silencioso que evalúa llegadas y cambios de estado de marcadores
+ * para auto-restaurar la red de polílineas.
  */
-function mostrarBotonLimpiarRutaNavegacion() {
-    let btnExistente = document.getElementById("btn-limpiar-navegacion-pwa");
-    if (btnExistente) return;
+if (typeof window !== "undefined") {
+    setInterval(() => {
+        if (!ultimaMapaInstancia || !ultimaListaGruposCache) return;
 
-    const btnHTML = `
-        <button id="btn-limpiar-navegacion-pwa" 
-                onclick="window.limpiarRutaNavegacionGPS()" 
-                style="position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%); z-index: 99999; background: #0d1117; border: 2px solid #ff3366; color: #ff3366; padding: 10px 18px; border-radius: 20px; font-family: 'Fira Code', monospace; font-size: 0.82rem; font-weight: bold; box-shadow: 0 0 15px rgba(255, 51, 102, 0.4); cursor: pointer; display: flex; align-items: center; gap: 8px;">
-            <span>❌ CANCELAR VIAJE GPS</span>
-        </button>
-    `;
-    document.body.insertAdjacentHTML("beforeend", btnHTML);
+        const estaNavegando = !!window.paradaObjetivoNavegacion || !!polylineVialNavegacion;
+        const hashActual = generarHashPendientesActual();
+
+        // Escenario A: El GPS ha llegado/limpiado, restauramos toda la grilla de tramos.
+        if (navegadorActivoPrevio && !estaNavegando) {
+            console.log("♻️ [MAPA_RUTAS]: Navegación finalizada. Restaurando red atenuada...");
+            ultimoHashPendientes = hashActual;
+            dibujarTrazadosSecuenciales(ultimaMapaInstancia, window.posicionActualMensajero || null, ultimaListaGruposCache);
+        } 
+        // Escenario B: Modal modificó el estado ("entregado"), la red atenuada se re-conecta automáticamente.
+        else if (!estaNavegando && hashActual !== ultimoHashPendientes) {
+            console.log("♻️ [MAPA_RUTAS]: Cambio de estado detectado. Re-calculando ruta...");
+            ultimoHashPendientes = hashActual;
+            dibujarTrazadosSecuenciales(ultimaMapaInstancia, window.posicionActualMensajero || null, ultimaListaGruposCache);
+        }
+
+        navegadorActivoPrevio = estaNavegando;
+    }, 1500); // Audit interval cada 1.5s
 }
 
 /**
- * Alias de compatibilidad global para el trazado exclusivo por zona.
+ * Alias de compatibilidad global.
  */
 export async function trazarRutaPorZonaAislada(paradasZona, zonaFoco = null) {
     return trazarPolilineaRuta(paradasZona, zonaFoco);

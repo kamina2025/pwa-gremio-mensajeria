@@ -1,12 +1,12 @@
 /**
  * PROTOCOLO MACONDO - MÓDULO DE AISLAMIENTO Y SECUENCIACIÓN DE RUTAS POR ZONA
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-aislamiento.js
- * Optimizado para PWA Local-First, prevención de re-renders redundantes y ordenamiento numérico estricto.
+ * Optimizado para PWA Local-First, re-renderizado reactivo y secuencia numérica estricta.
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
 import { obtenerParadasGuardadas } from "../mensajero-persistencia.js";
-import { trazarPolilineaRuta } from "../mapa/mapa-rutas.js";
+import { trazarPolilineaRuta, dibujarTrazadosSecuenciales } from "../mapa/mapa-rutas.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
 // Control de caché en memoria para evitar ciclos de re-renderizado duplicados sobre el Canvas
@@ -29,9 +29,10 @@ function obtenerNumeroSecuencia(p) {
  * Procesa y aísla las paradas de la zona activa asegurando su orden físico secuencial.
  * 
  * @param {string} zonaKeyInput - Clave o nombre crudo de la zona a aislar
+ * @param {boolean} [forzarRefresco=false] - Si es true, ignora la caché de hash y fuerza el re-dibujado
  * @returns {Promise<Array<Object>>} Lista de paradas filtradas y secuenciadas
  */
-export async function calcularRutaAisladaPorZona(zonaKeyInput) {
+export async function calcularRutaAisladaPorZona(zonaKeyInput, forzarRefresco = false) {
   if (!zonaKeyInput) {
     console.warn("⚠️ [ZONA_ISOLATION]: Se requiere una zonaKey válida para aislar la ruta.");
     return [];
@@ -42,15 +43,21 @@ export async function calcularRutaAisladaPorZona(zonaKeyInput) {
 
   console.group(`⚡ [ZONA_ISOLATION]: Procesando secuencia exclusiva para zona: [${zonaKeyInput}] -> '${targetCanonico}'`);
 
-  // 1. Prioridad de obtención de datos: RAM activa (Local-First) -> IndexedDB
-  let todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
+  // 1. Obtener los datos más recientes desde IndexedDB para evitar trabajar con RAM obsoleta
+  let todasLasParadas = [];
+  try {
+    todasLasParadas = (await obtenerParadasGuardadas()) || [];
+  } catch (err) {
+    console.warn("⚠️ [ZONA_ISOLATION]: Fallo al consultar IndexedDB local. Recurriendo a RAM:", err);
+  }
 
   if (!todasLasParadas || todasLasParadas.length === 0) {
-    try {
-      todasLasParadas = (await obtenerParadasGuardadas()) || [];
-    } catch (err) {
-      console.warn("⚠️ [ZONA_ISOLATION]: Fallo al consultar IndexedDB local:", err);
-    }
+    todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
+  } else {
+    // Sincronizar la memoria RAM activa con la lectura fresca de IndexedDB
+    window.__CACHE_PARADAS_MACONDO__ = todasLasParadas;
+    window.paradasMemoriaLocal = todasLasParadas;
+    window.paradasRutaActiva = todasLasParadas;
   }
 
   // 2. Filtrado canónico estricto de paradas pertenecientes a la zona objetivo
@@ -71,7 +78,7 @@ export async function calcularRutaAisladaPorZona(zonaKeyInput) {
   // 4. Generación de Hash de Control para evitar re-renderizados duplicados
   const hashActual = `${targetCanonico}_${paradasDeZona.map(p => (p.id || p.ssc) + "_" + obtenerNumeroSecuencia(p)).join('|')}`;
 
-  if (ultimaZonaAislada === targetCanonico && ultimoHashParadas === hashActual) {
+  if (!forzarRefresco && ultimaZonaAislada === targetCanonico && ultimoHashParadas === hashActual) {
     console.log(`ℹ️ [ZONA_ISOLATION]: Omitiendo re-renderizado duplicado para Zona: [${targetCanonico}] (Sin cambios detectados).`);
     console.groupEnd();
     return paradasDeZona;
@@ -89,7 +96,10 @@ export async function calcularRutaAisladaPorZona(zonaKeyInput) {
     window.actualizarPuntosEnMapa(paradasDeZona, 0);
   } else {
     // Fallback de dibujo para arquitecturas alternativas
-    if (typeof trazarPolilineaRuta === "function") {
+    const mapaInstancia = window.mapaMensajero || window.mapaInstanciaGlobal;
+    if (mapaInstancia) {
+      dibujarTrazadosSecuenciales(mapaInstancia, window.posicionActualMensajero, [paradasDeZona]);
+    } else if (typeof trazarPolilineaRuta === "function") {
       trazarPolilineaRuta(paradasDeZona, targetLimpio);
     }
     if (typeof window.enfocarZonaEnMapa === "function") {

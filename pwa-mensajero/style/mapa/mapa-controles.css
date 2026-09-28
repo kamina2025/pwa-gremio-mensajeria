@@ -95,3 +95,28 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+/* Botón Conmutador de Tema Día / Noche */
+.cyber-btn-map.btn-tema-mapa {
+    border-color: var(--neon-amber, #ffb300);
+    color: var(--neon-amber, #ffb300);
+    box-shadow: inset 0 0 6px rgba(255, 179, 0, 0.2);
+}
+
+.cyber-btn-map.btn-tema-mapa:active,
+.cyber-btn-map.btn-tema-mapa:hover {
+    background: var(--neon-amber, #ffb300);
+    color: #0d1117;
+    box-shadow: 0 0 15px var(--neon-amber, #ffb300);
+}
+
+/* Ajuste para modo día (Tema Claro) */
+body.mapa-tema-dia .cyber-map-controls {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: #007acc;
+    box-shadow: 0 0 15px rgba(0, 122, 204, 0.3);
+}
+
+body.mapa-tema-dia .cyber-btn-map.btn-tema-mapa {
+    border-color: #ff8c00;
+    color: #ff8c00;
+}

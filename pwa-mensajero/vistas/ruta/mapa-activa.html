@@ -5,58 +5,104 @@
    ========================================================================== -->
 
 <div class="cyber-map-container">
-
     <!-- ⚡ BUSCADOR FLOTANTE DUAL MULTIMODAL (TEXTO / ESCÁNER SCC) -->
     <div class="cyber-search-container" id="contenedor-buscador-mapa">
         <div class="cyber-search-input-wrapper">
             <span class="cyber-search-icon">🔍</span>
-            <input 
-                type="text" 
-                id="buscador-paradas-mapa" 
-                class="cyber-search-input" 
-                placeholder="Buscar por SCC, #Stop, cliente o dirección..." 
-                autocomplete="off" 
-                aria-label="Buscar paradas o código SCC en el mapa"
-            />
-            
+            <input
+                type="text"
+                id="buscador-paradas-mapa"
+                class="cyber-search-input"
+                placeholder="Buscar por SCC, #Stop, cliente o dirección..."
+                autocomplete="off"
+                aria-label="Buscar paradas o código SCC en el mapa" />
+
             <!-- Disparador de Cámara / Escáner de Código de Barras / SCC -->
-            <button type="button" id="btn-escanear-scc" class="cyber-scan-btn" title="Escanear Código de Barras / SCC" aria-label="Escanear código de barras o SCC">
+            <button
+                type="button"
+                id="btn-escanear-scc"
+                class="cyber-scan-btn"
+                title="Escanear Código de Barras / SCC"
+                aria-label="Escanear código de barras o SCC">
                 <span class="scan-icon">█║▌</span>
             </button>
 
             <!-- Botón de Limpieza -->
-            <button type="button" id="btn-limpiar-busqueda" class="cyber-search-clear" style="display: none;" title="Limpiar búsqueda">✕</button>
+            <button
+                type="button"
+                id="btn-limpiar-busqueda"
+                class="cyber-search-clear"
+                style="display: none"
+                title="Limpiar búsqueda">
+                ✕
+            </button>
         </div>
 
         <!-- Lista Desplegable de Sugerencias y Coincidencias Local-First -->
-        <ul id="sugerencias-paradas-mapa" class="cyber-sugerencias-lista" style="display: none;"></ul>
+        <ul id="sugerencias-paradas-mapa" class="cyber-sugerencias-lista" style="display: none"></ul>
     </div>
+    <!-- Botón Conmutador de Tema Día / Noche -->
 
     <!-- 🎛️ CONTROLES VERTICALES FLOTANTES (ZOOM, REFRESH, LOCK & ENFOQUE GRUPO) -->
     <div class="cyber-map-controls" id="cyber-map-controls">
-        <button type="button" class="cyber-btn-map" id="btn-zoom-in" title="Acercar (Zoom In)" aria-label="Acercar mapa">
+        <button
+            id="btn-toggle-tema-mapa"
+            class="cyber-btn-map btn-tema-mapa"
+            title="Conmutar Tema Día/Noche"
+            aria-label="Cambiar tema de mapa">
+            <span id="icon-tema-state">🌙</span>
+        </button>
+        <button
+            type="button"
+            class="cyber-btn-map"
+            id="btn-zoom-in"
+            title="Acercar (Zoom In)"
+            aria-label="Acercar mapa">
             <span class="cyber-btn-icon">➕</span>
         </button>
-        <button type="button" class="cyber-btn-map" id="btn-zoom-out" title="Alejar (Zoom Out)" aria-label="Alejar mapa">
+        <button
+            type="button"
+            class="cyber-btn-map"
+            id="btn-zoom-out"
+            title="Alejar (Zoom Out)"
+            aria-label="Alejar mapa">
             <span class="cyber-btn-icon">➖</span>
         </button>
-        <button type="button" class="cyber-btn-map cyber-btn-refresh" id="btn-refresh-map" title="Refrescar y Sincronizar Mapa Local-First" aria-label="Refrescar mapa">
+        <button
+            type="button"
+            class="cyber-btn-map cyber-btn-refresh"
+            id="btn-refresh-map"
+            title="Refrescar y Sincronizar Mapa Local-First"
+            aria-label="Refrescar mapa">
             <span class="cyber-btn-icon refresh-icon">🔄</span>
         </button>
-        <button type="button" class="cyber-btn-map" id="btn-enfocar-ultimo-grupo" title="Enfocar Última Parada del Grupo" aria-label="Enfocar última parada del grupo">
+        <button
+            type="button"
+            class="cyber-btn-map"
+            id="btn-enfocar-ultimo-grupo"
+            title="Enfocar Última Parada del Grupo"
+            aria-label="Enfocar última parada del grupo">
             <span class="cyber-btn-icon">🎯</span>
         </button>
-        <button type="button" class="cyber-btn-map" id="btn-toggle-lock" title="Bloquear / Desbloquear Mapa" aria-label="Bloquear/Desbloquear mapa" data-locked="false">
+        <button
+            type="button"
+            class="cyber-btn-map"
+            id="btn-toggle-lock"
+            title="Bloquear / Desbloquear Mapa"
+            aria-label="Bloquear/Desbloquear mapa"
+            data-locked="false">
             <span class="cyber-btn-icon" id="icon-lock-state">🔓</span>
         </button>
     </div>
 
     <!-- 📷 MODAL / VISOR TÁCTICO DE CÁMARA PARA ESCANEO DE BARRAS / SCC -->
-    <div id="contenedor-escanner-modal" class="cyber-scanner-modal" style="display: none;">
+    <div id="contenedor-escanner-modal" class="cyber-scanner-modal" style="display: none">
         <div class="cyber-scanner-overlay">
             <div class="cyber-scanner-header">
                 <span class="scanner-title">⚡ ESCÁNER TÁCTICO SCC</span>
-                <button type="button" id="btn-cerrar-escanner" class="btn-close-scanner" aria-label="Cerrar escáner">✕</button>
+                <button type="button" id="btn-cerrar-escanner" class="btn-close-scanner" aria-label="Cerrar escáner">
+                    ✕
+                </button>
             </div>
             <div class="cyber-scanner-viewport">
                 <video id="video-preview-escanner" autoplay playsinline muted></video>
@@ -73,14 +119,16 @@
     </div>
 
     <!-- 📋 TARJETA FLOTANTE DE DETALLE DE PARADA CON INDICADORES DE GRUPO/SUBGRUPO -->
-    <div class="cyber-stop-card" id="tarjeta-detalle-parada" style="display: none;">
+    <div class="cyber-stop-card" id="tarjeta-detalle-parada" style="display: none">
         <div class="cyber-card-header">
             <div class="cyber-card-badges">
                 <span id="card-stop-secuencia" class="cyber-badge badge-stop">#STOP --</span>
                 <span id="card-stop-grupo" class="cyber-badge badge-grupo">GRUPO --</span>
                 <span id="card-stop-subgrupo" class="cyber-badge badge-subgrupo">SUB --</span>
             </div>
-            <button type="button" class="cyber-card-close" id="btn-cerrar-tarjeta" aria-label="Cerrar tarjeta">✕</button>
+            <button type="button" class="cyber-card-close" id="btn-cerrar-tarjeta" aria-label="Cerrar tarjeta">
+                ✕
+            </button>
         </div>
         <div class="cyber-card-body">
             <div id="card-stop-scc" class="cyber-scc-tag">SCC: N/A</div>
@@ -97,5 +145,4 @@
 
     <!-- 🗺️ LIENZO DE MAPA GOOGLE MAPS PANTALLA COMPLETA -->
     <div id="mapa-mensajero-view" class="mapa-canvas"></div>
-
 </div>

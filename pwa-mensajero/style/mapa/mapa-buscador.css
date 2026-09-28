@@ -1,0 +1,346 @@
+/* ==========================================================================
+   PROTOCOLO MACONDO - BUSCADOR FLOTANTE, SUGERENCIAS & ESCÁNER SCC
+   Ubicación: pwa-mensajero/style/mapa/mapa-buscador.css
+   Arquitectura: Cyberpunk Dark Mode / Safe-Areas / Hardware Accelerated
+   ========================================================================== */
+
+/* Contenedor Principal Flotante del Buscador */
+.cyber-search-wrapper,
+.cyber-search-container,
+.contenedor-busqueda-mapa {
+    position: absolute;
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    left: 14px;
+    z-index: 1000;
+    width: calc(100% - 78px);
+    max-width: 440px;
+    box-sizing: border-box;
+}
+
+/* Caja del Campo de Entrada de Búsqueda */
+.cyber-search-input-box,
+.cyber-search-input-wrapper {
+    display: flex;
+    align-items: center;
+    background: rgba(13, 17, 23, 0.95);
+    border: 1.5px solid var(--neon-cyan, #00e5ff);
+    border-radius: 8px;
+    padding: 6px 10px;
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.35), inset 0 0 8px rgba(0, 229, 255, 0.1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.cyber-search-input-box:focus-within,
+.cyber-search-input-wrapper:focus-within {
+    border-color: var(--neon-green, #39ff14);
+    box-shadow: 0 0 20px rgba(57, 255, 20, 0.45), inset 0 0 10px rgba(57, 255, 20, 0.18);
+}
+
+.cyber-search-icon {
+    color: var(--neon-cyan, #00e5ff);
+    font-size: 1.05rem;
+    margin-right: 8px;
+    filter: drop-shadow(0 0 4px var(--neon-cyan, #00e5ff));
+    display: flex;
+    align-items: center;
+}
+
+#buscador-paradas-mapa,
+.cyber-search-input,
+#input-mapa-buscar-dir {
+    flex: 1;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    color: #ffffff !important;
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+    font-size: 0.88rem;
+    font-weight: 700;
+    padding: 4px 0;
+    min-width: 0;
+}
+
+#buscador-paradas-mapa::placeholder,
+.cyber-search-input::placeholder,
+#input-mapa-buscar-dir::placeholder {
+    color: var(--text-color, #c3ccdb);
+    opacity: 0.65;
+    font-weight: 400;
+}
+
+/* Botón Táctico de Escáner SCC */
+.cyber-scan-btn {
+    background: rgba(0, 229, 255, 0.08);
+    border: 1px solid var(--neon-cyan, #00e5ff);
+    color: var(--neon-cyan, #00e5ff);
+    padding: 5px 9px;
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+    font-size: 0.88rem;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 0 6px rgba(0, 229, 255, 0.2);
+}
+
+.cyber-scan-btn:hover,
+.cyber-scan-btn:active {
+    background: var(--neon-cyan, #00e5ff);
+    color: #0d1117;
+    box-shadow: 0 0 14px var(--neon-cyan, #00e5ff);
+    transform: scale(1.05);
+}
+
+/* Botón de Limpieza del Input */
+.cyber-btn-clear,
+.cyber-search-clear {
+    background: transparent;
+    border: none;
+    color: var(--neon-magenta, #ff3366);
+    font-weight: bold;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 1.1rem;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.15s ease;
+}
+
+.cyber-btn-clear:active,
+.cyber-search-clear:active {
+    transform: scale(0.85);
+}
+
+/* Lista Desplegable de Sugerencias */
+.cyber-sugerencias-lista {
+    list-style: none;
+    margin: 8px 0 0 0;
+    padding: 4px 0;
+    background: rgba(13, 17, 23, 0.98) !important;
+    border: 1.5px solid var(--neon-cyan, #00e5ff) !important;
+    border-radius: 8px;
+    max-height: 290px;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.95), 0 0 18px rgba(0, 229, 255, 0.3) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    position: absolute;
+    width: 100%;
+    left: 0;
+    top: 100%;
+    z-index: 1001 !important;
+    box-sizing: border-box;
+}
+
+.cyber-sugerencias-lista::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cyber-sugerencias-lista::-webkit-scrollbar-track {
+    background: #080c14;
+}
+
+.cyber-sugerencias-lista::-webkit-scrollbar-thumb {
+    background: var(--neon-cyan, #00e5ff);
+    border-radius: 3px;
+}
+
+.cyber-sugerencia-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(48, 54, 61, 0.7);
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.cyber-sugerencia-item:last-child {
+    border-bottom: none;
+}
+
+.cyber-sugerencia-item:hover,
+.cyber-sugerencia-item:active {
+    background: rgba(0, 229, 255, 0.18) !important;
+}
+
+/* Badges de Clasificación de Sugerencias */
+.cyber-sug-badge {
+    font-size: 0.7rem;
+    font-weight: 900;
+    padding: 3px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.cyber-sug-badge.badge-stop {
+    background: var(--neon-cyan, #00e5ff) !important;
+    color: #030308 !important;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+}
+
+.cyber-sug-badge.badge-grupo {
+    background: rgba(255, 179, 0, 0.2) !important;
+    color: var(--neon-amber, #ffb300) !important;
+    border: 1px solid var(--neon-amber, #ffb300) !important;
+    box-shadow: 0 0 8px rgba(255, 179, 0, 0.4);
+}
+
+.cyber-sug-badge.badge-subgrupo {
+    background: rgba(210, 168, 255, 0.2) !important;
+    color: var(--neon-purple, #d2a8ff) !important;
+    border: 1px solid var(--neon-purple, #d2a8ff) !important;
+    box-shadow: 0 0 8px rgba(210, 168, 255, 0.4);
+}
+
+.cyber-sug-badge.badge-cliente {
+    background: rgba(255, 51, 102, 0.2) !important;
+    color: var(--neon-magenta, #ff3366) !important;
+    border: 1px solid var(--neon-magenta, #ff3366) !important;
+    box-shadow: 0 0 10px rgba(255, 51, 102, 0.5);
+}
+
+.cyber-sug-badge.badge-dir {
+    background: var(--neon-green, #39ff14) !important;
+    color: #030308 !important;
+    box-shadow: 0 0 10px rgba(57, 255, 20, 0.6);
+}
+
+.cyber-sug-info {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+}
+
+.cyber-sug-info strong {
+    color: #ffffff !important;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cyber-sug-info small {
+    color: var(--text-color, #c3ccdb) !important;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+    opacity: 0.8;
+}
+
+/* Modal del Escáner SCC de Cámara */
+.cyber-scanner-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(3, 3, 8, 0.94);
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px;
+    box-sizing: border-box;
+}
+
+.cyber-scanner-overlay {
+    width: 100%;
+    max-width: 400px;
+    background: #0d1117;
+    border: 2px solid var(--neon-cyan, #00e5ff);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 0 28px rgba(0, 229, 255, 0.45);
+    box-sizing: border-box;
+}
+
+.cyber-scanner-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    color: var(--neon-cyan, #00e5ff);
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+    font-weight: bold;
+}
+
+.btn-close-scanner {
+    background: transparent;
+    border: none;
+    color: var(--neon-magenta, #ff3366);
+    font-size: 1.3rem;
+    font-weight: bold;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.cyber-scanner-viewport {
+    position: relative;
+    width: 100%;
+    height: 250px;
+    background: #000000;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 229, 255, 0.35);
+}
+
+.cyber-scanner-viewport video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Animación Acelerada por GPU para el Láser */
+.scanner-laser-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2.5px;
+    background: var(--neon-magenta, #ff3366);
+    box-shadow: 0 0 15px var(--neon-magenta, #ff3366);
+    will-change: transform;
+    animation: scanLaserGpu 2s infinite ease-in-out;
+}
+
+@keyframes scanLaserGpu {
+    0% {
+        transform: translateY(12px);
+    }
+    50% {
+        transform: translateY(238px);
+    }
+    100% {
+        transform: translateY(12px);
+    }
+}
+
+.cyber-scanner-footer {
+    margin-top: 12px;
+    text-align: center;
+    color: var(--text-color, #c3ccdb);
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+    font-size: 0.8rem;
+}

@@ -1,0 +1,45 @@
+/* ==========================================================================
+   PROTOCOLO MACONDO - BASE, PALETA & CANVAS FULLSCREEN
+   Ubicación: pwa-mensajero/style/mapa/mapa-base.css
+   ========================================================================== */
+
+:root {
+    --neon-cyan: #00e5ff;
+    --neon-amber: #ffb300;
+    --neon-purple: #d2a8ff;
+    --neon-magenta: #ff3366;
+    --neon-green: #39ff14;
+    --bg-dark: #0d1117;
+    --bg-canvas: #030308;
+    --cyber-font: 'Fira Code', 'Share Tech Mono', monospace;
+    --text-color: #c3ccdb;
+}
+
+/* Contenedor Fullscreen y Canvas de Mapa */
+.cyber-map-container,
+.mapa-fullscreen-wrapper,
+.mapa-contenedor-principal {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--bg-canvas);
+    z-index: 1;
+}
+
+#mapa-mensajero,
+#mapa-mensajero-view,
+.mapa-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    z-index: 1;
+    background-color: #0a0c10;
+}

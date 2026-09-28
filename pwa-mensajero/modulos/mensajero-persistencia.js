@@ -4,10 +4,7 @@
  * Arquitectura: Híbrida (IndexedDB + LocalStorage Fallback) con Relevo REST/PHP
  */
 
-import { IndexedStore } from "./db/indexed-store.js";
-
-// Instancia única de IndexedStore
-const storeLocal = new IndexedStore('PWA_Mensajero_DB', 'paradas_rutas');
+import { indexedStore, guardarUltimoEstadoNavegacion, obtenerUltimoEstadoNavegacion } from "./db/indexed-store.js";
 
 // --- CONFIGURACIÓN DE ENDPOINTS DE RED Y DISCO LOCAL ---
 const ENDPOINT_POOL = "../pool_pedidos.json";
@@ -17,14 +14,27 @@ const ENDPOINT_SAVE_PHP = "../save_pool.php";
 
 // --- CLAVES DE ALMACENAMIENTO LOCAL-FIRST ---
 const CLAVE_RUTA_ACTIVA = "pwa_mensajero_paradas_zonificadas";
+const CLAVE_STORAGE_PARADAS = "macondo_paradas_cache_v1";
 const CLAVE_POOL_LOCAL = "MACONDO_POOL";
+
+/**
+ * Sincroniza las referencias de la colección de paradas en todas las cachés volátiles de RAM.
+ * @param {Array<Object>} paradas 
+ */
+function actualizarCachesRAMGlobales(paradas = []) {
+    if (!Array.isArray(paradas)) return;
+    window.__CACHE_PARADAS_MACONDO__ = paradas;
+    window.paradasMemoriaLocal = paradas;
+    window.paradasRutaActiva = paradas;
+    window.pedidosGlobales = paradas;
+}
 
 // =============================================================================
 // 1. GESTIÓN Y PERSISTENCIA DE LA MÁQUINA DE ESTADOS LOCAL
 // =============================================================================
 
 /**
- * Guarda o reemplaza el conjunto de paradas zonificadas en IndexedDB y localStorage.
+ * Guarda o reemplaza el conjunto de paradas zonificadas en IndexedDB, localStorage y RAM.
  * @param {Array<Object>} ruta - Arreglo de paradas a guardar.
  * @returns {Promise<boolean>}
  */
@@ -36,17 +46,22 @@ export async function guardarRutaZonificada(ruta) {
 
     console.log(`>>> [PERSISTENCIA]: Guardando ${ruta.length} parada(s) en la base local...`);
 
-    // 1. Resguardo inmediato en localStorage
+    // 1. Resguardo inmediato en localStorage y RAM
     try {
-        localStorage.setItem(CLAVE_RUTA_ACTIVA, JSON.stringify(ruta));
+        const payloadJson = JSON.stringify(ruta);
+        localStorage.setItem(CLAVE_RUTA_ACTIVA, payloadJson);
+        localStorage.setItem(CLAVE_STORAGE_PARADAS, payloadJson);
+        actualizarCachesRAMGlobales(ruta);
     } catch (errStorage) {
         console.warn("⚠️ [PERSISTENCIA_STORAGE_WARN]: No se pudo escribir en localStorage:", errStorage);
     }
 
-    // 2. Persistencia en IndexedDB vía IndexedStore
+    // 2. Persistencia en IndexedDB vía IndexedStore Singleton
     try {
-        await storeLocal.guardarColeccionParadas(ruta);
-        console.log("✅ [PERSISTENCIA_INDEXED_OK]: Ruta sincronizada en IndexedDB.");
+        if (indexedStore && typeof indexedStore.guardarColeccionParadas === "function") {
+            await indexedStore.guardarColeccionParadas(ruta);
+            console.log("✅ [PERSISTENCIA_INDEXED_OK]: Ruta sincronizada en IndexedDB.");
+        }
     } catch (errIndexed) {
         console.error("❌ [PERSISTENCIA_INDEXED_FAIL]: Falló la escritura en IndexedDB:", errIndexed);
     }
@@ -60,15 +75,32 @@ export async function guardarRutaZonificada(ruta) {
  */
 export async function obtenerParadasGuardadas() {
     try {
-        const registros = await storeLocal.obtenerParadas();
-        if (Array.isArray(registros) && registros.length > 0) {
-            return registros;
+        if (indexedStore && typeof indexedStore.obtenerParadas === "function") {
+            const registros = await indexedStore.obtenerParadas();
+            if (Array.isArray(registros) && registros.length > 0) {
+                actualizarCachesRAMGlobales(registros);
+                return registros;
+            }
+        } else if (indexedStore && typeof indexedStore._execTx === "function") {
+            const registros = await indexedStore._execTx('paradas_rutas', 'readonly', (store) => {
+                return new Promise((resolve, reject) => {
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => reject(req.error);
+                });
+            });
+            if (Array.isArray(registros) && registros.length > 0) {
+                actualizarCachesRAMGlobales(registros);
+                return registros;
+            }
         }
     } catch (err) {
-        console.warn("⚠️ [PERSISTENCIA_WARN]: Falló la lectura de IndexedDB. Conmutando a localStorage:", err);
+        console.warn("⚠️ [PERSISTENCIA_WARN]: Falló la lectura de IndexedDB. Conmutando a localStorage:", err.message || err);
     }
 
-    return obtenerParadasLocalStorage();
+    const resultadoFallback = obtenerParadasLocalStorage();
+    actualizarCachesRAMGlobales(resultadoFallback);
+    return resultadoFallback;
 }
 
 /**
@@ -79,20 +111,25 @@ export async function obtenerRutaZonificada() {
 }
 
 /**
- * Lee directamente del respaldo en localStorage.
+ * Lee directamente del respaldo en localStorage o memoria.
  */
 function obtenerParadasLocalStorage() {
     try {
-        const data = localStorage.getItem(CLAVE_RUTA_ACTIVA);
-        return data ? JSON.parse(data) : [];
+        const data = localStorage.getItem(CLAVE_RUTA_ACTIVA) || localStorage.getItem(CLAVE_STORAGE_PARADAS);
+        if (data) {
+            return JSON.parse(data);
+        }
     } catch (e) {
         console.error("❌ [PERSISTENCIA_ERROR]: Error leyendo de localStorage:", e);
-        return [];
     }
+    return window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
 }
 
 /**
  * Actualiza el estado y metadatos de un pedido específico.
+ * @param {string|number} idPedido 
+ * @param {string} nuevoEstado 
+ * @param {Object} metadataExtra 
  */
 export async function actualizarEstadoPedido(idPedido, nuevoEstado, metadataExtra = {}) {
     const ruta = await obtenerParadasGuardadas();
@@ -108,7 +145,15 @@ export async function actualizarEstadoPedido(idPedido, nuevoEstado, metadataExtr
                 ...metadataExtra
             };
         }
-        await storeLocal.actualizarParada(ruta[index]);
+
+        try {
+            if (indexedStore && typeof indexedStore.actualizarParada === "function") {
+                await indexedStore.actualizarParada(ruta[index]);
+            }
+        } catch (e) {
+            console.warn("⚠️ [PERSISTENCIA]: No se pudo actualizar parada individual en IndexedDB:", e);
+        }
+
         await guardarRutaZonificada(ruta);
     }
     return ruta;
@@ -116,10 +161,18 @@ export async function actualizarEstadoPedido(idPedido, nuevoEstado, metadataExtr
 
 /**
  * Elimina una parada específica de la base local por su ID.
+ * @param {string|number} idParada 
  */
 export async function eliminarParadaLocal(idParada) {
     console.log(`>>> [PERSISTENCIA]: Eliminando parada local con ID: ${idParada}`);
-    await storeLocal.eliminarParada(idParada);
+    try {
+        if (indexedStore && typeof indexedStore.eliminarParada === "function") {
+            await indexedStore.eliminarParada(idParada);
+        }
+    } catch (e) {
+        console.warn("⚠️ Error eliminando parada individual de IndexedDB:", e);
+    }
+
     let rutaActual = await obtenerParadasGuardadas();
     rutaActual = rutaActual.filter(p => String(p.id || p.ssc) !== String(idParada));
     await guardarRutaZonificada(rutaActual);
@@ -132,9 +185,13 @@ export async function eliminarParadaLocal(idParada) {
 export async function borrarRutaCompletaLocal() {
     console.log(">>> [PERSISTENCIA]: Purgando todos los datos de ruta de la base local...");
     localStorage.removeItem(CLAVE_RUTA_ACTIVA);
+    localStorage.removeItem(CLAVE_STORAGE_PARADAS);
+    actualizarCachesRAMGlobales([]);
 
     try {
-        await storeLocal.limpiarStore();
+        if (indexedStore && typeof indexedStore.limpiarStore === "function") {
+            await indexedStore.limpiarStore('paradas_rutas');
+        }
     } catch (e) {
         console.warn("⚠️ Error purgando IndexedDB:", e);
     }
@@ -197,7 +254,7 @@ export async function sincronizarYRenderizarPool() {
         poolRaw = JSON.parse(localStorage.getItem(CLAVE_POOL_LOCAL)) || {};
     }
 
-    const lotesConvertidos = Object.values(poolRaw);
+    const lotesConvertidos = Object.values(poolRaw || {});
     contenedor.innerHTML = "";
 
     const disponibles = lotesConvertidos.filter(lote => lote && (lote.estado === "POOL_DISPONIBLE" || !lote.estado));
@@ -210,6 +267,8 @@ export async function sincronizarYRenderizarPool() {
     disponibles.forEach((lote) => {
         const tarjeta = document.createElement("div");
         tarjeta.className = "panel-maquina tarjeta-pedido";
+        const loteEscapado = JSON.stringify(lote).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
         tarjeta.innerHTML = `
             <div class="header-status">
                 <span style="color: var(--crypto-secure, #00ff66);">[ID: ${lote.id || '#MAC'}]</span>
@@ -220,7 +279,7 @@ export async function sincronizarYRenderizarPool() {
                 • Masa Chasis: ${lote.masaTotal || "1.5 kg"}<br>
                 • Valor Retenido: <span style="color:var(--crypto-secure, #00ff66); font-weight:bold;">$${Math.round(lote.tarifa || 0).toLocaleString()} COP</span>
             </div>
-            <button class="btn-terminal btn-crypto" onclick="procesarCustodiaEnServidor('${lote.id}', ${JSON.stringify(lote).replace(/"/g, '&quot;')})">
+            <button class="btn-terminal btn-crypto" onclick="procesarCustodiaEnServidor('${lote.id}', ${loteEscapado})">
                 EXECUTE_CUSTODY_ASIGNATION
             </button>
         `;
@@ -286,7 +345,7 @@ export async function sincronizarYRenderizarTransito() {
         if (!response.ok) return;
 
         const transitoRaw = await response.json();
-        const lotes = Object.values(transitoRaw);
+        const lotes = Object.values(transitoRaw || {});
 
         if (lotes.length === 0) {
             contenedor.innerHTML = `<div class="panel-maquina" style="text-align:center;color:var(--text-muted)">[CONTRATO_VACÍO] No tiene vectores en tránsito sobre el asfalto.</div>`;
@@ -364,6 +423,7 @@ export async function liquidarEntregaEnAsfalto(idLote) {
 if (typeof window !== "undefined") {
     window.guardarRutaZonificada = guardarRutaZonificada;
     window.obtenerParadasGuardadas = obtenerParadasGuardadas;
+    window.obtenerParadasLocalStorage = obtenerParadasLocalStorage;
     window.obtenerRutaZonificada = obtenerRutaZonificada;
     window.actualizarEstadoPedido = actualizarEstadoPedido;
     window.capturarCoordenadasGPS = capturarCoordenadasGPS;
@@ -374,4 +434,6 @@ if (typeof window !== "undefined") {
     window.procesarCustodiaEnServidor = procesarCustodiaEnServidor;
     window.sincronizarYRenderizarTransito = sincronizarYRenderizarTransito;
     window.liquidarEntregaEnAsfalto = liquidarEntregaEnAsfalto;
+    window.guardarUltimoEstadoNavegacion = guardarUltimoEstadoNavegacion;
+    window.obtenerUltimoEstadoNavegacion = obtenerUltimoEstadoNavegacion;
 }

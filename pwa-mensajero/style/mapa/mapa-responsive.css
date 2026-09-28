@@ -1,0 +1,66 @@
+/* ==========================================================================
+   PROTOCOLO MACONDO - RESPONSIVE & COMPONENTES ADICIONALES (ORBITAL)
+   Ubicación: pwa-mensajero/style/mapa/mapa-responsive.css
+   ========================================================================== */
+
+/* Botón Táctico de Navegación "VIAJAR" en Menú Orbital */
+.btn-orbital-viajar {
+    background: rgba(13, 17, 23, 0.95);
+    border: 1.5px solid var(--neon-cyan, #00e5ff);
+    color: var(--neon-cyan, #00e5ff);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-orbital-viajar:active {
+    transform: scale(1.1);
+    background: var(--neon-cyan, #00e5ff);
+    color: #0d1117;
+    box-shadow: 0 0 20px var(--neon-cyan, #00e5ff);
+}
+
+.btn-orbital-viajar svg {
+    filter: drop-shadow(0 0 4px var(--neon-cyan, #00e5ff));
+}
+
+/* Adaptabilidad Móvil */
+@media screen and (max-width: 480px) {
+    .cyber-search-wrapper,
+    .cyber-search-container,
+    .contenedor-busqueda-mapa {
+        top: calc(10px + env(safe-area-inset-top, 0px));
+        left: 10px;
+        width: calc(100% - 74px);
+    }
+
+    .cyber-map-controls {
+        right: 10px;
+        padding: 6px;
+        gap: 8px;
+    }
+
+    .cyber-btn-map {
+        width: 44px;
+        height: 44px;
+        font-size: 1.1rem;
+    }
+
+    .panel-inferior-mapa {
+        bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+        left: 10px;
+        right: 10px;
+        padding: 6px;
+    }
+
+    .cyber-stop-card {
+        bottom: calc(105px + env(safe-area-inset-bottom, 0px));
+        width: calc(100% - 20px);
+        padding: 10px;
+    }
+
+    #panel-guia-conduccion {
+        top: calc(62px + env(safe-area-inset-top, 0px));
+        padding: 8px 12px;
+        font-size: 0.78rem;
+    }
+}

@@ -1,218 +1,117 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL DEL MAPA (MODO RÁSTER ESTABLE 2D)
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-visor.js
- * Arquitectura: Google Maps SDK / Local-First / Telemetría GPS con Interpolación Vial / Cyberpunk Dark Mode
+ * Arquitectura: Google Maps SDK / Local-First / Orquestador PWA Resiliente
  */
 
 import { desplegarZonaMensajeroEnMapa } from "./mapa-mensajero-zonas.js";
-import { trazarPolilineaRuta, trazarRutaNavegacionInternaGPS } from "./mapa-rutas.js";
-import { renderizarMarcadoresInteractivos } from "./mapa-marcadores.js";
 import { 
     registrarEventosClicMapa, 
     ejecutarBusquedaDireccion, 
     toggleBuscadorMapaUI, 
-    activarModoSeleccionMapaUI,
+    activarModoSeleccionMapaUI, 
     mapaEventos 
 } from "./mapa-eventos.js";
-import { guardarRutaZonificada, obtenerParadasGuardadas } from "../mensajero-persistencia.js";
-import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificacion/estandar-zonas.js";
+import { obtenerCoordenadasValidasParada } from "./utils/mapa-coordenadas.js";
 
-// Instancias y variables de estado global
-window.mapaMensajero = window.mapaMensajero || null;
-window.mapaInstancia = window.mapaInstancia || null; // Alias Singleton
-window.renderRutasMensajero = window.renderRutasMensajero || null;
-window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
-window.infoWindowMensajero = window.infoWindowMensajero || null;
-window.pendientesParaRenderizar = window.pendientesParaRenderizar || null;
+// Subsistema de Sincronización Local-First
+import { recargarMapaCompleto, actualizarPuntosEnMapa } from "./core/mapa-sincronizacion.js";
+
+// Subsistema especializado del Lienzo (Render, Enfoques y Bounds)
+import { 
+    refrescarLienzoMapa, 
+    enfocarZonaEnMapa, 
+    enfocarParadaEnMapa, 
+    enfocarYResaltarGrupoSCC 
+} from "./core/mapa-lienzo.js";
+
+// Subsistema de Geolocalización y Telemetría GPS
+import { 
+    inicializarSeguimientoGPS, 
+    renderizarUbicacionGpsEnMapa, 
+    simularMovimientoGPS, 
+    renderizarBotonDevSimulacion 
+} from "./gps/mapa-gps.js";
+
+// Instancias y variables de estado global (Singleton Pattern)
+if (typeof window !== "undefined") {
+    window.mapaMensajero = window.mapaMensajero || null;
+    window.mapaInstancia = window.mapaInstancia || null;
+    window.renderRutasMensajero = window.renderRutasMensajero || null;
+    window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
+    window.infoWindowMensajero = window.infoWindowMensajero || null;
+    window.pendientesParaRenderizar = window.pendientesParaRenderizar || null;
+}
 
 let observadorResizeContenedor = null;
-let temporizadorDebounceResize = null;
-let watcherGpsId = null;
-let marcadorGpsMensajero = null;
-let animacionGpsFrameId = null;
-let ultimoRecalculoRutaTime = 0;
-const KEY_ULTIMA_PARADA = 'macondo_ultima_parada_id';
+let temporizadorReintentoVisibilidad = null;
 
 /**
- * Extrae y valida coordenadas numéricas de un objeto parada soportando múltiples esquemas de datos.
- * @param {Object} parada 
- * @returns {{lat: number, lng: number}|null}
- */
-export function obtenerCoordenadasValidasParada(parada) {
-    if (!parada || typeof parada !== "object") return null;
-
-    let rawLat = parada.lat ?? parada.latitud ?? parada.latitud_num ?? parada.y ?? parada.lat_num;
-    if ((rawLat === undefined || rawLat === null) && parada.coordenadas) {
-        rawLat = parada.coordenadas.lat ?? parada.coordenadas.latitud;
-    }
-
-    let rawLng = parada.lng ?? parada.longitud ?? parada.longitud_num ?? parada.x ?? parada.lng_num;
-    if ((rawLng === undefined || rawLng === null) && parada.coordenadas) {
-        rawLng = parada.coordenadas.lng ?? parada.coordenadas.longitud;
-    }
-
-    if (rawLat === undefined || rawLng === undefined || rawLat === null || rawLng === null) {
-        return null;
-    }
-
-    const latStr = String(rawLat).trim().replace(',', '.');
-    const lngStr = String(rawLng).trim().replace(',', '.');
-
-    const lat = parseFloat(latStr);
-    const lng = parseFloat(lngStr);
-
-    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
-        return null;
-    }
-
-    return { lat, lng };
-}
-
-/**
- * Redimensiona el lienzo del mapa de forma segura tras cambios en el DOM.
- */
-export function refrescarLienzoMapa() {
-    const mapa = window.mapaMensajero || window.mapaInstancia;
-    if (!mapa || typeof google === "undefined" || !google.maps) return;
-
-    const contenedor = mapa.getDiv();
-    if (!contenedor || contenedor.clientWidth === 0 || contenedor.clientHeight === 0) {
-        return;
-    }
-
-    if (temporizadorDebounceResize) clearTimeout(temporizadorDebounceResize);
-
-    temporizadorDebounceResize = setTimeout(() => {
-        requestAnimationFrame(() => {
-            if (contenedor.clientWidth > 0 && contenedor.clientHeight > 0) {
-                const centroActual = mapa.getCenter();
-                google.maps.event.trigger(mapa, "resize");
-                
-                if (centroActual) {
-                    mapa.setCenter(centroActual);
-                }
-                console.log("⚡ [MAPA_VISOR]: Re-renderizado Post-Paint de lienzo Ráster ejecutado con éxito.");
-            }
-        });
-    }, 80);
-}
-
-/**
- * Consulta IndexedDB, resincroniza la RAM global y fuerza la actualización del canvas,
- * respetando la secuenciaZona guardada por el usuario.
- * @returns {Promise<boolean>}
- */
-export async function recargarMapaCompleto() {
-    console.group("🔄 [MAPA_VISOR]: Ejecutando sincronización y refresco Local-First del mapa...");
-
-    try {
-        let paradasFrescas = [];
-        if (typeof obtenerParadasGuardadas === "function") {
-            paradasFrescas = await obtenerParadasGuardadas();
-        }
-
-        if (!Array.isArray(paradasFrescas) || paradasFrescas.length === 0) {
-            paradasFrescas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
-        }
-
-        console.log(`📦 [MAPA_VISOR]: Total de paradas recuperadas para refresco: ${paradasFrescas.length}`);
-
-        // Ordenar según secuencia guardada por el usuario
-        paradasFrescas.sort((a, b) => {
-            const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
-            const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
-            return seqA - seqB;
-        });
-
-        // Sincronizar memorias RAM
-        window.__CACHE_PARADAS_MACONDO__ = [...paradasFrescas];
-        window.paradasMemoriaLocal = [...paradasFrescas];
-        window.paradasRutaActiva = [...paradasFrescas];
-        window.pedidosGlobales = [...paradasFrescas];
-
-        const mapa = window.mapaMensajero || window.mapaInstancia;
-        const zonaActiva = localStorage.getItem("zona_activa_operacion") || "ORIENTE";
-        const targetCanonico = estandarizarZonaCanonica(zonaActiva);
-
-        if (mapa && typeof google !== "undefined" && google.maps) {
-            google.maps.event.trigger(mapa, "resize");
-            console.log("📐 [MAPA_VISOR]: Disparado 'resize' sobre Google Maps.");
-
-            await actualizarPuntosEnMapa(paradasFrescas, 0);
-
-            const paradasDeZona = paradasFrescas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
-            const listaParaBounds = paradasDeZona.length > 0 ? paradasDeZona : paradasFrescas;
-
-            const bounds = new google.maps.LatLngBounds();
-            let puntosValidos = 0;
-
-            listaParaBounds.forEach((p) => {
-                const coords = obtenerCoordenadasValidasParada(p);
-                if (coords) {
-                    bounds.extend(new google.maps.LatLng(coords.lat, coords.lng));
-                    puntosValidos++;
-                }
-            });
-
-            if (puntosValidos > 0) {
-                mapa.fitBounds(bounds);
-                console.log(`🔍 [MAPA_VISOR]: Bounds re-ajustados para ${puntosValidos} coordenadas de la zona [${targetCanonico}].`);
-            }
-        } else {
-            console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible durante el refresco.");
-        }
-
-        if (typeof window.renderizarParadasZonificadasUI === "function") {
-            await window.renderizarParadasZonificadasUI(paradasFrescas);
-        }
-
-        refrescarLienzoMapa();
-        console.groupEnd();
-        return true;
-
-    } catch (error) {
-        console.error("❌ [MAPA_VISOR]: Error crítico ejecutando recargarMapaCompleto:", error);
-        console.groupEnd();
-        throw error;
-    }
-}
-
-/**
- * Inicializa la instancia de Google Maps en modo 2D estable.
- * @param {string} [idContenedor="mapa-mensajero"] - ID del elemento contenedor
+ * Inicializa de forma resiliente la instancia de Google Maps sobre el contenedor HTML indicado.
+ * @param {string} [idContenedor="mapa-mensajero"] - ID del elemento contenedor HTML
  * @returns {google.maps.Map|null}
  */
 export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
-    if (window.mapaMensajero || window.mapaInstancia) {
-        console.log("ℹ️ [MAPA_VISOR]: Reutilizando instancia existente del mapa Google Maps.");
-        refrescarLienzoMapa();
-        return window.mapaMensajero || window.mapaInstancia;
-    }
-
-    if (typeof google === "undefined" || !google.maps || typeof google.maps.Map !== "function") {
-        console.warn("⏳ [MAPA_VISOR]: SDK de Google Maps aún no está listo. Reintentando en 300ms...");
-        setTimeout(() => inicializarMapaMensajero(idContenedor), 300);
-        return null;
-    }
-
+    // 1. Ubicar el contenedor HTML en el DOM
     const contenedorMapa = document.getElementById(idContenedor) || 
                            document.getElementById("mapa-mensajero-view") || 
                            document.getElementById("map");
 
     if (!contenedorMapa) {
-        console.warn(`⚠️ [MAPA_VISOR]: Contenedor HTML '#${idContenedor}' no encontrado en el DOM.`);
+        // Retorno silencioso si los componentes HTML dinámicos aún no han terminado de inyectarse
+        return null;
+    }
+
+    // 2. Si la instancia de Google Maps ya existe, refrescar dimensiones del lienzo y retornar
+    if (window.mapaMensajero || window.mapaInstancia) {
+        const mapaActivo = window.mapaMensajero || window.mapaInstancia;
+        if (typeof google !== "undefined" && google.maps && mapaActivo) {
+            google.maps.event.trigger(mapaActivo, "resize");
+            refrescarLienzoMapa();
+        }
+        return mapaActivo;
+    }
+
+    // 3. Verificar disponibilidad del SDK de Google Maps
+    if (typeof google === "undefined" || !google.maps || typeof google.maps.Map !== "function") {
+        clearTimeout(temporizadorReintentoVisibilidad);
+        temporizadorReintentoVisibilidad = setTimeout(() => inicializarMapaMensajero(idContenedor), 350);
+        return null;
+    }
+
+    // 4. Configurar ResizeObserver reactivo sobre el contenedor antes de crear el mapa
+    if (window.ResizeObserver && !observadorResizeContenedor) {
+        observadorResizeContenedor = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                    if (!window.mapaMensajero && !window.mapaInstancia) {
+                        console.log("👁️ [MAPA_VISOR]: Contenedor visible detectado por ResizeObserver. Inicializando mapa...");
+                        inicializarMapaMensajero(idContenedor);
+                    } else {
+                        refrescarLienzoMapa();
+                    }
+                }
+            }
+        });
+        observadorResizeContenedor.observe(contenedorMapa);
+    }
+
+    // 5. Validar visibilidad física (dimensiones > 0x0)
+    const rect = contenedorMapa.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0 || contenedorMapa.clientWidth === 0) {
         return null;
     }
 
     try {
-        console.log("🗺️ [MAPA_VISOR]: Inicializando mapa Ráster Cyberpunk de alta estabilidad...");
+        console.log("🗺️ [MAPA_VISOR]: Contenedor activo detectado. Creando lienzo Cyberpunk 2D...");
 
+        // Inicializar ventana emergente unificada InfoWindow
         if (!window.infoWindowMensajero && google.maps.InfoWindow) {
             window.infoWindowMensajero = new google.maps.InfoWindow();
         }
 
-        const instancia = new google.maps.Map(contenedorMapa, {
-            center: { lat: 3.4516467, lng: -76.5319854 }, // Cali, Colombia
+        const opcionesMapa = {
+            center: { lat: 3.4516467, lng: -76.5319854 }, // Coordenada base: Cali, Colombia
             zoom: 13,
             disableDefaultUI: true,
             zoomControl: false,
@@ -230,24 +129,23 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
                 { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#504060" }] },
                 { featureType: "transit", elementType: "labels.text.fill", stylers: [{ color: "#605070" }] }
             ]
-        });
+        };
 
+        const instancia = new google.maps.Map(contenedorMapa, opcionesMapa);
+
+        // Bindings globales del Singleton
         window.mapaMensajero = instancia;
         window.mapaInstancia = instancia;
+        window.mapaVisorInstancia = instancia;
 
+        // Cierre defensivo de menús flotantes al hacer clic directo en el mapa
         instancia.addListener("click", () => {
             if (window.overlayMenuActivo && typeof window.overlayMenuActivo.cerrar === "function") {
                 window.overlayMenuActivo.cerrar();
             }
         });
 
-        if (window.ResizeObserver && !observadorResizeContenedor) {
-            observadorResizeContenedor = new ResizeObserver(() => {
-                refrescarLienzoMapa();
-            });
-            observadorResizeContenedor.observe(contenedorMapa);
-        }
-
+        // Inicializar controles, eventos y clics tácticos
         if (mapaEventos && typeof mapaEventos.inicializarControles === "function") {
             mapaEventos.inicializarControles(instancia);
         }
@@ -260,458 +158,78 @@ export function inicializarMapaMensajero(idContenedor = "mapa-mensajero") {
             });
         }
 
+        // Forzar recalculo de dimensiones y centrado
+        google.maps.event.trigger(instancia, "resize");
         refrescarLienzoMapa();
 
+        // Cargar capas de zonificación
         if (typeof desplegarZonaMensajeroEnMapa === "function") {
             desplegarZonaMensajeroEnMapa(instancia, "TODAS");
         }
 
+        // Renderizar waypoints diferidos en cola
         if (window.pendientesParaRenderizar) {
             const { listaPedidos, indiceActivo } = window.pendientesParaRenderizar;
             window.pendientesParaRenderizar = null;
             actualizarPuntosEnMapa(listaPedidos, indiceActivo);
         }
 
-        // Inicializar lectura continua y movimiento fluido de GPS
+        // Iniciar telemetría GPS y botón de desarrollo
         inicializarSeguimientoGPS();
         renderizarBotonDevSimulacion();
 
+        console.log("✅ [MAPA_VISOR]: Instancia de Google Maps desplegada exitosamente.");
         return instancia;
 
     } catch (e) {
-        console.error("❌ [MAPA_VISOR]: Fallo crítico al inicializar mapa:", e);
+        console.error("❌ [MAPA_VISOR]: Fallo crítico al instanciar Google Maps:", e);
         return null;
     }
 }
 
 /**
- * Anima el marcador GPS suavemente entre dos coordenadas mediante interpolación lineal.
- * @param {number} destinoLat 
- * @param {number} destinoLng 
- */
-function animarMovimientoMarcadorGps(destinoLat, destinoLng) {
-    if (!marcadorGpsMensajero) return;
-
-    const posOrigen = marcadorGpsMensajero.getPosition();
-    if (!posOrigen) {
-        marcadorGpsMensajero.setPosition(new google.maps.LatLng(destinoLat, destinoLng));
-        return;
-    }
-
-    const origLat = posOrigen.lat();
-    const origLng = posOrigen.lng();
-
-    if (Math.abs(origLat - destinoLat) < 0.000001 && Math.abs(origLng - destinoLng) < 0.000001) return;
-
-    if (animacionGpsFrameId) cancelAnimationFrame(animacionGpsFrameId);
-
-    const duracionMs = 600;
-    const inicioTime = performance.now();
-
-    function pasoAnimacion(currentTime) {
-        const transcurrido = currentTime - inicioTime;
-        const progreso = Math.min(transcurrido / duracionMs, 1);
-
-        const actualLat = origLat + (destinoLat - origLat) * progreso;
-        const actualLng = origLng + (destinoLng - origLng) * progreso;
-
-        marcadorGpsMensajero.setPosition(new google.maps.LatLng(actualLat, actualLng));
-
-        if (progreso < 1) {
-            animacionGpsFrameId = requestAnimationFrame(pasoAnimacion);
-        }
-    }
-
-    animacionGpsFrameId = requestAnimationFrame(pasoAnimacion);
-}
-
-/**
- * Dibuja o actualiza la posición del marcador GPS del mensajero en tiempo real.
- * @param {number} lat 
- * @param {number} lng 
- */
-function renderizarUbicacionGpsEnMapa(lat, lng) {
-    const mapa = window.mapaMensajero || window.mapaInstancia;
-    if (!mapa || typeof google === "undefined" || !google.maps) return;
-
-    window.posicionActualMensajero = { lat, lng };
-
-    if (!marcadorGpsMensajero) {
-        const iconoGpsSvg = {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: "#00e5ff",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 3
-        };
-
-        marcadorGpsMensajero = new google.maps.Marker({
-            position: new google.maps.LatLng(lat, lng),
-            map: mapa,
-            title: "Mi Ubicación Táctica (GPS)",
-            icon: iconoGpsSvg,
-            zIndex: 999999
-        });
-
-        console.log(`📍 [MAPA_GPS]: Marcador GPS creado exitosamente en [${lat.toFixed(5)}, ${lng.toFixed(5)}]`);
-    } else {
-        animarMovimientoMarcadorGps(lat, lng);
-    }
-
-    // AUTO-REROUTE: Si hay una navegación activa, recalcular dinámicamente la ruta en vivo
-    if (window.paradaObjetivoNavegacion) {
-        const ahora = Date.now();
-        if (ahora - ultimoRecalculoRutaTime > 4000) {
-            ultimoRecalculoRutaTime = ahora;
-            console.log("🔄 [MAPA_GPS]: Recalculando traza de viaje en movimiento...");
-            if (typeof trazarRutaNavegacionInternaGPS === "function") {
-                trazarRutaNavegacionInternaGPS(window.paradaObjetivoNavegacion, false);
-            }
-        }
-    }
-}
-
-/**
- * Inicializa la lectura continua de coordenadas del dispositivo y dibuja el marcador neón.
- */
-export function inicializarSeguimientoGPS() {
-    const mapa = window.mapaMensajero || window.mapaInstancia;
-    if (!mapa || typeof google === "undefined" || !google.maps) {
-        console.warn("⚠️ [MAPA_GPS]: Mapa no listo. Reintentando activación de GPS en 1s...");
-        setTimeout(inicializarSeguimientoGPS, 1000);
-        return;
-    }
-
-    if (!("geolocation" in navigator)) {
-        console.warn("⚠️ [MAPA_GPS]: Geolocalización no soportada. Activando ubicación estimada de fallback.");
-        activarFallbackUbicacionGPS();
-        return;
-    }
-
-    if (watcherGpsId !== null) {
-        navigator.geolocation.clearWatch(watcherGpsId);
-    }
-
-    console.log("🛰️ [MAPA_GPS]: Activando sensor de posición continua (watchPosition)...");
-
-    watcherGpsId = navigator.geolocation.watchPosition(
-        (pos) => {
-            renderizarUbicacionGpsEnMapa(pos.coords.latitude, pos.coords.longitude);
-        },
-        (error) => {
-            console.warn(`⚠️ [MAPA_GPS]: Error o permiso denegado capturando señal GPS (${error.code}): ${error.message}`);
-            activarFallbackUbicacionGPS();
-        },
-        {
-            enableHighAccuracy: true,
-            maximumAge: 3000,
-            timeout: 10000
-        }
-    );
-}
-
-/**
- * Coordenada estimada de fallback cerca del primer punto de la ruta activa o Cali.
- */
-function activarFallbackUbicacionGPS() {
-    const paradas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
-    let lat = 3.442708;
-    let lng = -76.493357;
-
-    if (Array.isArray(paradas) && paradas.length > 0) {
-        const coords = obtenerCoordenadasValidasParada(paradas[0]);
-        if (coords) {
-            lat = coords.lat + 0.0015;
-            lng = coords.lng - 0.0015;
-        }
-    }
-
-    console.log(`📍 [MAPA_GPS_FALLBACK]: Usando coordenada estimada de operador [Lat: ${lat}, Lng: ${lng}]`);
-    renderizarUbicacionGpsEnMapa(lat, lng);
-}
-
-/**
- * SIMULADOR TÁCTICO DE GEOLOCALIZACIÓN NAVEGABLE POR VÍAS REALES
- * Desplaza el marcador neón siguiendo paso a paso la malla vial calculada por Google Directions.
- * @param {number} [intervaloMs=800] - Tiempo en milisegundos entre cada vértice vial
- */
-window.simularMovimientoGPS = function (intervaloMs = 800) {
-    const puntosViales = window.rutaNavegacionPuntosActiva;
-
-    if (!Array.isArray(puntosViales) || puntosViales.length === 0) {
-        console.warn("⚠️ [SIMULADOR_GPS]: No hay una ruta trazada en memoria. Activa primero 'Viajar GPS' sobre una parada.");
-        if (typeof window.notificarMensajeroUI === "function") {
-            window.notificarMensajeroUI("⚠️ Selecciona una parada y presiona 'Viajar GPS' para simular el recorrido por calles.", "advertencia");
-        }
-        return;
-    }
-
-    console.log(`🎮 [SIMULADOR_GPS]: Iniciando recorrido realista por las calles (${puntosViales.length} intersecciones)...`);
-
-    if (typeof window.notificarMensajeroUI === "function") {
-        window.notificarMensajeroUI("🎮 [DEV_MODE]: Simulación de recorrido vial en marcha...", "info");
-    }
-
-    let pasoActual = 0;
-
-    const timerSimulador = setInterval(() => {
-        if (pasoActual >= puntosViales.length) {
-            clearInterval(timerSimulador);
-            console.log("🏁 [SIMULADOR_GPS]: Recorrido por calles completado exitosamente.");
-            if (typeof window.notificarMensajeroUI === "function") {
-                window.notificarMensajeroUI("🏁 [DEV_MODE]: Has llegado a la parada objetivo.", "éxito");
-            }
-            return;
-        }
-
-        const puntoVial = puntosViales[pasoActual];
-        renderizarUbicacionGpsEnMapa(puntoVial.lat, puntoVial.lng);
-
-        pasoActual++;
-    }, intervaloMs);
-};
-
-/**
- * Renderiza un botón flotante de prueba de desarrollo si se detecta entorno local (localhost / 127.0.0.1)
- */
-function renderizarBotonDevSimulacion() {
-    if (typeof window === "undefined") return;
-    const esLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-    if (!esLocal || document.getElementById("btn-simular-gps-dev")) return;
-
-    const btnHTML = `
-        <button id="btn-simular-gps-dev" 
-                onclick="window.simularMovimientoGPS(800)" 
-                style="position: fixed; top: 75px; right: 15px; z-index: 99999; background: #0d1117; border: 1.5px solid #00e5ff; color: #00e5ff; padding: 8px 12px; border-radius: 8px; font-family: 'Fira Code', monospace; font-size: 0.75rem; font-weight: bold; box-shadow: 0 0 10px rgba(0, 229, 255, 0.3); cursor: pointer;">
-            🎮 SIMULAR VIAJE
-        </button>
-    `;
-    document.body.insertAdjacentHTML("beforeend", btnHTML);
-}
-
-/**
- * Actualiza waypoints, minirutas por clúster y marcadores sobre el mapa.
- * @param {Array<Object>} listaPedidos 
- * @param {number} [indiceActivo=0] 
- */
-export async function actualizarPuntosEnMapa(listaPedidos, indiceActivo = 0) {
-    const mapa = window.mapaMensajero || window.mapaInstancia;
-    if (!mapa || typeof google === "undefined" || !google.maps) {
-        window.pendientesParaRenderizar = { listaPedidos, indiceActivo };
-        return;
-    }
-
-    const zonaDetectada = localStorage.getItem("zona_activa_operacion") || (Array.isArray(listaPedidos) && listaPedidos.length > 0 
-        ? (listaPedidos[0]?.zonaKey || listaPedidos[0]?.zona || "GENERAL") 
-        : "TODAS");
-
-    const targetCanonico = estandarizarZonaCanonica(zonaDetectada);
-
-    if (typeof desplegarZonaMensajeroEnMapa === "function") {
-        desplegarZonaMensajeroEnMapa(mapa, targetCanonico);
-    }
-
-    if (typeof trazarPolilineaRuta === "function") {
-        trazarPolilineaRuta(listaPedidos, targetCanonico);
-    }
-
-    if (typeof renderizarMarcadoresInteractivos === "function") {
-        renderizarMarcadoresInteractivos(listaPedidos, indiceActivo);
-    }
-}
-
-/**
- * Enfoca una zona ajustando sus límites geográficos (FitBounds).
- * @param {Array<Object>} paradasZona 
- */
-export function enfocarZonaEnMapa(paradasZona) {
-    const mapa = window.mapaMensajero || window.mapaInstancia;
-    if (!mapa || !Array.isArray(paradasZona) || paradasZona.length === 0) return;
-
-    const bounds = new google.maps.LatLngBounds();
-    let puntosValidos = 0;
-
-    paradasZona.forEach(p => {
-        if (p) {
-            const coords = obtenerCoordenadasValidasParada(p);
-            if (coords) {
-                bounds.extend(new google.maps.LatLng(coords.lat, coords.lng));
-                puntosValidos++;
-            }
-        }
-    });
-
-    if (puntosValidos > 0) {
-        if (puntosValidos === 1) {
-            mapa.setCenter(bounds.getCenter());
-            mapa.setZoom(15);
-        } else {
-            mapa.fitBounds(bounds);
-        }
-        refrescarLienzoMapa();
-    }
-}
-
-/**
- * Centra y acerca la cámara a una parada específica actualizando la clave local de última parada.
- * @param {Object|string} paradaOrId 
- */
-export function enfocarParadaEnMapa(paradaOrId) {
-    const mapa = window.mapaMensajero || window.mapaInstancia;
-    
-    if (!mapa) {
-        console.warn("⚠️ [MAPA_VISOR]: Instancia del mapa no disponible para enfocar la parada.", paradaOrId);
-        return;
-    }
-
-    let parada = null;
-    if (typeof paradaOrId === "object" && paradaOrId !== null) {
-        parada = paradaOrId;
-    } else if (paradaOrId) {
-        const idTarget = String(paradaOrId).trim();
-        const paradas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
-        parada = paradas.find(p => String(p.id || p.scc || p.ssc).trim() === idTarget);
-    }
-
-    if (!parada) return;
-
-    const idTargetLocal = String(parada.id || parada.scc || parada.ssc || "").trim();
-    if (idTargetLocal) {
-        try {
-            localStorage.setItem(KEY_ULTIMA_PARADA, idTargetLocal);
-            console.log(`💾 [MAPA_VISOR]: 'macondo_ultima_parada_id' actualizado -> ${idTargetLocal}`);
-        } catch (err) {
-            console.warn("⚠️ Error guardando id de última parada:", err);
-        }
-    }
-
-    const coords = obtenerCoordenadasValidasParada(parada);
-
-    if (coords) {
-        console.log(`🎯 [MAPA_VISOR]: Enfocando posición en mapa -> [Lat: ${coords.lat}, Lng: ${coords.lng}]`);
-        const centroObjetivo = new google.maps.LatLng(coords.lat, coords.lng);
-        mapa.panTo(centroObjetivo);
-        mapa.setZoom(17);
-        refrescarLienzoMapa();
-        return;
-    }
-
-    const direccionTexto = parada?.direccion || parada?.dir;
-    if (direccionTexto && typeof google !== "undefined" && google.maps && google.maps.Geocoder) {
-        console.warn(`⚠️ [MAPA_VISOR]: Parada sin coordenadas directas. Geocodificando dirección en vivo: "${direccionTexto}"`);
-        const geocoder = new google.maps.Geocoder();
-        const query = direccionTexto.toLowerCase().includes("cali") ? direccionTexto : `${direccionTexto}, Cali, Colombia`;
-
-        geocoder.geocode({ address: query }, async (results, status) => {
-            if (status === "OK" && results[0]) {
-                const loc = results[0].geometry.location;
-                const latNum = loc.lat();
-                const lngNum = loc.lng();
-
-                console.log(`✅ [MAPA_VISOR]: Dirección geocodificada con éxito -> [Lat: ${latNum}, Lng: ${lngNum}]`);
-
-                parada.lat = latNum;
-                parada.lng = lngNum;
-                parada.latitud = latNum;
-                parada.longitud = lngNum;
-
-                let coleccionActual = window.paradasRutaActiva || window.__CACHE_PARADAS_MACONDO__ || [];
-                if (Array.isArray(coleccionActual) && coleccionActual.length > 0) {
-                    try {
-                        await guardarRutaZonificada(coleccionActual);
-                        
-                        window.__CACHE_PARADAS_MACONDO__ = [...coleccionActual];
-                        window.paradasMemoriaLocal = [...coleccionActual];
-                        window.paradasRutaActiva = [...coleccionActual];
-                        window.pedidosGlobales = [...coleccionActual];
-
-                        console.log(`💾 [MAPA_VISOR]: Coordenadas de la parada ${parada.id || parada.ssc} persistidas en IndexedDB y RAM.`);
-                    } catch (err) {
-                        console.warn("⚠️ [MAPA_VISOR]: No se pudo auto-guardar la coordenada en IndexedDB:", err);
-                    }
-                }
-
-                mapa.panTo(loc);
-                mapa.setZoom(17);
-                refrescarLienzoMapa();
-            } else {
-                console.error(`❌ [MAPA_VISOR]: No se pudo geocodificar la dirección "${query}". Status: ${status}`);
-            }
-        });
-        return;
-    }
-
-    console.error("❌ [MAPA_VISOR]: Parada con coordenadas e información de dirección completamente inválidas:", parada);
-}
-
-/**
- * Centra la cámara en la parada seleccionada por SCC y resalta visualmente los marcadores del mismo clúster.
- * @param {Object} parada 
- */
-export function enfocarYResaltarGrupoSCC(parada) {
-    if (!parada) return;
-
-    enfocarParadaEnMapa(parada);
-
-    const grupoBuscado = String(parada.grupoId || parada.grupo || parada.cluster || "").trim();
-    if (!grupoBuscado) return;
-
-    const marcadoresDOM = document.querySelectorAll(".cyber-pin-marker, [data-grupo], [data-grupo-id], [data-cluster]");
-    let contadorResaltados = 0;
-
-    marcadoresDOM.forEach(el => {
-        const grupoAttr = String(
-            el.getAttribute("data-grupo") || 
-            el.getAttribute("data-grupo-id") || 
-            el.getAttribute("data-cluster") || ""
-        ).trim();
-        
-        if (grupoAttr && grupoAttr.toLowerCase() === grupoBuscado.toLowerCase()) {
-            el.classList.add("activa");
-            if (el.style) el.style.zIndex = "9999";
-            contadorResaltados++;
-        } else {
-            el.classList.remove("activa");
-        }
-    });
-
-    console.log(`⚡ [MAPA_VISOR]: Resaltados ${contadorResaltados} marcadores del clúster [${grupoBuscado}]`);
-}
-
-/**
- * Retorna la instancia global activa del mapa.
+ * Retorna de forma resiliente la instancia global activa del mapa.
  * @returns {google.maps.Map|null}
  */
 export function obtenerInstanciaMapa() {
-    return window.mapaMensajero || window.mapaInstancia || null;
+    return window.mapaMensajero || window.mapaInstancia || window.mapaVisorInstancia || null;
 }
 
-// BINDINGS GLOBALES EN WINDOW
-window.obtenerCoordenadasValidasParada = obtenerCoordenadasValidasParada;
-window.inicializarMapaMensajero = inicializarMapaMensajero;
-window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;
-window.enfocarZonaEnMapa = enfocarZonaEnMapa;
-window.enfocarParadaEnMapa = enfocarParadaEnMapa;
-window.enfocarYResaltarGrupoSCC = enfocarYResaltarGrupoSCC;
-window.refrescarLienzoMapa = refrescarLienzoMapa;
-window.obtenerInstanciaMapa = obtenerInstanciaMapa;
-window.recargarMapaCompleto = recargarMapaCompleto;
-window.ejecutarRefrescoLocalMapa = recargarMapaCompleto;
-window.inicializarSeguimientoGPS = inicializarSeguimientoGPS;
+// BINDINGS GLOBALES Y FACHADA
+if (typeof window !== "undefined") {
+    window.obtenerCoordenadasValidasParada = obtenerCoordenadasValidasParada;
+    window.inicializarMapaMensajero = inicializarMapaMensajero;
+    window.actualizarPuntosEnMapa = actualizarPuntosEnMapa;
+    window.recargarMapaCompleto = recargarMapaCompleto;
+    window.ejecutarRefrescoLocalMapa = recargarMapaCompleto;
+    window.enfocarZonaEnMapa = enfocarZonaEnMapa;
+    window.enfocarParadaEnMapa = enfocarParadaEnMapa;
+    window.enfocarYResaltarGrupoSCC = enfocarYResaltarGrupoSCC;
+    window.refrescarLienzoMapa = refrescarLienzoMapa;
+    window.obtenerInstanciaMapa = obtenerInstanciaMapa;
+}
 
 export { 
+    recargarMapaCompleto,
+    actualizarPuntosEnMapa,
+    obtenerCoordenadasValidasParada,
+    refrescarLienzoMapa,
+    enfocarZonaEnMapa,
+    enfocarParadaEnMapa,
+    enfocarYResaltarGrupoSCC,
     ejecutarBusquedaDireccion, 
     toggleBuscadorMapaUI, 
     activarModoSeleccionMapaUI, 
     registrarEventosClicMapa 
 };
 
-if (typeof google !== "undefined" && google.maps && typeof google.maps.Map === "function" && !window.mapaMensajero) {
-    const contenedorExistente = document.getElementById("mapa-mensajero") || 
-                                document.getElementById("mapa-mensajero-view") || 
-                                document.getElementById("map");
-    if (contenedorExistente) {
-        inicializarMapaMensajero();
-    }
+// Auto-inicialización coordinada con el evento 'modulosCargados' de app.js
+if (typeof window !== "undefined") {
+    const intentarInicializar = () => {
+        if (!window.mapaMensajero) {
+            inicializarMapaMensajero();
+        }
+    };
+
+    document.addEventListener("modulosCargados", intentarInicializar);
 }

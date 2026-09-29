@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - GESTOR DE MARCADORES E INTERACCIONES EN MAPA
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
- * Arquitectura: Google Maps OverlayView / Local-First / Orbital UI / GitHub Pages Compatible
+ * Arquitectura: Google Maps OverlayView / Local-First / Orbital UI / Producción & GitHub Pages Compatible
  */
 
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
@@ -64,6 +64,12 @@ function obtenerEndpointAPI() {
     return `${origin}/api.php`;
 }
 
+/**
+ * Normaliza y compara dos identificadores de parada eliminando prefijos tipo #PNT-.
+ * @param {string|number} idA 
+ * @param {string|number} idB 
+ * @returns {boolean}
+ */
 function compararIdsParada(idA, idB) {
     if (!idA || !idB) return false;
     const normA = String(idA).replace(/^[#PNT-]+/i, '').trim();
@@ -71,6 +77,11 @@ function compararIdsParada(idA, idB) {
     return normA === normB || String(idA).trim() === String(idB).trim();
 }
 
+/**
+ * Extrae y valida coordenadas geográficas utilizables de un objeto parada.
+ * @param {Object} parada 
+ * @returns {{lat: number, lng: number}|null}
+ */
 function obtenerCoordenadasNavegacion(parada) {
     if (!parada) return null;
     const lat = parseFloat(parada.lat || parada.latitud);
@@ -79,6 +90,13 @@ function obtenerCoordenadasNavegacion(parada) {
     return { lat, lng };
 }
 
+/**
+ * Remueve una parada de todos los buffers globales de memoria RAM, 
+ * actualiza el almacenamiento persistente global y retorna el array filtrado.
+ * 
+ * @param {string|number} idTarget 
+ * @returns {Array<Object>}
+ */
 function limpiarParadaDeBuffersRAM(idTarget) {
     const filtrarArray = (arr) => {
         if (!Array.isArray(arr)) return [];
@@ -91,6 +109,7 @@ function limpiarParadaDeBuffersRAM(idTarget) {
     window.paradasRutaActiva = filtrarArray(window.paradasRutaActiva);
     window.pedidosGlobales = filtrarArray(window.pedidosGlobales);
 
+    // Sobrescribir la snapshot persistente en IndexedDB para asegurar consistencia tras F5
     if (typeof guardarRutaZonificada === "function") {
         guardarRutaZonificada(nuevoCache).catch(err => {
             console.warn("⚠️ [MAPA_MARCADORES]: Snapshot en IndexedDB no actualizada:", err);
@@ -340,6 +359,12 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                     await dbStore.actualizarParada(pedido, "paradas_rutas");
                 }
                 await actualizarParadaEnPlanillaLocal(pedido);
+
+                // Reescritura del snapshot contenedor para garantizar consistencia tras F5
+                const snapshotMemoria = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+                if (snapshotMemoria.length > 0 && typeof guardarRutaZonificada === "function") {
+                    await guardarRutaZonificada(snapshotMemoria);
+                }
 
                 console.log("💾 [MAPA_MARCADORES]: Reubicación persistida atómicamente en IndexedDB.");
             } catch (err) {

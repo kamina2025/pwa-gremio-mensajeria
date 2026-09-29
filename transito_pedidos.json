@@ -326,14 +326,41 @@
     },
     {
         "action": "actualizar_parada",
-        "id": "#PNT-6281",
+        "id": "#PNT-6190",
         "ssc": "187501",
         "planilla_id": null,
-        "lat": 3.425425759421631,
-        "lng": -76.49392601055906,
-        "latitud": 3.425425759421631,
-        "longitud": -76.49392601055906,
-        "direccion": "Cl. 72j #28a-95, Comuneros II, Cali, Valle del Cauca, Colombia",
-        "updated_at": "2026-09-29 04:31:07"
+        "estado": "entregado",
+        "destinatario": "PAOLA VERONICA LUNA MONTANO",
+        "direccion": "Cl. 72m # 28-52, Comuneros II, Cali, Valle del Cauca, Colombia",
+        "telefono": "3148736120",
+        "lat": 3.426196855210341,
+        "lng": -76.49220939678953,
+        "updated_at": "2026-09-29 05:06:08",
+        "latitud": 3.426196855210341,
+        "longitud": -76.49220939678953
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-3510",
+        "ssc": "234219",
+        "planilla_id": null,
+        "lat": 3.4243393292206377,
+        "lng": -76.49431550419921,
+        "latitud": 3.4243393292206377,
+        "longitud": -76.49431550419921,
+        "direccion": "Cra 28D1 #72I-52, Cali, Valle del Cauca, Colombia",
+        "updated_at": "2026-09-29 05:00:57"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-7366",
+        "ssc": "309715",
+        "planilla_id": null,
+        "lat": 3.4299659623213765,
+        "lng": -76.5130144974365,
+        "latitud": 3.4299659623213765,
+        "longitud": -76.5130144974365,
+        "direccion": "Cra. 26 #30-150, Villanueva, Cali, Valle del Cauca, Colombia",
+        "updated_at": "2026-09-29 05:06:26"
     }
 ]

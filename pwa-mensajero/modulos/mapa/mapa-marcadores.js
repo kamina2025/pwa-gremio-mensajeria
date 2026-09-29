@@ -14,8 +14,8 @@ import { abrirModalGestionParada as abrirModalGestionParadaImpl } from "./marcad
 // Instancia de persistencia Local-First para operaciones de IndexedDB
 const dbStore = new IndexedStore();
 const KEY_ULTIMA_PARADA = 'macondo_ultima_parada_id';
+const KEY_COLA_OFFLINE = 'macondo_cola_offline_pwa';
 
-// Garantizar arreglos globales y estado overlay
 window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
 window.overlayMenuActivo = null;
 
@@ -26,6 +26,27 @@ window.overlayMenuActivo = null;
 function esEntornoEstatico() {
     if (typeof window === "undefined") return false;
     return window.location.hostname.includes("github.io");
+}
+
+/**
+ * Registra defensivamente operaciones pendientes en la cola offline (IndexedDB o localStorage fallback).
+ * @param {string} accion 
+ * @param {Object} payload 
+ */
+async function registrarOperacionPendienteDefensivo(accion, payload) {
+    try {
+        if (typeof dbStore.registrarOperacionPendiente === "function") {
+            await dbStore.registrarOperacionPendiente(accion, payload);
+            console.log(`💾 [OFFLINE_QUEUE]: Operación '${accion}' guardada en IndexedDB.`);
+        } else {
+            const colaExistente = JSON.parse(localStorage.getItem(KEY_COLA_OFFLINE) || "[]");
+            colaExistente.push({ accion, payload, timestamp: new Date().toISOString() });
+            localStorage.setItem(KEY_COLA_OFFLINE, JSON.stringify(colaExistente));
+            console.log(`💾 [OFFLINE_QUEUE_FALLBACK]: Operación '${accion}' guardada en localStorage.`);
+        }
+    } catch (err) {
+        console.warn("⚠️ [OFFLINE_QUEUE]: No se pudo guardar la operación en la cola offline:", err);
+    }
 }
 
 /**
@@ -43,12 +64,6 @@ function obtenerEndpointAPI() {
     return `${origin}/api.php`;
 }
 
-/**
- * Normaliza y compara dos identificadores de parada eliminando prefijos tipo #PNT-.
- * @param {string|number} idA 
- * @param {string|number} idB 
- * @returns {boolean}
- */
 function compararIdsParada(idA, idB) {
     if (!idA || !idB) return false;
     const normA = String(idA).replace(/^[#PNT-]+/i, '').trim();
@@ -56,11 +71,6 @@ function compararIdsParada(idA, idB) {
     return normA === normB || String(idA).trim() === String(idB).trim();
 }
 
-/**
- * Extrae y valida coordenadas geográficas utilizables de un objeto parada.
- * @param {Object} parada 
- * @returns {{lat: number, lng: number}|null}
- */
 function obtenerCoordenadasNavegacion(parada) {
     if (!parada) return null;
     const lat = parseFloat(parada.lat || parada.latitud);
@@ -69,13 +79,6 @@ function obtenerCoordenadasNavegacion(parada) {
     return { lat, lng };
 }
 
-/**
- * Remueve una parada de todos los buffers globales de memoria RAM, 
- * actualiza el almacenamiento persistente global y retorna el array filtrado.
- * 
- * @param {string|number} idTarget 
- * @returns {Array<Object>}
- */
 function limpiarParadaDeBuffersRAM(idTarget) {
     const filtrarArray = (arr) => {
         if (!Array.isArray(arr)) return [];
@@ -88,10 +91,9 @@ function limpiarParadaDeBuffersRAM(idTarget) {
     window.paradasRutaActiva = filtrarArray(window.paradasRutaActiva);
     window.pedidosGlobales = filtrarArray(window.pedidosGlobales);
 
-    // Sobrescribir la snapshot persistente en IndexedDB para asegurar consistencia en F5
     if (typeof guardarRutaZonificada === "function") {
         guardarRutaZonificada(nuevoCache).catch(err => {
-            console.warn("⚠️ [MAPA_MARCADORES]: No se pudo actualizar snapshot en guardarRutaZonificada:", err);
+            console.warn("⚠️ [MAPA_MARCADORES]: Snapshot en IndexedDB no actualizada:", err);
         });
     }
 
@@ -359,7 +361,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 
             if (esEntornoEstatico()) {
                 console.log("ℹ️ [MAPA_MARCADORES_GITPAGES]: Entorno estático detectado. Reubicación guardada en cola local.");
-                await dbStore.registrarOperacionPendiente("actualizar_parada", payload);
+                await registrarOperacionPendienteDefensivo("actualizar_parada", payload);
             } else {
                 const baseUrl = obtenerEndpointAPI();
                 const urlApi = `${baseUrl}?action=actualizar_parada`;
@@ -376,7 +378,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                     })
                     .catch(async (err) => {
                         console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido guardado en cola offline:", err);
-                        await dbStore.registrarOperacionPendiente("actualizar_parada", payload);
+                        await registrarOperacionPendienteDefensivo("actualizar_parada", payload);
                     });
             }
 
@@ -419,7 +421,7 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
         }
         console.log("💾 [MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
 
-        // 4. Sincronización Remota Backend o Cola Offline para GitHub Pages
+        // 4. Sincronización Remota Backend o Cola Offline defensiva para GitHub Pages
         const payload = {
             action: "eliminar_parada",
             id: idParada
@@ -427,7 +429,7 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
 
         if (esEntornoEstatico()) {
             console.log("ℹ️ [MAPA_MARCADORES_GITPAGES]: Entorno estático detectado. Eliminación registrada en cola local.");
-            await dbStore.registrarOperacionPendiente("eliminar_parada", payload);
+            await registrarOperacionPendienteDefensivo("eliminar_parada", payload);
         } else {
             const baseUrl = obtenerEndpointAPI();
             const urlApi = `${baseUrl}?action=eliminar_parada&id=${encodeURIComponent(idParada)}`;
@@ -444,7 +446,7 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
                 })
                 .catch(async (err) => {
                     console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Operación guardada en cola offline:", err);
-                    await dbStore.registrarOperacionPendiente("eliminar_parada", payload);
+                    await registrarOperacionPendienteDefensivo("eliminar_parada", payload);
                 });
         }
 

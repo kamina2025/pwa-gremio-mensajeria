@@ -313,34 +313,6 @@
     },
     {
         "action": "actualizar_parada",
-        "id": "#PNT-7103",
-        "ssc": "231093",
-        "planilla_id": null,
-        "estado": "no-entregado",
-        "destinatario": "CARMEN ELENA OSORIO MURIEL",
-        "direccion": "cll 51 24b 30 fenalco kennedy",
-        "telefono": "3152836946",
-        "lat": 3.4388155,
-        "lng": -76.4992479,
-        "updated_at": "2026-09-29 03:11:14"
-    },
-    {
-        "action": "actualizar_parada",
-        "id": "#PNT-8118",
-        "ssc": "260267",
-        "planilla_id": null,
-        "lat": 3.440446421402666,
-        "lng": -76.49884618638106,
-        "latitud": 3.440446421402666,
-        "longitud": -76.49884618638106,
-        "direccion": "Cl. 52 #2330, Cali, Valle del Cauca, Colombia",
-        "updated_at": "2026-09-29 03:11:53",
-        "estado": "entregado",
-        "destinatario": "JOSE OSMER PULECIO RAMIREZ",
-        "telefono": "3218542449"
-    },
-    {
-        "action": "actualizar_parada",
         "id": "#PNT-3242",
         "ssc": "235720",
         "planilla_id": null,
@@ -351,18 +323,5 @@
         "lat": 3.437841,
         "lng": -76.499838,
         "updated_at": "2026-09-29 03:12:54"
-    },
-    {
-        "action": "actualizar_parada",
-        "id": "#PNT-3719",
-        "ssc": "251514",
-        "planilla_id": null,
-        "estado": "entregado",
-        "destinatario": "BELARMINA GONZALEZ CASTRO",
-        "direccion": "CR 20K 50-04 B\/ NUEVA FLORESTA",
-        "telefono": "3178803536",
-        "lat": 3.4345645,
-        "lng": -76.4982375,
-        "updated_at": "2026-09-29 03:14:01"
     }
 ]

@@ -20,6 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 /**
+ * Registra eventos formateados en los logs del servidor PHP para auditoría.
+ */
+function logServidor($mensaje) {
+    error_log(date('[Y-m-d H:i:s] ') . $mensaje);
+}
+
+/**
  * Responde un Payload JSON garantizando un buffer limpio.
  */
 function responderJSON($data, $httpCode = 200) {
@@ -55,12 +62,11 @@ cargarVariablesEntornoEnv(__DIR__ . '/.env');
 
 /**
  * Consulta a la API REST de Google Gemini con fallback secuencial.
- * Prioriza el modelo gemini-3.6-flash validado.
  */
 function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
     $keyLimpia = trim($apiKey);
     
-    // Jerarquía de modelos actualizada: 3.6-flash como estándar principal
+    // Jerarquía de modelos para extracción multimodal
     $candidatos = [
         "gemini-3.6-flash",
         "gemini-2.0-flash",
@@ -97,7 +103,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
         curl_close($ch);
 
         if ($curlError) {
-            error_log("[API_GEMINI_ERROR] Error cURL con modelo {$modelo}: {$curlError}");
+            logServidor("❌ [API_GEMINI_ERROR] Error cURL con modelo {$modelo}: {$curlError}");
             $ultimoErrorData = ["curl_error" => $curlError, "modelo_probado" => $modelo];
             continue;
         }
@@ -114,7 +120,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
                 }
 
                 if (!empty($textoResultado)) {
-                    error_log("[API_GEMINI_SUCCESS] Extracción exitosa utilizando modelo: {$modelo}");
+                    logServidor("✅ [API_GEMINI_SUCCESS] Extracción exitosa utilizando modelo: {$modelo}");
                     return [
                         'exito' => true,
                         'modelo' => $modelo,
@@ -124,7 +130,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
                 }
             }
 
-            error_log("[API_GEMINI_WARN] Fallo HTTP {$httpCode} con modelo {$modelo}. Intentando siguiente candidato.");
+            logServidor("⚠️ [API_GEMINI_WARN] Fallo HTTP {$httpCode} con modelo {$modelo}. Intentando siguiente candidato.");
             $ultimoErrorData = [
                 'modelo_probado' => $modelo,
                 'http_code' => $httpCode,
@@ -132,7 +138,6 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
             ];
 
             if ($httpCode === 402) {
-                // Pago requerido / Cuota agotada de cuenta
                 break;
             }
         }
@@ -174,6 +179,31 @@ if ($method === 'POST' && isset($payload['_method'])) {
 
 // Extracción flexible del parámetro 'action' o 'accion'
 $action = $_GET['action'] ?? ($_GET['accion'] ?? ($payload['action'] ?? ($payload['accion'] ?? ($_POST['action'] ?? ''))));
+
+logServidor("🌐 [API_PHP]: Solicitud {$method} recibida | Acción: " . ($action ?: 'NINGUNA'));
+
+// --- LOGICA DE ELIMINACIÓN REUTILIZABLE ---
+function procesarEliminacionParada($payload, $idParam = null) {
+    $idTarget = trim($idParam ?? ($payload['id'] ?? ($payload['paradaId'] ?? ($payload['ssc'] ?? ''))));
+    if (empty($idTarget)) {
+        responderJSON(['status' => 'error', 'message' => 'ID de la parada es requerido para eliminar'], 400);
+    }
+
+    $paradas = cargarJSONFile('transito_pedidos.json');
+    $paradasFiltradas = array_values(array_filter($paradas, function($p) use ($idTarget) {
+        $idCur = trim($p['id'] ?? ($p['ssc'] ?? ''));
+        return $idCur !== $idTarget;
+    }));
+
+    guardarJSONFile('transito_pedidos.json', $paradasFiltradas);
+    logServidor("🗑️ [API_PHP]: Parada #{$idTarget} eliminada de transito_pedidos.json");
+
+    responderJSON([
+        'status' => 'success',
+        'message' => "Parada #{$idTarget} eliminada correctamente del servidor",
+        'id' => $idTarget
+    ]);
+}
 
 switch ($method) {
     case 'GET':
@@ -235,7 +265,6 @@ switch ($method) {
 
             $rawText = $resultado['text'];
             
-            // Limpieza de marcadores markdown si el modelo responde dentro de bloque de código
             if (preg_match('/\[.*\]/s', $rawText, $matches)) {
                 $cleanJsonText = $matches[0];
             } else {
@@ -291,6 +320,8 @@ switch ($method) {
 
             guardarJSONFile('transito_pedidos.json', $paradas);
 
+            logServidor("💾 [API_PHP]: Parada #{$idTarget} actualizada en transito_pedidos.json");
+
             responderJSON([
                 'status' => 'success',
                 'message' => 'Parada actualizada correctamente en el servidor',
@@ -306,6 +337,7 @@ switch ($method) {
             }
 
             guardarJSONFile('transito_pedidos.json', $lista);
+            logServidor("💾 [API_PHP]: Guardado masivo de " . count($lista) . " paradas");
 
             responderJSON([
                 'status' => 'success',
@@ -314,32 +346,21 @@ switch ($method) {
             ]);
         }
 
+        // --- ELIMINAR PARADA DESDE POST/PUT ---
+        if ($action === 'eliminar_parada' || $action === 'eliminar_parada_remoto') {
+            procesarEliminacionParada($payload);
+        }
+
         responderJSON(["error" => "ACCION_NO_RECONOCIDA", "action_recibida" => $action], 400);
         break;
 
     case 'DELETE':
-        if ($action === 'eliminar_parada') {
-            $idTarget = trim($_GET['id'] ?? ($payload['id'] ?? ''));
-            if (empty($idTarget)) {
-                responderJSON(['status' => 'error', 'message' => 'ID de la parada es requerido'], 400);
-            }
-
-            $paradas = cargarJSONFile('transito_pedidos.json');
-            $paradasFiltradas = array_values(array_filter($paradas, function($p) use ($idTarget) {
-                $idCur = trim($p['id'] ?? ($p['ssc'] ?? ''));
-                return $idCur !== $idTarget;
-            }));
-
-            guardarJSONFile('transito_pedidos.json', $paradasFiltradas);
-
-            responderJSON([
-                'status' => 'success',
-                'message' => "Parada #{$idTarget} eliminada correctamente",
-                'id' => $idTarget
-            ]);
+        if ($action === 'eliminar_parada' || $action === 'eliminar_parada_remoto') {
+            $idParam = $_GET['id'] ?? ($_GET['ssc'] ?? null);
+            procesarEliminacionParada($payload, $idParam);
         }
 
-        responderJSON(["error" => "ACCION_NO_RECONOCIDA"], 400);
+        responderJSON(["error" => "ACCION_NO_RECONOCIDA", "action_recibida" => $action], 400);
         break;
 
     default:

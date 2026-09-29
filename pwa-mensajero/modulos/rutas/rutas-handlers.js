@@ -1,5 +1,5 @@
 /**
- * PROTOCOLO MACONDO - CONTROLADOR DE EVENTOS DE NAVEGACIÓN Y ACCIONES GLOBALES DE RUTAS
+ * PROTOCOLO MACONDO - CONTROLADOR DE EVENTOS DE NAVEGACIÓN, MODALES Y ACCIONES GLOBALES DE RUTAS
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-handlers.js
  * Arquitectura: Event-Driven / Local-First / Sincronización Atómica
  */
@@ -9,20 +9,94 @@ import { optimizarRutaPorProximidadZona, invertirSecuenciaRutaZona } from "./rut
 import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
-/**
- * Registra y expone los controladores de eventos globales de rutas en el objeto window.
- */
+// =========================================================================
+// SECCIÓN 1: HANDLERS DE MODALES UI (INYECCIÓN DIRECTA EN WINDOW)
+// =========================================================================
+
+export function vincularHandlersModalesGlobales() {
+    window.mostrarModalImportarRutaUI = function () {
+        console.log("🖥️ [UI_MODAL]: Abriendo modal de importación de ruta.");
+        const modal = document.getElementById('modal-importar-ruta');
+        if (modal) {
+            if (typeof modal.showModal === "function") {
+                modal.showModal();
+            } else {
+                modal.style.display = "block";
+            }
+        }
+    };
+
+    window.cerrarModalImportarRutaUI = function () {
+        console.log("🖥️ [UI_MODAL]: Cerrando modal de importación de ruta.");
+        const modal = document.getElementById('modal-importar-ruta');
+        if (modal) {
+            if (typeof modal.close === "function") {
+                modal.close();
+            } else {
+                modal.style.display = "none";
+            }
+        }
+    };
+
+    window.ejecutarImportacionYRutaUI = async function () {
+        console.log("⚡ [UI_MODAL]: Ejecutando importación manual de ruta.");
+        if (typeof window.procesarCargaManualEnlace === "function") {
+            await window.procesarCargaManualEnlace();
+        }
+        window.cerrarModalImportarRutaUI();
+    };
+
+    window.mostrarModalGestionParadaUI = function () {
+        console.log("✏️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.");
+        const modal = document.getElementById('modal-gestion-parada');
+        if (modal) {
+            if (typeof modal.showModal === "function") {
+                modal.showModal();
+            } else {
+                modal.style.display = "block";
+            }
+        }
+    };
+
+    window.cerrarModalGestionParadaUI = function () {
+        console.log("✏️ [UI_MODAL]: Cerrando modal de gestión de parada.");
+        if (typeof window.limpiarFormularioParadaUI === "function") {
+            window.limpiarFormularioParadaUI();
+        }
+        const modal = document.getElementById('modal-gestion-parada');
+        if (modal) {
+            if (typeof modal.close === "function") {
+                modal.close();
+            } else {
+                modal.style.display = "none";
+            }
+        }
+    };
+
+    window.guardarYcerrarParadaManualUI = async function () {
+        console.log("💾 [UI_MODAL]: Guardando parada desde ventana modal.");
+        if (typeof window.guardarParadaManualUI === "function") {
+            await window.guardarParadaManualUI();
+        }
+        window.cerrarModalGestionParadaUI();
+    };
+}
+
+// Ejecución inmediata al importar el módulo ES6
+vincularHandlersModalesGlobales();
+
+// =========================================================================
+// SECCIÓN 2: CONTROLADOR Y REGISTRO GLOBAL DE EVENTOS DE RUTA
+// =========================================================================
+
 export function registrarHandlersGlobales() {
-    // Protección contra doble inicialización y duplicación de eventos en window
+    vincularHandlersModalesGlobales();
+
     if (window.__RUTAS_HANDLERS_INITIALIZED__) {
-        console.log("ℹ️ [RUTAS_HANDLERS]: Handlers globales ya inicializados previamente. Omitiendo duplicación.");
+        console.log("ℹ️ [RUTAS_HANDLERS]: Handlers de rutas ya registrados en window.");
         return;
     }
 
-    /**
-     * Inicia la navegación táctica e aislamiento de mapa para una zona específica.
-     * @param {string} zona - Nombre o clave de la zona objetivo
-     */
     window.iniciarRutaZona = async function (zona) {
         if (!zona) return;
         const targetCanonico = estandarizarZonaCanonica(zona);
@@ -46,59 +120,41 @@ export function registrarHandlersGlobales() {
         }
     };
 
-    /**
-     * Invoca la optimización por proximidad detectando si hay puntos iniciales o finales configurados en la UI
-     * y forzando el refresco gráfico en caliente tanto en la consola como sobre el lienzo del mapa.
-     * 
-     * @param {string} zona - Nombre o clave de la zona a optimizar
-     */
     window.optimizarProximidadZona = async function (zona) {
         if (!zona) return null;
         const targetCanonico = estandarizarZonaCanonica(zona);
         console.group(`⚡ [MENSAJERO_RUTAS]: Invocando optimización por proximidad para Zona: ${zona} -> '${targetCanonico}'`);
 
         try {
-            // 1. Cargar paradas almacenadas con fallback resiliente
             let todasLasParadas = await obtenerParadasGuardadas();
             if (!Array.isArray(todasLasParadas) || todasLasParadas.length === 0) {
                 todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
             }
 
-            // 2. Filtrar paradas de la zona objetivo
             const paradasDeZona = todasLasParadas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
 
-            // 3. Capturar selectores de punto de inicio / fin desde la UI (si existen)
             const selectInicio = document.getElementById(`select-inicio-${targetCanonico}`);
             const selectFin = document.getElementById(`select-fin-${targetCanonico}`);
 
             const valInicio = selectInicio ? String(selectInicio.value).trim() : "";
             const valFin = selectFin ? String(selectFin.value).trim() : "";
 
-            // Sanitización estricta para ignorar valores por defecto/automáticos
             const idInicioValido = (valInicio && valInicio !== "null" && valInicio !== "auto" && !valInicio.includes("Automático")) ? valInicio : null;
             const idFinValido = (valFin && valFin !== "null" && valFin !== "auto" && !valFin.includes("Automático")) ? valFin : null;
 
             const paradaInicio = idInicioValido ? paradasDeZona.find(p => String(p.id || p.scc || p.ssc || "").trim() === idInicioValido) : null;
             const paradaFin = idFinValido ? paradasDeZona.find(p => String(p.id || p.scc || p.ssc || "").trim() === idFinValido) : null;
 
-            if (paradaInicio) console.log(`📍 [OPTIMIZAR_HANDLERS]: Punto inicial fijado: ${paradaInicio.destinatario || paradaInicio.cliente || paradaInicio.ssc}`);
-            if (paradaFin) console.log(`🏁 [OPTIMIZAR_HANDLERS]: Punto final fijado: ${paradaFin.destinatario || paradaFin.cliente || paradaFin.ssc}`);
-
-            // 4. Ejecutar algoritmo de optimización jerárquico por proximidad
             const secuenciaResultante = await optimizarRutaPorProximidadZona(targetCanonico, paradaInicio, paradaFin);
-
-            // 5. Refrescar interfaces de usuario y forzar re-trazado sobre el mapa
             const paradasReordenadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || [];
-
-            console.log("🎨 [OPTIMIZAR_HANDLERS]: Re-renderizando acordeones y mapa en caliente...");
 
             if (typeof window.renderizarParadasZonificadasUI === "function") {
                 await window.renderizarParadasZonificadasUI(paradasReordenadas);
-            } else if (typeof window.refrescarConsolaOperacionesUI === "function") {
+            }
+            if (typeof window.refrescarConsolaOperacionesUI === "function") {
                 await window.refrescarConsolaOperacionesUI(paradasReordenadas);
             }
 
-            // Forzar el aislamiento y trazado por calles en el mapa
             if (typeof calcularRutaAisladaPorZona === "function") {
                 await calcularRutaAisladaPorZona(targetCanonico, true);
             }
@@ -112,10 +168,6 @@ export function registrarHandlersGlobales() {
         }
     };
 
-    /**
-     * Invierte la secuencia de recorrido para una zona específica.
-     * @param {string} zona - Nombre o clave de la zona
-     */
     window.invertirSecuenciaZona = async function (zona) {
         if (!zona) return;
         const targetCanonico = estandarizarZonaCanonica(zona);
@@ -123,8 +175,6 @@ export function registrarHandlersGlobales() {
         
         if (typeof invertirSecuenciaRutaZona === "function") {
             const resultado = await invertirSecuenciaRutaZona(targetCanonico);
-            
-            // Refrescar la UI y mapa inmediatamente
             if (typeof window.renderizarParadasZonificadasUI === "function") {
                 await window.renderizarParadasZonificadasUI(resultado);
             }
@@ -135,10 +185,6 @@ export function registrarHandlersGlobales() {
         }
     };
 
-    /**
-     * Redirige al módulo de generación y descarga de planillas operativas.
-     * @param {string} zona - Nombre de la zona a planillar
-     */
     window.planillarRutaZona = function (zona) {
         if (!zona) return;
         const targetCanonico = estandarizarZonaCanonica(zona);
@@ -158,10 +204,6 @@ export function registrarHandlersGlobales() {
         }
     };
 
-    /**
-     * Abre el lienzo de mapa interactivo enfocado exclusivamente en los waypoints de la zona.
-     * @param {string} zona - Nombre de la zona a enfocar
-     */
     window.verMapaZona = async function (zona) {
         if (!zona) return;
         const targetCanonico = estandarizarZonaCanonica(zona);
@@ -181,14 +223,6 @@ export function registrarHandlersGlobales() {
         }
     };
 
-    /**
-     * Mueve manualmente una parada hacia arriba (-1) o abajo (+1) dentro de su secuencia
-     * y recalcula atómicamente la pertenencia a clústeres/grupos.
-     * 
-     * @param {string} paradaId - ID de la parada a desplazar
-     * @param {string|number} direccion - Direccion: 'arriba', -1, 'abajo', 1
-     * @param {string} zonaNombre - Nombre de la zona contenedor
-     */
     window.reordenarParadaManual = async function (paradaId, direccion, zonaNombre) {
         if (!paradaId) return;
         const delta = (direccion === "arriba" || direccion === -1) ? -1 : 1;
@@ -196,10 +230,8 @@ export function registrarHandlersGlobales() {
         console.log(`>>> [REORDER_MANUAL]: Mover parada #${paradaId} (delta: ${delta}) en zona: ${targetCanonico}`);
 
         let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
-        
         if (!todasLasParadas || todasLasParadas.length === 0) return;
 
-        // 1. Filtrar paradas de la zona objetivo y ordenarlas por secuencia
         let paradasZona = todasLasParadas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
         paradasZona.sort((a, b) => parseInt(a.secuenciaZona || a.secuencia || 0, 10) - parseInt(b.secuenciaZona || b.secuencia || 0, 10));
 
@@ -207,13 +239,11 @@ export function registrarHandlersGlobales() {
         if (idxActual === -1) return;
 
         const idxNuevo = idxActual + delta;
-        if (idxNuevo < 0 || idxNuevo >= paradasZona.length) return; // Límites alcanzados
+        if (idxNuevo < 0 || idxNuevo >= paradasZona.length) return;
 
-        // 2. Intercambiar posiciones en el arreglo
         const itemMover = paradasZona.splice(idxActual, 1)[0];
         paradasZona.splice(idxNuevo, 0, itemMover);
 
-        // 3. Re-asignar secuenciaZona y grupoId de forma coordinada (Bloques de 4)
         const TAMANO_CLUSTER = 4;
         paradasZona.forEach((p, idx) => {
             const seq = idx + 1;
@@ -224,23 +254,23 @@ export function registrarHandlersGlobales() {
             p.grupoId = `GRUPO-${Math.ceil(seq / TAMANO_CLUSTER).toString().padStart(2, "0")}`;
         });
 
-        // 4. Reintegrar cambios a la colección global
         const mapaActualizados = new Map(paradasZona.map(p => [String(p.id || p.scc || p.ssc).trim(), p]));
         const listaGlobalActualizada = todasLasParadas.map(p => {
             const key = String(p.id || p.scc || p.ssc).trim();
             return mapaActualizados.has(key) ? mapaActualizados.get(key) : p;
         });
 
-        // 5. Persistir y actualizar memorias RAM globales
         await guardarRutaZonificada(listaGlobalActualizada);
         window.__CACHE_PARADAS_MACONDO__ = [...listaGlobalActualizada];
         window.paradasMemoriaLocal = [...listaGlobalActualizada];
         window.paradasRutaActiva = [...listaGlobalActualizada];
         window.pedidosGlobales = [...listaGlobalActualizada];
 
-        // 6. Redibujar trazado y refrescar la UI del acordeón
         if (typeof window.renderizarParadasZonificadasUI === "function") {
             await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
+        }
+        if (typeof window.refrescarConsolaOperacionesUI === "function") {
+            await window.refrescarConsolaOperacionesUI(listaGlobalActualizada);
         }
 
         if (typeof calcularRutaAisladaPorZona === "function") {
@@ -248,14 +278,13 @@ export function registrarHandlersGlobales() {
         }
     };
 
-    // Alias de compatibilidad global
     window.moverParadaManual = window.reordenarParadaManual;
 
     window.__RUTAS_HANDLERS_INITIALIZED__ = true;
     console.log("🟢 [RUTAS_HANDLERS]: Handlers globales de rutas inicializados correctamente.");
 }
 
-// Auto-inicialización de bindings en window
+// Auto-inicialización al importar el módulo ES6
 if (typeof window !== "undefined") {
     registrarHandlersGlobales();
 }

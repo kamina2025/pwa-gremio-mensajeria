@@ -1,11 +1,104 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA RENDERIZADOR DE INTERFAZ OPERACIONAL (TIRILLAS & ZONAS)
  * Ubicación: pwa-mensajero/modulos/mensajero-ui.js
- * Fachada principal modularizada y desacoplada para la consola operacional
+ * Fachada principal modularizada y desacoplada para la consola operacional y modales PWA
  */
 
 import { renderizarParadasZonificadasUI } from "./rutas/rutas-ui-acordeon.js";
 import { guardarRutaZonificada } from "./mensajero-persistencia.js";
+
+// =========================================================================
+// SECCIÓN 1: INMUNIZACIÓN ESTÁTICA Y EXPOSICIÓN DE HANDLERS DE MODALES UI
+// =========================================================================
+
+/**
+ * Registra incondicionalmente las funciones de apertura/cierre de modales en el objeto window.
+ * Esto previene errores 'TypeError: window.mostrarModalGestionParadaUI is not a function'
+ * provocados por la inyección dinámica de HTML en PWA.
+ */
+(function inmunizarModalesUIGlobales() {
+    window.mostrarModalImportarRutaUI = function () {
+        console.log("🖥️ [UI_MODAL]: Abriendo modal de importación de ruta.");
+        const modal = document.getElementById('modal-importar-ruta');
+        if (modal) {
+            if (typeof modal.showModal === "function") {
+                modal.showModal();
+            } else {
+                modal.style.display = "block";
+            }
+        } else {
+            console.warn("⚠️ [UI_MODAL]: Elemento #modal-importar-ruta no disponible en el DOM.");
+        }
+    };
+
+    window.cerrarModalImportarRutaUI = function () {
+        console.log("🖥️ [UI_MODAL]: Cerrando modal de importación de ruta.");
+        const modal = document.getElementById('modal-importar-ruta');
+        if (modal) {
+            if (typeof modal.close === "function") {
+                modal.close();
+            } else {
+                modal.style.display = "none";
+            }
+        }
+    };
+
+    window.ejecutarImportacionYRutaUI = async function () {
+        console.log("⚡ [UI_MODAL]: Ejecutando importación manual de ruta.");
+        if (typeof window.procesarCargaManualEnlace === "function") {
+            await window.procesarCargaManualEnlace();
+        } else {
+            console.warn("⚠️ [UI_MODAL]: La función 'procesarCargaManualEnlace' no está definida globalmente.");
+        }
+        window.cerrarModalImportarRutaUI();
+    };
+
+    window.mostrarModalGestionParadaUI = function () {
+        console.log("✏️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.");
+        const modal = document.getElementById('modal-gestion-parada');
+        if (modal) {
+            if (typeof modal.showModal === "function") {
+                modal.showModal();
+            } else {
+                modal.style.display = "block";
+            }
+        } else {
+            console.warn("⚠️ [UI_MODAL]: Elemento #modal-gestion-parada no disponible en el DOM.");
+        }
+    };
+
+    window.cerrarModalGestionParadaUI = function () {
+        console.log("✏️ [UI_MODAL]: Cerrando modal de gestión de parada.");
+        if (typeof window.limpiarFormularioParadaUI === "function") {
+            window.limpiarFormularioParadaUI();
+        }
+        const modal = document.getElementById('modal-gestion-parada');
+        if (modal) {
+            if (typeof modal.close === "function") {
+                modal.close();
+            } else {
+                modal.style.display = "none";
+            }
+        }
+    };
+
+    window.guardarYcerrarParadaManualUI = async function () {
+        console.log("💾 [UI_MODAL]: Guardando parada desde ventana modal.");
+        if (typeof window.guardarParadaManualUI === "function") {
+            await window.guardarParadaManualUI();
+        } else {
+            console.warn("⚠️ [UI_MODAL]: La función 'guardarParadaManualUI' no está definida globalmente.");
+        }
+        window.cerrarModalGestionParadaUI();
+    };
+
+    console.log("🟢 [MENSAJERO_UI]: Modales de UI e interfaces emergentes vinculados a window correctamente.");
+})();
+
+
+// =========================================================================
+// SECCIÓN 2: CONTROL DE ESTADO LOCAL Y MODULOS DEPENDIENTES
+// =========================================================================
 
 // Módulos dependientes cargados dinámicamente
 let actualizarPuntosEnMapaFn = null;
@@ -130,6 +223,10 @@ export function emitirHaptico(pattern = 30) {
     }
 }
 
+// =========================================================================
+// SECCIÓN 3: FUNCIONES DE RENDERIZADO DE CONSOLA Y ACCIONES OPERATIVAS
+// =========================================================================
+
 /**
  * Renderiza la consola de operaciones delegando acordeones a rutas-ui-acordeon.js.
  * @param {Array<Object>} listaPedidos 
@@ -237,7 +334,7 @@ export async function moverParadaSecuencia(idParada, delta) {
  * Activa la interfaz de edición rápida para una parada específica.
  */
 export function activarEdicionParadaUI(e, idx) {
-    if (e?.preventDefault) e.preventDefault();
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     console.log(`✏️ [MENSAJERO_UI]: Activando modo edición en interfaz para índice -> ${idx}`);
     emitirHaptico(20);
     const lectura = document.getElementById(`vista-lectura-${idx}`);
@@ -250,7 +347,7 @@ export function activarEdicionParadaUI(e, idx) {
  * Cancela el modo edición para una parada.
  */
 export function cancelarEdicionParadaUI(e, idx) {
-    if (e?.preventDefault) e.preventDefault();
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     console.log(`↩️ [MENSAJERO_UI]: Cancelando edición para índice -> ${idx}`);
     emitirHaptico(20);
     const lectura = document.getElementById(`vista-lectura-${idx}`);
@@ -263,7 +360,7 @@ export function cancelarEdicionParadaUI(e, idx) {
  * Guarda los cambios realizados en el formulario de edición rápida y persiste cambios local-first.
  */
 export async function guardarEdicionParadaUI(e, idx) {
-    if (e?.preventDefault) e.preventDefault();
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     console.log(`💾 [MENSAJERO_UI]: Guardando edición realizada en índice -> ${idx}`);
     emitirHaptico(40);
     
@@ -306,9 +403,9 @@ export async function guardarEdicionParadaUI(e, idx) {
  * Acepta evento e índice numérico o identificador de parada.
  */
 export async function eliminarParadaUI(e, idxOId) {
-    if (e?.preventDefault) e.preventDefault();
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     
-    // Determinar si idxOId es evento directo
+    // Determinar el target cuando el primer parámetro es el índice/ID directamente
     let target = idxOId;
     if (typeof e === "number" || typeof e === "string") {
         target = e;
@@ -376,7 +473,10 @@ export async function eliminarParadaUI(e, idxOId) {
     await renderizarConsolaOperaciones(paradasRestantes, 0, 0);
 }
 
-// --- BUS DE EVENTOS DE SINCRONIZACIÓN LOCAL-FIRST ---
+// =========================================================================
+// SECCIÓN 4: BUS DE EVENTOS DE SINCRONIZACIÓN LOCAL-FIRST & BINDINGS
+// =========================================================================
+
 window.addEventListener('sincronizacion:inicio', (e) => {
     const { taskId, totalItems } = e.detail || { taskId: 'sync-queue', totalItems: 1 };
     console.log(`🔄 [MENSAJERO_UI_EVENT]: Evento 'sincronizacion:inicio' capturado -> TaskID: ${taskId} | Total: ${totalItems}`);
@@ -445,7 +545,7 @@ window.addEventListener('sincronizacion:error', (e) => {
     }
 });
 
-// Bindings globales en Window con monitoreo completo
+// Bindings globales estáticos en el objeto window
 window.renderizarConsolaOperaciones = renderizarConsolaOperaciones;
 window.refrescarConsolaOperaciones = refrescarConsolaOperaciones;
 window.refrescarConsolaOperacionesUI = refrescarConsolaOperaciones;

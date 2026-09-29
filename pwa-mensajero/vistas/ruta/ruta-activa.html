@@ -14,74 +14,103 @@
 <!-- CONTENEDOR PRINCIPAL DE LA RUTA -->
 <div class="modulo-ruta-container" style="display: flex; flex-direction: column; gap: 10px;">
 
-    <!-- ACORDEÓN PARA CARGAR / PEGAR RUTA DESDE WHATSAPP O TELEGRAM -->
-    <section class="panel-maquina" style="border-color: var(--neon-purple, #b359ff); flex-shrink: 0;">
-        <details style="cursor: pointer">
-            <summary style="color: var(--neon-purple, #b359ff); font-weight: bold; font-size: 0.85rem">
+    <!-- BARRA DE ACCIONES RÁPIDAS (BOTONES DE APERTURA DE MODALES) -->
+    <section class="panel-maquina" style="display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0;">
+        <button 
+            type="button" 
+            class="btn-terminal btn-crypto" 
+            onclick="window.mostrarModalImportarRutaUI()" 
+            style="flex: 1; min-width: 200px; color: var(--neon-purple, #b359ff); border-color: var(--neon-purple, #b359ff);">
+            [📥] IMPORTAR RUTA (WA / TELEGRAM)
+        </button>
+        <button 
+            type="button" 
+            class="btn-terminal btn-crypto" 
+            onclick="window.mostrarModalGestionParadaUI()" 
+            style="flex: 1; min-width: 200px; color: var(--neon-green, #00ff66); border-color: var(--neon-green, #00ff66);">
+            [➕ / ✏️] GESTIÓN MANUAL DE PARADA
+        </button>
+    </section>
+
+    <!-- MODAL 1: CARGAR / PEGAR RUTA DESDE WHATSAPP O TELEGRAM -->
+    <dialog id="modal-importar-ruta" class="panel-maquina" style="border-color: var(--neon-purple, #b359ff); max-width: 500px; width: 90%; margin: auto; padding: 15px; background: rgba(10, 10, 15, 0.95); color: #fff;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--neon-purple, #b359ff); padding-bottom: 6px;">
+            <span style="color: var(--neon-purple, #b359ff); font-weight: bold; font-size: 0.9rem;">
                 [📥] CARGAR / PEGAR RUTA DESDE WHATSAPP O TELEGRAM
-            </summary>
-            <div style="margin-top: 10px">
-                <label class="label-consola" style="font-size: 0.75rem; color: #aaa">
-                    Pegue aquí la URL recibida por WhatsApp/Telegram o el manifiesto codificado:
-                </label>
-                <textarea
-                    id="txt-payload-manual"
-                    rows="3"
-                    class="input-terminal"
-                    placeholder="Ej: https://kamina2025.github.io/pwa-gremio-mensajeria/pwa-mensajero/?payload=%5B%7B..."></textarea>
+            </span>
+            <button type="button" onclick="window.cerrarModalImportarRutaUI()" style="background: transparent; border: none; color: #ff3366; font-weight: bold; cursor: pointer; font-size: 1.1rem;">[X]</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="label-consola" style="font-size: 0.75rem; color: #aaa">
+                Pegue aquí la URL recibida por WhatsApp/Telegram o el manifiesto codificado:
+            </label>
+            <textarea
+                id="txt-payload-manual"
+                rows="4"
+                class="input-terminal"
+                placeholder="Ej: https://kamina2025.github.io/pwa-gremio-mensajeria/pwa-mensajero/?payload=%5B%7B..."></textarea>
+            <div style="display: flex; gap: 8px; margin-top: 6px;">
                 <button
                     type="button"
                     class="btn-terminal btn-crypto"
-                    onclick="procesarCargaManualEnlace()"
-                    style="margin-top: 6px; width: 100%">
-                    [⚡] IMPORTAR Y ACTIVAR RUTA EN MI TERMINAL
+                    onclick="window.ejecutarImportacionYRutaUI()"
+                    style="flex: 2; color: var(--neon-purple, #b359ff); border-color: var(--neon-purple, #b359ff);">
+                    [⚡] IMPORTAR Y ACTIVAR RUTA
+                </button>
+                <button
+                    type="button"
+                    class="btn-terminal btn-crypto"
+                    onclick="window.cerrarModalImportarRutaUI()"
+                    style="flex: 1; color: #aaa; border-color: #555;">
+                    [CANCELAR]
                 </button>
             </div>
-        </details>
-    </section>
+        </div>
+    </dialog>
 
-    <!-- FORMULARIO ACORDEÓN PARA CREAR / EDITAR PARADA MANUALMENTE -->
-    <section class="panel-maquina" style="border-color: var(--neon-green, #00ff66); flex-shrink: 0;">
-        <details id="details-formulario-parada" style="cursor: pointer">
-            <summary style="color: var(--neon-green, #00ff66); font-weight: bold; font-size: 0.85rem">
-                [➕ / ✏️] GESTIÓN MANUAL DE PARADA (NUEVA O EDICIÓN)
-            </summary>
-            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px">
-                <input type="hidden" id="edit-parada-id" value="" />
+    <!-- MODAL 2: CREAR / EDITAR PARADA MANUALMENTE -->
+    <dialog id="modal-gestion-parada" class="panel-maquina" style="border-color: var(--neon-green, #00ff66); max-width: 500px; width: 90%; margin: auto; padding: 15px; background: rgba(10, 10, 15, 0.95); color: #fff;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--neon-green, #00ff66); padding-bottom: 6px;">
+            <span style="color: var(--neon-green, #00ff66); font-weight: bold; font-size: 0.9rem;">
+                [➕ / ✏️] GESTIÓN MANUAL DE PARADA
+            </span>
+            <button type="button" onclick="window.cerrarModalGestionParadaUI()" style="background: transparent; border: none; color: #ff3366; font-weight: bold; cursor: pointer; font-size: 1.1rem;">[X]</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+            <input type="hidden" id="edit-parada-id" value="" />
 
-                <input
-                    type="text"
-                    id="edit-parada-destinatario"
-                    class="input-terminal"
-                    placeholder="Nombre Destinatario" />
-                <input
-                    type="text"
-                    id="edit-parada-direccion"
-                    class="input-terminal"
-                    placeholder="Dirección de Entrega" />
-                <input type="text" id="edit-parada-telefono" class="input-terminal" placeholder="Teléfono Contacto" />
-                <input
-                    type="text"
-                    id="edit-parada-ssc"
-                    class="input-terminal"
-                    placeholder="SSC / No. Guía (Opcional)" />
-                <input
-                    type="text"
-                    id="edit-parada-cuota"
-                    class="input-terminal"
-                    placeholder="Cuota Moderadora / Copago" />
+            <input
+                type="text"
+                id="edit-parada-destinatario"
+                class="input-terminal"
+                placeholder="Nombre Destinatario" />
+            <input
+                type="text"
+                id="edit-parada-direccion"
+                class="input-terminal"
+                placeholder="Dirección de Entrega" />
+            <input type="text" id="edit-parada-telefono" class="input-terminal" placeholder="Teléfono Contacto" />
+            <input
+                type="text"
+                id="edit-parada-ssc"
+                class="input-terminal"
+                placeholder="SSC / No. Guía (Opcional)" />
+            <input
+                type="text"
+                id="edit-parada-cuota"
+                class="input-terminal"
+                placeholder="Cuota Moderadora / Copago" />
 
-                <div style="display: flex; gap: 8px; margin-top: 4px">
-                    <button type="button" class="btn-terminal btn-crypto" onclick="guardarParadaManualUI()" style="flex: 1">
-                        [💾] GUARDAR EN BASE LOCAL
-                    </button>
-                    <button type="button" class="btn-terminal btn-crypto" onclick="limpiarFormularioParadaUI()" style="flex: 1">
-                        [CANCELAR]
-                    </button>
-                </div>
+            <div style="display: flex; gap: 8px; margin-top: 6px">
+                <button type="button" class="btn-terminal btn-crypto" onclick="window.guardarYcerrarParadaManualUI()" style="flex: 1; color: var(--neon-green, #00ff66); border-color: var(--neon-green, #00ff66);">
+                    [💾] GUARDAR EN BASE LOCAL
+                </button>
+                <button type="button" class="btn-terminal btn-crypto" onclick="window.cerrarModalGestionParadaUI()" style="flex: 1; color: #aaa; border-color: #555;">
+                    [CANCELAR]
+                </button>
             </div>
-        </details>
-    </section>
+        </div>
+    </dialog>
 
     <!-- POOL DINÁMICA DE CONTRATOS DISPONIBLES -->
     <div id="pool-pedidos-dinamico" style="flex-shrink: 0;"></div>
@@ -95,7 +124,7 @@
                 <button type="button" onclick="window.ejecutarZonificacionAutomatica()" class="btn-terminal btn-crypto" style="color: #00e5ff; border-color: #00e5ff">
                     [🎨 ZONIFICAR]
                 </button>
-                <button type="button" onclick="purgarTodaLaRutaUI()" class="btn-terminal btn-crypto" style="color: #ff3366; border-color: #ff3366">
+                <button type="button" onclick="window.purgarTodaLaRutaUI()" class="btn-terminal btn-crypto" style="color: #ff3366; border-color: #ff3366">
                     [🗑️ BORRAR]
                 </button>
             </div>
@@ -108,3 +137,50 @@
     </section>
 
 </div>
+
+<!-- SCRIPT DE INMUNIZACIÓN INMEDIATA CONTRA RACES DE CARGA DE MÓDULOS -->
+<script>
+    (function () {
+        if (typeof window.mostrarModalGestionParadaUI !== "function") {
+            window.mostrarModalGestionParadaUI = function () {
+                console.log("🛡️ [INMUNIZADOR_INLINE]: Desplegando #modal-gestion-parada");
+                const m = document.getElementById('modal-gestion-parada');
+                if (m) typeof m.showModal === 'function' ? m.showModal() : m.style.display = 'block';
+            };
+        }
+        if (typeof window.cerrarModalGestionParadaUI !== "function") {
+            window.cerrarModalGestionParadaUI = function () {
+                console.log("🛡️ [INMUNIZADOR_INLINE]: Cerrando #modal-gestion-parada");
+                if (typeof window.limpiarFormularioParadaUI === "function") window.limpiarFormularioParadaUI();
+                const m = document.getElementById('modal-gestion-parada');
+                if (m) typeof m.close === 'function' ? m.close() : m.style.display = 'none';
+            };
+        }
+        if (typeof window.mostrarModalImportarRutaUI !== "function") {
+            window.mostrarModalImportarRutaUI = function () {
+                console.log("🛡️ [INMUNIZADOR_INLINE]: Desplegando #modal-importar-ruta");
+                const m = document.getElementById('modal-importar-ruta');
+                if (m) typeof m.showModal === 'function' ? m.showModal() : m.style.display = 'block';
+            };
+        }
+        if (typeof window.cerrarModalImportarRutaUI !== "function") {
+            window.cerrarModalImportarRutaUI = function () {
+                console.log("🛡️ [INMUNIZADOR_INLINE]: Cerrando #modal-importar-ruta");
+                const m = document.getElementById('modal-importar-ruta');
+                if (m) typeof m.close === 'function' ? m.close() : m.style.display = 'none';
+            };
+        }
+        if (typeof window.ejecutarImportacionYRutaUI !== "function") {
+            window.ejecutarImportacionYRutaUI = async function () {
+                if (typeof window.procesarCargaManualEnlace === 'function') await window.procesarCargaManualEnlace();
+                window.cerrarModalImportarRutaUI();
+            };
+        }
+        if (typeof window.guardarYcerrarParadaManualUI !== "function") {
+            window.guardarYcerrarParadaManualUI = async function () {
+                if (typeof window.guardarParadaManualUI === 'function') await window.guardarParadaManualUI();
+                window.cerrarModalGestionParadaUI();
+            };
+        }
+    })();
+</script>

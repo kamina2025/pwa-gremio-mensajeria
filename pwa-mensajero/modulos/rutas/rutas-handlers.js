@@ -13,11 +13,6 @@ import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zon
  * Registra y expone los controladores de eventos globales de rutas en el objeto window.
  */
 export function registrarHandlersGlobales() {
-    // Protección contra doble inicialización y duplicación de eventos en window
-    if (window.__RUTAS_HANDLERS_INITIALIZED__) {
-        console.log("ℹ️ [RUTAS_HANDLERS]: Handlers globales ya inicializados previamente. Omitiendo duplicación.");
-        return;
-    }
 
     /**
      * Inicia la navegación táctica e aislamiento de mapa para una zona específica.
@@ -61,7 +56,7 @@ export function registrarHandlersGlobales() {
             // 1. Cargar paradas almacenadas con fallback resiliente
             let todasLasParadas = await obtenerParadasGuardadas();
             if (!Array.isArray(todasLasParadas) || todasLasParadas.length === 0) {
-                todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
+                todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || [];
             }
 
             // 2. Filtrar paradas de la zona objetivo
@@ -87,7 +82,7 @@ export function registrarHandlersGlobales() {
             // 4. Ejecutar algoritmo de optimización jerárquico por proximidad
             const secuenciaResultante = await optimizarRutaPorProximidadZona(targetCanonico, paradaInicio, paradaFin);
 
-            // 5. Refrescar interfaces de usuario y forzar re-trazado sobre el mapa
+            // 5. Refrescar interfaces de usuario y forzar re-trazado sobre el mapa por las calles
             const paradasReordenadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || [];
 
             console.log("🎨 [OPTIMIZAR_HANDLERS]: Re-renderizando acordeones y mapa en caliente...");
@@ -98,10 +93,8 @@ export function registrarHandlersGlobales() {
                 await window.refrescarConsolaOperacionesUI(paradasReordenadas);
             }
 
-            // Forzar el aislamiento y trazado por calles en el mapa
-            if (typeof calcularRutaAisladaPorZona === "function") {
-                await calcularRutaAisladaPorZona(targetCanonico, true);
-            }
+            // Forzar el aislamiento y trazado por calles en el mapa con romper de caché
+            await calcularRutaAisladaPorZona(targetCanonico, true);
 
             console.groupEnd();
             return secuenciaResultante;
@@ -128,9 +121,7 @@ export function registrarHandlersGlobales() {
             if (typeof window.renderizarParadasZonificadasUI === "function") {
                 await window.renderizarParadasZonificadasUI(resultado);
             }
-            if (typeof calcularRutaAisladaPorZona === "function") {
-                await calcularRutaAisladaPorZona(targetCanonico, true);
-            }
+            await calcularRutaAisladaPorZona(targetCanonico, true);
             return resultado;
         }
     };
@@ -220,8 +211,8 @@ export function registrarHandlersGlobales() {
             p.secuenciaZona = seq;
             p.secuencia = seq;
             p.orden = seq;
-            p.updated_at = new Date().toISOString();
             p.grupoId = `GRUPO-${Math.ceil(seq / TAMANO_CLUSTER).toString().padStart(2, "0")}`;
+            p.updated_at = new Date().toISOString();
         });
 
         // 4. Reintegrar cambios a la colección global
@@ -243,15 +234,12 @@ export function registrarHandlersGlobales() {
             await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
         }
 
-        if (typeof calcularRutaAisladaPorZona === "function") {
-            await calcularRutaAisladaPorZona(targetCanonico, true);
-        }
+        await calcularRutaAisladaPorZona(targetCanonico, true);
     };
 
     // Alias de compatibilidad global
     window.moverParadaManual = window.reordenarParadaManual;
 
-    window.__RUTAS_HANDLERS_INITIALIZED__ = true;
     console.log("🟢 [RUTAS_HANDLERS]: Handlers globales de rutas inicializados correctamente.");
 }
 

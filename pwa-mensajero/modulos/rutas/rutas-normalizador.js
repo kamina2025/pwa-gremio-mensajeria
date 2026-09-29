@@ -1,7 +1,6 @@
 /**
  * PROTOCOLO MACONDO - NORMALIZADOR DE RUTAS, PAYLOADS Y ORDENAMIENTO
- * Ubicación: pwa-mensajero/modulos/rutas/rutas-normalizador.js
- * Arquitectura: Local-First / Sincronización Primaria con IndexedDB
+ * Ubicación: modulos/rutas/rutas-normalizador.js
  */
 
 import { guardarRutaZonificada, obtenerParadasGuardadas } from "../mensajero-persistencia.js";
@@ -52,81 +51,73 @@ export function ordenarParadasPorSecuencia(paradas) {
 export function normalizarYOrdenarColeccionParadas(listaParadasRaw) {
     if (!Array.isArray(listaParadasRaw)) return [];
 
-    const paradasNormalizadas = listaParadasRaw
-        .filter(p => p && typeof p === "object") // Filtrar elementos nulos o corruptos
-        .map((p, idx) => {
-            const secuenciaCalculada = parseInt(p.secuenciaZona || p.orden || p.secuencia || (idx + 1), 10);
-            const claveCanonica = estandarizarZonaCanonica(p.zonaKey || p.nombreZona || p.zona || p.zonaNombre);
-            
-            // Homologación de atributos de cliente/destinatario para búsquedas
-            const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "CLIENTE N/A";
-            const direccionTexto = p.direccion || p.dir || p.direccion_entrega || "SIN DIRECCIÓN";
-            const telefonoTexto = p.telefono || p.tel || p.celular || "N/A";
+    const paradasNormalizadas = listaParadasRaw.map((p, idx) => {
+        const secuenciaCalculada = parseInt(p.secuenciaZona || p.orden || p.secuencia || (idx + 1), 10);
+        const claveCanonica = estandarizarZonaCanonica(p.zonaKey || p.nombreZona || p.zona || p.zonaNombre);
+        
+        // Homologación de atributos de cliente/destinatario para búsquedas
+        const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "CLIENTE N/A";
+        const direccionTexto = p.direccion || p.dir || p.direccion_entrega || "SIN DIRECCIÓN";
+        const telefonoTexto = p.telefono || p.tel || p.celular || "N/A";
 
-            return {
-                ...p,
-                id: p.id || p.ssc || p.idParada || `#PNT-${secuenciaCalculada}`,
-                destinatario: nombreCliente,
-                cliente: nombreCliente,
-                nombre_cliente: nombreCliente,
-                direccion: direccionTexto,
-                dir: direccionTexto,
-                telefono: telefonoTexto,
-                lat: p.lat || p.latitud || null,
-                lng: p.lng || p.longitud || null,
-                zona: claveCanonica,
-                zonaKey: normalizarClaveZona(claveCanonica),
-                nombreZona: `ZONA ${claveCanonica}`,
-                zonaNombre: `ZONA ${claveCanonica}`,
-                secuencia: secuenciaCalculada,
-                secuenciaZona: secuenciaCalculada,
-                orden: secuenciaCalculada,
-                estado: (p.estado || "ASIGNADO").toUpperCase(),
-                registroOperaciones: p.registroOperaciones || {}
-            };
-        });
+        return {
+            ...p,
+            id: p.id || p.ssc || p.idParada || `#PNT-${secuenciaCalculada}`,
+            destinatario: nombreCliente,
+            cliente: nombreCliente,
+            nombre_cliente: nombreCliente,
+            direccion: direccionTexto,
+            dir: direccionTexto,
+            telefono: telefonoTexto,
+            lat: p.lat || p.latitud || null,
+            lng: p.lng || p.longitud || null,
+            zona: claveCanonica,
+            zonaKey: normalizarClaveZona(claveCanonica),
+            nombreZona: `ZONA ${claveCanonica}`,
+            zonaNombre: `ZONA ${claveCanonica}`,
+            secuencia: secuenciaCalculada,
+            secuenciaZona: secuenciaCalculada,
+            orden: secuenciaCalculada,
+            estado: (p.estado || "ASIGNADO").toUpperCase(),
+            registroOperaciones: p.registroOperaciones || {}
+        };
+    });
 
     return ordenarParadasPorSecuencia(paradasNormalizadas);
 }
 
 /**
- * Procesa la carga inicial de paradas respetando prioritariamente IndexedDB local.
- * Si existen datos locales guardados, se utilizan para evitar sobreescribir borrados con el payload URL.
+ * Procesa la carga inicial de paradas desde la URL (payload=) o lee la persistencia local IndexedDB
+ * asegurando el orden numérico estricto y la sincronización con variables de memoria global.
  * 
  * @returns {Promise<Array<Object>>}
  */
 export async function procesarPayloadOStorage() {
     console.log(">>> [RUTAS]: Evaluando origen de datos (URL Payload vs IndexedDB Local)...");
-    
     let listaPedidos = [];
-    const paradasGuardadasLocal = await obtenerParadasGuardadas();
+    const urlParams = new URLSearchParams(window.location.search);
+    const payloadRaw = urlParams.get("payload");
 
-    // 1. Prioridad Local-First: Si ya hay datos en IndexedDB, respetarlos (incluso si son menos paradas por borrados)
-    if (Array.isArray(paradasGuardadasLocal) && paradasGuardadasLocal.length > 0) {
-        console.log(`💾 [RUTAS_NORMALIZADOR]: Datos locales detectados en IndexedDB (${paradasGuardadasLocal.length} paradas). Priorizando Local-First.`);
-        listaPedidos = normalizarYOrdenarColeccionParadas(paradasGuardadasLocal);
-    } else {
-        // 2. Fallback: Si IndexedDB está vacío, intentar leer Payload de URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const payloadRaw = urlParams.get("payload");
-
-        if (payloadRaw) {
-            try {
-                const parsed = JSON.parse(decodeURIComponent(payloadRaw));
-                listaPedidos = normalizarYOrdenarColeccionParadas(parsed);
-                await guardarRutaZonificada(listaPedidos);
-                console.log(`📥 [RUTAS_NORMALIZADOR]: Payload de URL procesado, ordenado y guardado: ${listaPedidos.length} paradas.`);
-            } catch (e) {
-                console.error("❌ [PAYLOAD_ERROR]: Error procesando payload URL:", e);
-                listaPedidos = [];
-            }
+    if (payloadRaw) {
+        try {
+            const parsed = JSON.parse(decodeURIComponent(payloadRaw));
+            listaPedidos = normalizarYOrdenarColeccionParadas(parsed);
+            await guardarRutaZonificada(listaPedidos);
+            console.log(`>>> [RUTAS] Payload de URL procesado, ordenado y guardado: ${listaPedidos.length} paradas.`);
+        } catch (e) {
+            console.error(">>> [PAYLOAD_ERROR]: Error procesando payload URL, recayendo a IndexedDB:", e);
+            const guardadas = await obtenerParadasGuardadas();
+            listaPedidos = normalizarYOrdenarColeccionParadas(guardadas || []);
         }
+    } else {
+        const guardadas = await obtenerParadasGuardadas();
+        listaPedidos = normalizarYOrdenarColeccionParadas(guardadas || []);
     }
 
     // Asegurar ordenamiento físico antes de devolver al orquestador
     const listaOrdenada = ordenarParadasPorSecuencia(listaPedidos);
     
-    // Asignación explícita y sincronizada a las 4 memorias de sesión para Local-First
+    // Asignación explícita a memorias de sesión para Local-First
     window.__CACHE_PARADAS_MACONDO__ = [...listaOrdenada];
     window.paradasMemoriaLocal = [...listaOrdenada];
     window.paradasRutaActiva = [...listaOrdenada];
@@ -162,10 +153,7 @@ export async function buscarIndiceActivo(listaPedidosRaw) {
 }
 
 // Bindings globales inmediatos para compatibilidad desacoplada
-if (typeof window !== "undefined") {
-    window.ordenarParadasPorSecuencia = ordenarParadasPorSecuencia;
-    window.normalizarYOrdenarColeccionParadas = normalizarYOrdenarColeccionParadas;
-    window.procesarPayloadOStorage = procesarPayloadOStorage;
-    window.normalizarYObtenerParadasActivas = procesarPayloadOStorage; // Alias de compatibilidad
-    window.normalizarClaveZona = normalizarClaveZona;
-}
+window.ordenarParadasPorSecuencia = ordenarParadasPorSecuencia;
+window.normalizarYOrdenarColeccionParadas = normalizarYOrdenarColeccionParadas;
+window.procesarPayloadOStorage = procesarPayloadOStorage;
+window.normalizarClaveZona = normalizarClaveZona;

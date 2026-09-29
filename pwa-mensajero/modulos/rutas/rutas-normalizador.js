@@ -14,13 +14,13 @@ import { estandarizarZonaCanonica } from "../mapa/zonificacion/estandar-zonas.js
  * @returns {string} Clave limpia estandarizada
  */
 export function normalizarClaveZona(zonaRaw) {
-    if (!zonaRaw || typeof zonaRaw !== "string") return "";
+    if (!zonaRaw || typeof zonaRaw !== "string") return "GENERAL";
     
     let limpia = zonaRaw.trim().toLowerCase();
     limpia = limpia.replace(/^zona[_\s-]*/i, "");
     limpia = limpia.replace(/\s+/g, "-").replace(/_/g, "-");
 
-    return limpia;
+    return limpia ? limpia.toUpperCase() : "GENERAL";
 }
 
 /**
@@ -60,12 +60,14 @@ export function normalizarYOrdenarColeccionParadas(listaParadasRaw) {
             const claveCanonica = estandarizarZonaCanonica(p.zonaKey || p.nombreZona || p.zona || p.zonaNombre);
             
             // Homologación de identificadores únicos (Biyectiva)
-            const idUnico = String(p.id || p.ssc || p.idParada || `#PNT-${secuenciaCalculada}`).trim();
+            const idUnico = String(p.id || p.ssc || p.scc || p.idParada || `#PNT-${secuenciaCalculada}`).trim();
 
             // Homologación de atributos de cliente/destinatario para búsquedas
             const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "CLIENTE N/A";
             const direccionTexto = p.direccion || p.dir || p.direccion_entrega || "SIN DIRECCIÓN";
             const telefonoTexto = p.telefono || p.tel || p.celular || "N/A";
+            const cuotaValor = p.cuotaModeradora || p.copago || p.cuota || "";
+            const notasTexto = p.observaciones || p.notas || "";
 
             // Preservar el estado mutado (soporta estado y status)
             const estadoBruto = p.estado || p.status || "ASIGNADO";
@@ -75,13 +77,19 @@ export function normalizarYOrdenarColeccionParadas(listaParadasRaw) {
             return {
                 ...p,
                 id: idUnico,
-                ssc: p.ssc || idUnico,
+                ssc: p.ssc || p.scc || idUnico,
+                scc: p.scc || p.ssc || idUnico,
                 destinatario: nombreCliente,
                 cliente: nombreCliente,
                 nombre_cliente: nombreCliente,
                 direccion: direccionTexto,
                 dir: direccionTexto,
                 telefono: telefonoTexto,
+                tel: telefonoTexto,
+                cuotaModeradora: cuotaValor,
+                copago: cuotaValor,
+                observaciones: notasTexto,
+                notas: notasTexto,
                 lat: p.lat || p.latitud || null,
                 lng: p.lng || p.longitud || null,
                 zona: claveCanonica,
@@ -110,16 +118,22 @@ export async function procesarPayloadOStorage() {
     console.log(">>> [RUTAS]: Evaluando origen de datos (URL Payload vs IndexedDB Local)...");
     
     let listaPedidos = [];
-    const paradasGuardadasLocal = await obtenerParadasGuardadas();
+    let paradasGuardadasLocal = [];
 
-    // 1. Prioridad Local-First: Si ya hay datos en IndexedDB, respetarlos
+    try {
+        paradasGuardadasLocal = await obtenerParadasGuardadas();
+    } catch (e) {
+        console.warn("⚠️ [RUTAS_NORMALIZADOR]: Fallo al consultar IndexedDB local:", e);
+    }
+
+    // 1. Prioridad Local-First: Si ya hay datos en IndexedDB, respetarlos prioritariamente
     if (Array.isArray(paradasGuardadasLocal) && paradasGuardadasLocal.length > 0) {
         console.log(`💾 [RUTAS_NORMALIZADOR]: Datos locales detectados en IndexedDB (${paradasGuardadasLocal.length} paradas). Priorizando Local-First.`);
         listaPedidos = normalizarYOrdenarColeccionParadas(paradasGuardadasLocal);
     } else {
         // 2. Fallback: Si IndexedDB está vacío, intentar leer Payload de URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const payloadRaw = urlParams.get("payload");
+        const urlParams = typeof window !== "undefined" && window.location ? new URLSearchParams(window.location.search) : null;
+        const payloadRaw = urlParams ? urlParams.get("payload") : null;
 
         if (payloadRaw) {
             try {
@@ -131,6 +145,9 @@ export async function procesarPayloadOStorage() {
                 console.error("❌ [PAYLOAD_ERROR]: Error procesando payload URL:", e);
                 listaPedidos = [];
             }
+        } else {
+            console.log("ℹ️ [RUTAS_NORMALIZADOR]: No hay datos locales ni payload en URL. Se mantiene lista vacía.");
+            listaPedidos = [];
         }
     }
 
@@ -138,15 +155,17 @@ export async function procesarPayloadOStorage() {
     const listaOrdenada = ordenarParadasPorSecuencia(listaPedidos);
     
     // Asignación explícita y sincronizada a las 4 memorias de sesión para Local-First
-    window.__CACHE_PARADAS_MACONDO__ = [...listaOrdenada];
-    window.paradasMemoriaLocal = [...listaOrdenada];
-    window.paradasRutaActiva = [...listaOrdenada];
-    window.pedidosGlobales = [...listaOrdenada];
+    if (typeof window !== "undefined") {
+        window.__CACHE_PARADAS_MACONDO__ = [...listaOrdenada];
+        window.paradasMemoriaLocal = [...listaOrdenada];
+        window.paradasRutaActiva = [...listaOrdenada];
+        window.pedidosGlobales = [...listaOrdenada];
 
-    try {
-        localStorage.setItem("ruta_zonificada", JSON.stringify(listaOrdenada));
-    } catch (err) {
-        console.warn("⚠️ [RUTAS_NORMALIZADOR]: No se pudo actualizar localStorage de respaldo:", err);
+        try {
+            localStorage.setItem("ruta_zonificada", JSON.stringify(listaOrdenada));
+        } catch (err) {
+            console.warn("⚠️ [RUTAS_NORMALIZADOR]: No se pudo actualizar localStorage de respaldo:", err);
+        }
     }
 
     console.log(`✅ [RUTAS_NORMALIZADOR]: ${listaOrdenada.length} paradas listas y sincronizadas en memoria activa.`);
@@ -163,7 +182,7 @@ export async function procesarPayloadOStorage() {
 export async function buscarIndiceActivo(listaPedidosRaw) {
     let listaPedidos = await Promise.resolve(listaPedidosRaw);
 
-    if (!listaPedidos || typeof listaPedidos.then === "function") {
+    if (!listaPedidos || typeof listaPedidos.then === "function" || !Array.isArray(listaPedidos)) {
         listaPedidos = await obtenerParadasGuardadas();
     }
 
@@ -174,10 +193,10 @@ export async function buscarIndiceActivo(listaPedidosRaw) {
     const index = listaPedidos.findIndex((p) => {
         if (!p) return false;
         const est = String(p.estado || p.status || "").toUpperCase();
-        return est !== "FINALIZADO" && est !== "NOVEDAD" && est !== "ENTREGADO";
+        return est !== "FINALIZADO" && est !== "NOVEDAD" && est !== "ENTREGADO" && est !== "CANCELADO";
     });
 
-    return index !== -1 ? index : listaPedidos.length - 1;
+    return index !== -1 ? index : 0;
 }
 
 // Bindings globales inmediatos para compatibilidad desacoplada
@@ -185,6 +204,7 @@ if (typeof window !== "undefined") {
     window.ordenarParadasPorSecuencia = ordenarParadasPorSecuencia;
     window.normalizarYOrdenarColeccionParadas = normalizarYOrdenarColeccionParadas;
     window.procesarPayloadOStorage = procesarPayloadOStorage;
+    window.evaluarOrigenDatos = procesarPayloadOStorage; // Alias de compatibilidad
     window.normalizarYObtenerParadasActivas = procesarPayloadOStorage; // Alias de compatibilidad
     window.normalizarClaveZona = normalizarClaveZona;
     window.buscarIndiceActivo = buscarIndiceActivo;

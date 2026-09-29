@@ -46,15 +46,25 @@ export function vincularHandlersModalesGlobales() {
         window.cerrarModalImportarRutaUI();
     };
 
-    window.mostrarModalGestionParadaUI = function () {
-        console.log("✏️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.");
-        const modal = document.getElementById('modal-gestion-parada');
+    window.mostrarModalGestionParadaUI = function (datosParada = null) {
+        console.log("✏️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.", datosParada || "Nueva Parada");
+        const modal = document.getElementById('modal-gestion-parada') || document.getElementById('modal-formulario-parada') || document.getElementById('modal-editar-parada');
+        
         if (modal) {
+            if (datosParada && typeof window.precargarFormularioParadaUI === "function") {
+                window.precargarFormularioParadaUI(datosParada);
+            } else if (typeof window.limpiarFormularioParadaUI === "function") {
+                window.limpiarFormularioParadaUI();
+            }
+
             if (typeof modal.showModal === "function") {
                 modal.showModal();
             } else {
                 modal.style.display = "block";
+                modal.classList.add("active", "show");
             }
+        } else {
+            console.warn("⚠️ [UI_MODAL]: No se encontró el contenedor modal de gestión de parada en el DOM.");
         }
     };
 
@@ -63,12 +73,13 @@ export function vincularHandlersModalesGlobales() {
         if (typeof window.limpiarFormularioParadaUI === "function") {
             window.limpiarFormularioParadaUI();
         }
-        const modal = document.getElementById('modal-gestion-parada');
+        const modal = document.getElementById('modal-gestion-parada') || document.getElementById('modal-formulario-parada') || document.getElementById('modal-editar-parada');
         if (modal) {
             if (typeof modal.close === "function") {
                 modal.close();
             } else {
                 modal.style.display = "none";
+                modal.classList.remove("active", "show");
             }
         }
     };
@@ -276,6 +287,42 @@ export function registrarHandlersGlobales() {
         if (typeof calcularRutaAisladaPorZona === "function") {
             await calcularRutaAisladaPorZona(targetCanonico, true);
         }
+    };
+
+    /**
+     * Handler para abrir el modal de gestión manual cargando la información de la parada.
+     * @param {string|Object} paradaOId - ID o directamente el objeto de la parada
+     * @param {string} zonaNombre - Zona de origen
+     */
+    window.editarParadaManual = async function (paradaOId, zonaNombre = "") {
+        console.log(`✏️ [EDITAR_PARADA_HANDLERS]: Solicitando edición para:`, paradaOId);
+
+        let paradaTarget = null;
+
+        if (typeof paradaOId === "object" && paradaOId !== null) {
+            paradaTarget = paradaOId;
+        } else {
+            const cleanId = String(paradaOId || "").replace(/^[#PNT-]+/i, "").trim();
+            let todas = await obtenerParadasGuardadas();
+            if (!Array.isArray(todas) || todas.length === 0) {
+                todas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || [];
+            }
+
+            paradaTarget = todas.find(p => {
+                if (!p) return false;
+                const idActual = String(p.id || p.ssc || p.scc || p.idParada || "").replace(/^[#PNT-]+/i, "").trim();
+                return idActual === cleanId;
+            });
+        }
+
+        if (!paradaTarget) {
+            console.error(`❌ [EDITAR_PARADA_HANDLERS]: No se pudo localizar el objeto de la parada.`);
+            window.mostrarModalGestionParadaUI(paradaOId);
+            return;
+        }
+
+        console.log("📄 [EDITAR_PARADA_HANDLERS]: Objeto parada localizado:", paradaTarget);
+        window.mostrarModalGestionParadaUI(paradaTarget);
     };
 
     window.moverParadaManual = window.reordenarParadaManual;

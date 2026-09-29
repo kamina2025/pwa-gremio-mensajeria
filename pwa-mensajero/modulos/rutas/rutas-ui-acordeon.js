@@ -182,10 +182,10 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
                         </div>
                     </div>
                     <div class="btn-group-reorder" style="display:flex; gap:3px;">
-                        <button type="button" class="btn-reorder" data-action="subir" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">▲</button>
-                        <button type="button" class="btn-reorder" data-action="bajar" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">▼</button>
-                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ffb300; color: #ffb300; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;" data-action="editar" data-id="${rawId}">✏️</button>
-                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ff3366; color: #ff3366; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;" data-action="eliminar" data-id="${rawId}">🗑️</button>
+                        <button type="button" class="btn-reorder" data-action="subir" data-accion-parada="subir" data-id="${rawId}" data-parada-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">▲</button>
+                        <button type="button" class="btn-reorder" data-action="bajar" data-accion-parada="bajar" data-id="${rawId}" data-parada-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">▼</button>
+                        <button type="button" class="btn-reorder" data-action="editar" data-accion-parada="editar" data-id="${rawId}" data-parada-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; border-color: #ffb300; color: #ffb300; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">✏️</button>
+                        <button type="button" class="btn-reorder" data-action="eliminar" data-accion-parada="eliminar" data-id="${rawId}" data-parada-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; border-color: #ff3366; color: #ff3366; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">🗑️</button>
                     </div>
                 </div>
             `;
@@ -215,7 +215,6 @@ function ejecutarNavegacionTransicion(targetContainer) {
 
     const selectorLimpio = targetContainer.replace("#", "");
 
-    // 1. Invocar enrutadores globales PWA con selector limpio y con id selector
     if (typeof window.alternarVista === "function") {
         window.alternarVista(selectorLimpio);
         window.alternarVista(targetContainer);
@@ -223,7 +222,6 @@ function ejecutarNavegacionTransicion(targetContainer) {
         window.navegarA(targetContainer);
     }
 
-    // 2. Fallback de desocultamiento directo en el DOM para el nodo objetivo
     const nodoMapa = document.getElementById(selectorLimpio) || document.querySelector(targetContainer);
     if (nodoMapa) {
         document.querySelectorAll(".contenedor-pestana, .vista-pantalla, .pestana-contenido").forEach((el) => {
@@ -236,7 +234,6 @@ function ejecutarNavegacionTransicion(targetContainer) {
         nodoMapa.classList.add("activa");
     }
 
-    // 3. Notificar redimensionamiento y refrescar Google Maps
     setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
         if (typeof window.refrescarMapaPWA === "function") {
@@ -254,9 +251,9 @@ function vincularEventosGlobalesAcciones(contenedor) {
         const btn = e.target.closest("button");
         if (!btn) return;
 
-        const action = btn.dataset.action;
+        const action = btn.dataset.action || btn.dataset.accionParada;
         const zona = btn.dataset.zona || localStorage.getItem("zona_activa_operacion") || "GENERAL";
-        const id = btn.dataset.id;
+        const id = btn.dataset.id || btn.dataset.paradaId;
 
         localStorage.setItem("zona_activa_operacion", zona);
         window.zonaActivaOperacion = zona;
@@ -322,24 +319,35 @@ function vincularEventosGlobalesAcciones(contenedor) {
                 break;
 
             case "subir":
+            case "arriba":
                 if (typeof window.moverParadaManual === "function") {
                     window.moverParadaManual(id, -1, zona);
                 }
                 break;
 
             case "bajar":
+            case "abajo":
                 if (typeof window.moverParadaManual === "function") {
                     window.moverParadaManual(id, 1, zona);
                 }
                 break;
 
             case "editar":
-                if (typeof window.editarParadaUI === "function") {
+            case "modificar":
+                console.log(`✏️ [RUTAS_UI_ACTION]: Invocando apertura de modal de gestión manual para ID: ${id}`);
+                if (typeof window.editarParadaManual === "function") {
+                    await window.editarParadaManual(id, zona);
+                } else if (typeof window.mostrarModalGestionParadaUI === "function") {
+                    window.mostrarModalGestionParadaUI(id);
+                } else if (typeof window.editarParadaUI === "function") {
                     window.editarParadaUI(id);
+                } else {
+                    console.warn("⚠️ [RUTAS_UI_ACTION]: No se encontró una función de apertura de modal registrada en window.");
                 }
                 break;
 
             case "eliminar":
+            case "borrar":
                 if (typeof window.eliminarParadaUI === "function") {
                     window.eliminarParadaUI(e, id);
                 }

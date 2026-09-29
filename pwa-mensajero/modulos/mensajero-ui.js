@@ -5,6 +5,7 @@
  */
 
 import { renderizarParadasZonificadasUI } from "./rutas/rutas-ui-acordeon.js";
+import { guardarRutaZonificada } from "./mensajero-persistencia.js";
 
 // Módulos dependientes cargados dinámicamente
 let actualizarPuntosEnMapaFn = null;
@@ -17,6 +18,19 @@ let ejecutarZonificacionAutomaticaUIFn = null;
 let moverParadaSecuenciaUIFn = null;
 
 let paradasMemoriaLocal = [];
+
+/**
+ * Normaliza y compara dos identificadores de parada eliminando prefijos tipo #PNT-.
+ * @param {string|number} idA 
+ * @param {string|number} idB 
+ * @returns {boolean}
+ */
+function compararIdsParada(idA, idB) {
+    if (!idA || !idB) return false;
+    const normA = String(idA).replace(/^[#PNT-]+/i, '').trim();
+    const normB = String(idB).replace(/^[#PNT-]+/i, '').trim();
+    return normA === normB || String(idA).trim() === String(idB).trim();
+}
 
 /**
  * Carga dinámica de módulos para compatibilidad con scripts tradicionales y módulos ES6.
@@ -84,7 +98,7 @@ function resolverFn(fnModulo, nombreGlobal) {
 }
 
 /**
- * Sincroniza las referencias globales en memoria RAM y LocalStorage (Single Source of Truth)
+ * Sincroniza las referencias globales en memoria RAM, LocalStorage e IndexedDB
  * @param {Array<Object>} listaActualizada 
  */
 function sincronizarMemoriasGlobales(listaActualizada) {
@@ -194,7 +208,10 @@ export async function ejecutarZonificacionAutomatica() {
     if (typeof zonifFn === "function") {
         const resultado = await zonifFn(paradasMemoriaLocal, (p) => renderizarConsolaOperaciones(p, 0, 0));
         sincronizarMemoriasGlobales(resultado);
-        console.log("✅ [MENSAJERO_UI]: Zonificación automática completada.");
+        if (typeof guardarRutaZonificada === "function") {
+            await guardarRutaZonificada(resultado);
+        }
+        console.log("✅ [MENSAJERO_UI]: Zonificación automática completada y persistida.");
     } else {
         console.warn("⚠️ [MENSAJERO_UI]: Función 'ejecutarZonificacionAutomatica' no disponible.");
     }
@@ -272,8 +289,12 @@ export async function guardarEdicionParadaUI(e, idx) {
             }
         }
 
+        if (typeof guardarRutaZonificada === "function") {
+            await guardarRutaZonificada(paradasMemoriaLocal);
+        }
+
         sincronizarMemoriasGlobales(paradasMemoriaLocal);
-        console.log("✅ [MENSAJERO_UI]: Cambios guardados en LocalStorage/RAM. Refrescando UI...");
+        console.log("✅ [MENSAJERO_UI]: Cambios guardados en LocalStorage/IndexedDB/RAM. Refrescando UI...");
         renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0);
     } else {
         console.error(`❌ [MENSAJERO_UI]: No se encontró la parada en memoria para el índice -> ${idx}`);
@@ -282,46 +303,77 @@ export async function guardarEdicionParadaUI(e, idx) {
 
 /**
  * Elimina una parada de la secuencia local y re-secuencia los registros restantes.
+ * Acepta evento e índice numérico o identificador de parada.
  */
-export async function eliminarParadaUI(e, idx) {
+export async function eliminarParadaUI(e, idxOId) {
     if (e?.preventDefault) e.preventDefault();
-    console.log(`🗑️ [MENSAJERO_UI]: Solicitud para eliminar parada en índice -> ${idx}`);
+    
+    // Determinar si idxOId es evento directo
+    let target = idxOId;
+    if (typeof e === "number" || typeof e === "string") {
+        target = e;
+    }
+
+    console.log(`🗑️ [MENSAJERO_UI]: Solicitud para eliminar parada -> ${target}`);
     emitirHaptico([50, 30, 50]);
     
-    if (!confirm("¿Desea eliminar esta parada de la ruta?")) {
+    if (typeof window !== "undefined" && window.confirm && !confirm("¿Desea eliminar esta parada de la ruta?")) {
         console.log("❌ [MENSAJERO_UI]: Eliminación cancelada por el usuario.");
         return;
     }
 
-    const paradaEliminada = paradasMemoriaLocal.splice(idx, 1);
-    console.log("🗑️ [MENSAJERO_UI]: Parada removida de memoria local:", paradaEliminada[0]);
+    let paradaRemovida = null;
+    let paradasRestantes = [];
 
-    if (paradaEliminada[0]?.id && dbStore && typeof dbStore.eliminarParada === "function") {
-        try {
-            console.log(`💾 [MENSAJERO_UI]: Purgando registro ID '${paradaEliminada[0].id}' de IndexedDB...`);
-            await dbStore.eliminarParada(paradaEliminada[0].id);
-        } catch (err) {
-            console.warn("⚠️ [MENSAJERO_UI]: Error eliminando de IndexedDB:", err);
-        }
-    }
-
-    console.log("🔢 [MENSAJERO_UI]: Re-secuenciando paradas restantes...");
-    for (let i = 0; i < paradasMemoriaLocal.length; i++) {
-        paradasMemoriaLocal[i].secuencia = i + 1;
-        paradasMemoriaLocal[i].secuenciaZona = i + 1;
-        paradasMemoriaLocal[i].orden = i + 1;
-        if (dbStore && typeof dbStore.actualizarParada === "function") {
-            try {
-                await dbStore.actualizarParada(paradasMemoriaLocal[i]);
-            } catch (err) {
-                console.warn(`⚠️ [MENSAJERO_UI]: Error actualizando re-secuencia ID ${paradasMemoriaLocal[i].id}:`, err);
+    // 1. Filtrar por índice numérico o ID/SSC
+    if (typeof target === "number" && target >= 0 && target < paradasMemoriaLocal.length) {
+        paradaRemovida = paradasMemoriaLocal[target];
+        paradasRestantes = paradasMemoriaLocal.filter((_, i) => i !== target);
+    } else {
+        paradasRestantes = paradasMemoriaLocal.filter(p => {
+            if (p && compararIdsParada(p.id || p.ssc, target)) {
+                paradaRemovida = p;
+                return false;
             }
-        }
+            return true;
+        });
     }
 
-    sincronizarMemoriasGlobales(paradasMemoriaLocal);
+    if (paradaRemovida) {
+        console.log("🗑️ [MENSAJERO_UI]: Parada removida de memoria local:", paradaRemovida);
+    } else {
+        console.warn(`⚠️ [MENSAJERO_UI]: No se pudo encontrar la parada con identificador: ${target}`);
+    }
+
+    // 2. Re-secuenciar paradas restantes
+    console.log("🔢 [MENSAJERO_UI]: Re-secuenciando paradas restantes...");
+    paradasRestantes.forEach((p, idx) => {
+        p.secuencia = idx + 1;
+        p.secuenciaZona = idx + 1;
+        p.orden = idx + 1;
+        p.updated_at = new Date().toISOString();
+    });
+
+    // 3. Persistencia en IndexedDB
+    try {
+        if (paradaRemovida && paradaRemovida.id && dbStore && typeof dbStore.eliminarParada === "function") {
+            console.log(`💾 [MENSAJERO_UI]: Purgando registro ID '${paradaRemovida.id}' de IndexedDB...`);
+            await dbStore.eliminarParada(paradaRemovida.id, "paradas_rutas");
+            await dbStore.eliminarParada(paradaRemovida.id, "rutas_zonificadas").catch(() => {});
+        }
+
+        if (typeof guardarRutaZonificada === "function") {
+            await guardarRutaZonificada(paradasRestantes);
+            console.log("💾 [MENSAJERO_UI]: Snapshot reducida persistida en IndexedDB.");
+        }
+    } catch (err) {
+        console.warn("⚠️ [MENSAJERO_UI]: Error actualizando la persistencia local:", err);
+    }
+
+    // 4. Actualizar referencias en RAM y refrescar UI
+    sincronizarMemoriasGlobales(paradasRestantes);
     console.log("✅ [MENSAJERO_UI]: Parada eliminada y consola refrescada.");
-    renderizarConsolaOperaciones(paradasMemoriaLocal, 0, 0);
+    await renderizarConsolaOperaciones(paradasRestantes, 0, 0);
 }
 
 // --- BUS DE EVENTOS DE SINCRONIZACIÓN LOCAL-FIRST ---

@@ -323,5 +323,17 @@
         "lat": 3.437841,
         "lng": -76.499838,
         "updated_at": "2026-09-29 03:12:54"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "#PNT-6281",
+        "ssc": "187501",
+        "planilla_id": null,
+        "lat": 3.425425759421631,
+        "lng": -76.49392601055906,
+        "latitud": 3.425425759421631,
+        "longitud": -76.49392601055906,
+        "direccion": "Cl. 72j #28a-95, Comuneros II, Cali, Valle del Cauca, Colombia",
+        "updated_at": "2026-09-29 04:31:07"
     }
 ]

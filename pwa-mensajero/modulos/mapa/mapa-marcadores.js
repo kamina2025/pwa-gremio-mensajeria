@@ -7,6 +7,7 @@
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
 import { IndexedStore } from "../db/indexed-store.js";
 import { actualizarParadaEnPlanillaLocal } from "../planilla/planillas-db.js";
+import { guardarRutaZonificada } from "../mensajero-persistencia.js";
 import { obtenerClaseMenuRadialOverlay } from "./marcadores/mapa-overlay-orbital.js";
 import { abrirModalGestionParada as abrirModalGestionParadaImpl } from "./marcadores/mapa-modal-parada.js";
 
@@ -18,6 +19,10 @@ const KEY_ULTIMA_PARADA = 'macondo_ultima_parada_id';
 window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
 window.overlayMenuActivo = null;
 
+/**
+ * Obtiene la URL base válida para la API REST local.
+ * @returns {string}
+ */
 function obtenerEndpointAPI() {
     if (typeof window !== "undefined" && window.API_ENDPOINT) {
         return window.API_ENDPOINT;
@@ -27,6 +32,48 @@ function obtenerEndpointAPI() {
         return `${origin}/pwa-gremio-mensajeria/api.php`;
     }
     return `${origin}/api.php`;
+}
+
+/**
+ * Normaliza y compara dos identificadores de parada eliminando prefijos tipo #PNT-.
+ * @param {string|number} idA 
+ * @param {string|number} idB 
+ * @returns {boolean}
+ */
+function compararIdsParada(idA, idB) {
+    if (!idA || !idB) return false;
+    const normA = String(idA).replace(/^[#PNT-]+/i, '').trim();
+    const normB = String(idB).replace(/^[#PNT-]+/i, '').trim();
+    return normA === normB || String(idA).trim() === String(idB).trim();
+}
+
+/**
+ * Remueve una parada de todos los buffers globales de memoria RAM, 
+ * actualiza el almacenamiento persistente global y retorna el array filtrado.
+ * 
+ * @param {string|number} idTarget 
+ * @returns {Array<Object>}
+ */
+function limpiarParadaDeBuffersRAM(idTarget) {
+    const filtrarArray = (arr) => {
+        if (!Array.isArray(arr)) return [];
+        return arr.filter(p => p && !compararIdsParada(p.id || p.ssc, idTarget));
+    };
+
+    const nuevoCache = filtrarArray(window.__CACHE_PARADAS_MACONDO__);
+    window.__CACHE_PARADAS_MACONDO__ = nuevoCache;
+    window.paradasMemoriaLocal = filtrarArray(window.paradasMemoriaLocal);
+    window.paradasRutaActiva = filtrarArray(window.paradasRutaActiva);
+    window.pedidosGlobales = filtrarArray(window.pedidosGlobales);
+
+    // Sobrescribir la snapshot persistente en IndexedDB para asegurar consistencia en F5
+    if (typeof guardarRutaZonificada === "function") {
+        guardarRutaZonificada(nuevoCache).catch(err => {
+            console.warn("⚠️ [MAPA_MARCADORES]: No se pudo actualizar snapshot en guardarRutaZonificada:", err);
+        });
+    }
+
+    return nuevoCache;
 }
 
 export function cerrarOverlayActivo() {
@@ -59,7 +106,8 @@ export function iniciarViajeNavegacionGPS(parada) {
         return;
     }
 
-    console.log(`🚀 [MAPA_NAVEGACION]: Iniciando navegación interna para la parada: #${parada.id || parada.ssc}`);
+    const idDisplay = parada.id || parada.ssc || "PNT";
+    console.log(`🚀 [MAPA_NAVEGACION]: Iniciando navegación interna para la parada: #${idDisplay}`);
 
     if (typeof window.trazarRutaNavegacionInternaGPS === "function") {
         window.trazarRutaNavegacionInternaGPS(parada);
@@ -68,7 +116,7 @@ export function iniciarViajeNavegacionGPS(parada) {
         
         const coordsDestino = typeof window.obtenerCoordenadasValidasParada === "function"
             ? window.obtenerCoordenadasValidasParada(parada)
-            : null;
+            : (parada.lat && parada.lng ? { lat: parseFloat(parada.lat), lng: parseFloat(parada.lng) } : null);
 
         if (coordsDestino) {
             const { lat, lng } = coordsDestino;
@@ -131,6 +179,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 
             const grupoAsignado = String(pedido.grupoId || pedido.grupo || pedido.cluster || "").trim();
             marker.set("idParada", idUnicoParada);
+            marker.set("sscParada", pedido.ssc || idUnicoParada);
             marker.set("secuencia", idx + 1);
             marker.set("grupoId", grupoAsignado);
             marker.set("cluster", grupoAsignado);
@@ -237,9 +286,7 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
 
         const actualizarBufferRAM = (arr) => {
             if (!Array.isArray(arr)) return;
-            const idx = arr.findIndex(
-                (p) => String(p.id || p.ssc || "").trim() === String(pedido.id || pedido.ssc || idParada).trim()
-            );
+            const idx = arr.findIndex((p) => p && compararIdsParada(p.id || p.ssc, pedido.id || pedido.ssc || idParada));
             if (idx !== -1) {
                 arr[idx] = { ...arr[idx], ...pedido };
             }
@@ -311,22 +358,29 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
     if (!confirm(`¿Eliminar la parada ${idParada} del mapa y registro local?`)) return;
 
     try {
+        console.log(`🗑️ [MAPA_MARCADORES]: Iniciando eliminación atómica para parada: ${idParada}`);
+
+        // 1. Ocultar y remover el marcador visual en Google Maps
+        if (marker && typeof marker.setMap === "function") {
+            marker.setMap(null);
+        }
+        if (Array.isArray(window.marcadoresRutaMensajero)) {
+            window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter((m) => m !== marker);
+        }
+
+        // 2. Limpieza sincrónica de memoria RAM y sobrescritura de snapshot en IndexedDB
+        const paradasActualizadas = limpiarParadaDeBuffersRAM(idParada);
+
+        // 3. Persistencia Local en IndexedDB eliminando explícitamente de las tablas secundarias
         if (typeof dbStore.eliminarParada === "function") {
             await dbStore.eliminarParada(idParada, "paradas_rutas");
+            await dbStore.eliminarParada(idParada, "rutas_zonificadas").catch(() => {});
         }
         console.log("💾 [MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
 
-        marker.setMap(null);
-        window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter((m) => m !== marker);
-
-        if (Array.isArray(window.__CACHE_PARADAS_MACONDO__)) {
-            window.__CACHE_PARADAS_MACONDO__ = window.__CACHE_PARADAS_MACONDO__.filter(
-                (p) => String(p.id || p.ssc) !== String(idParada)
-            );
-        }
-
+        // 4. Sincronización Remota Backend
         const baseUrl = obtenerEndpointAPI();
-        const urlApi = `${baseUrl}?action=eliminar_parada`;
+        const urlApi = `${baseUrl}?action=eliminar_parada&id=${encodeURIComponent(idParada)}`;
 
         const payload = {
             action: "eliminar_parada",
@@ -347,8 +401,13 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
                 await dbStore.registrarOperacionPendiente("eliminar_parada", payload);
             });
 
+        // 5. Refresco de Consola de Operaciones pasando directamente la colección purgada
+        if (typeof window.refrescarConsolaOperacionesUI === "function") {
+            await window.refrescarConsolaOperacionesUI(paradasActualizadas);
+        }
+
         if (typeof callbackActualizacion === "function") {
-            callbackActualizacion();
+            callbackActualizacion(paradasActualizadas);
         }
     } catch (err) {
         console.error("❌ [MAPA_MARCADORES]: Fallo al eliminar parada:", err);
@@ -359,7 +418,7 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = "") {
     if (!window.marcadoresRutaMensajero) return;
 
     const marker = window.marcadoresRutaMensajero.find(
-        (m) => String(m.get("idParada")).trim() === String(idParada).trim()
+        (m) => compararIdsParada(m.get("idParada"), idParada) || compararIdsParada(m.get("sscParada"), idParada)
     );
 
     if (marker) {

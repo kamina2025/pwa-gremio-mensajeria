@@ -276,7 +276,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 if (!MenuClass) return;
 
                 window.overlayMenuActivo = new MenuClass(marker.getPosition(), {
-                    onEdit: () => window.cargarEdicionDesdePin(idUnicoParada),
+                    onEdit: () => window.cargarEdicionDesdePin(pedido),
                     onSequence: () => {
                         if (typeof window.moverParadaManual === "function") {
                             window.moverParadaManual(idUnicoParada, -1, pedido.zonaKey || pedido.zona);
@@ -508,9 +508,17 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = "") {
     }
 }
 
-window.cargarEdicionDesdePin = function (idParada) {
-    console.log("🎯 [MAPA_MARCADORES]: Redirigiendo a edición para parada:", idParada);
-    if (typeof window.navegarA === "function") {
+window.cargarEdicionDesdePin = function (paradaOrId) {
+    const targetId = typeof paradaOrId === "object" && paradaOrId !== null
+        ? String(paradaOrId.id || paradaOrId.ssc || "").trim()
+        : String(paradaOrId || "").trim();
+
+    console.log("🎯 [MAPA_MARCADORES]: Redirigiendo a edición para parada:", targetId || paradaOrId);
+
+    // 1. Transición de vista
+    if (typeof window.alternarVistaPestaña === "function") {
+        window.alternarVistaPestaña("pestana-ruta-activa");
+    } else if (typeof window.navegarA === "function") {
         window.navegarA("vistas/ruta/ruta-activa.html");
     } else {
         const pestanaRuta = document.getElementById("pestana-ruta-activa");
@@ -521,11 +529,18 @@ window.cargarEdicionDesdePin = function (idParada) {
         }
     }
 
+    // 2. Invocar despliegue modal con precarga de datos
     setTimeout(() => {
-        if (typeof window.prepararEdicionParadaUI === "function") {
-            window.prepararEdicionParadaUI(idParada);
+        if (typeof window.mostrarModalGestionParadaUI === "function") {
+            window.mostrarModalGestionParadaUI(paradaOrId);
+        } else if (typeof window.abrirModalEditarParada === "function") {
+            window.abrirModalEditarParada(paradaOrId);
+        } else if (typeof window.prepararEdicionParadaUI === "function") {
+            window.prepararEdicionParadaUI(targetId || paradaOrId);
+        } else {
+            console.warn("⚠️ [MAPA_MARCADORES]: No se encontró un handler global válido para desplegar el modal de edición.");
         }
-    }, 120);
+    }, 150);
 };
 
 if (typeof window !== "undefined") {

@@ -68,7 +68,7 @@ export function precargarFormularioParadaUI(paradaOId) {
 
     let parada = paradaOId;
 
-    if (typeof paradaOId === "string") {
+    if (typeof paradaOId === "string" || typeof paradaOId === "number") {
         const cleanTarget = normalizarIdParada(paradaOId);
         const listaRAM = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || [];
         parada = listaRAM.find(p => p && normalizarIdParada(p.id || p.ssc || p.scc) === cleanTarget);
@@ -304,8 +304,9 @@ export async function guardarParadaManualUI() {
             if (typeof modal.showModal === "function") {
                 modal.showModal();
             } else {
-                modal.style.display = "block";
+                modal.style.display = "flex";
                 modal.classList.add("active", "show");
+                modal.classList.remove("is-hidden", "hidden");
             }
         } else {
             console.warn("⚠️ [UI_MODAL]: Elemento modal de gestión de parada no disponible en el DOM.");
@@ -335,6 +336,8 @@ export async function guardarParadaManualUI() {
     window.precargarFormularioParadaUI = precargarFormularioParadaUI;
     window.limpiarFormularioParadaUI = limpiarFormularioParadaUI;
     window.guardarParadaManualUI = guardarParadaManualUI;
+    window.abrirModalEditarParada = window.mostrarModalGestionParadaUI;
+    window.prepararEdicionParadaUI = window.mostrarModalGestionParadaUI;
 
     console.log("🟢 [MENSAJERO_UI]: Modales de UI e interfaces emergentes vinculados a window correctamente.");
 })();

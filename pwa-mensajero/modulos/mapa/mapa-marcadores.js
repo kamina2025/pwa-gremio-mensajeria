@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - GESTOR DE MARCADORES E INTERACCIONES EN MAPA
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-marcadores.js
- * Arquitectura: Google Maps OverlayView / Local-First / Orbital UI / GPS Navigation
+ * Arquitectura: Google Maps OverlayView / Local-First / Orbital UI / GitHub Pages Compatible
  */
 
 import { crearIconoParadaCyberpunkSVG } from "./mapa-iconos.js";
@@ -20,7 +20,16 @@ window.marcadoresRutaMensajero = window.marcadoresRutaMensajero || [];
 window.overlayMenuActivo = null;
 
 /**
- * Obtiene la URL base válida para la API REST local.
+ * Detecta si el entorno actual soporta API REST backend en PHP o es un hosting estático (GitHub Pages).
+ * @returns {boolean}
+ */
+function esEntornoEstatico() {
+    if (typeof window === "undefined") return false;
+    return window.location.hostname.includes("github.io");
+}
+
+/**
+ * Obtiene la URL base válida para la API REST local o remota.
  * @returns {string}
  */
 function obtenerEndpointAPI() {
@@ -45,6 +54,19 @@ function compararIdsParada(idA, idB) {
     const normA = String(idA).replace(/^[#PNT-]+/i, '').trim();
     const normB = String(idB).replace(/^[#PNT-]+/i, '').trim();
     return normA === normB || String(idA).trim() === String(idB).trim();
+}
+
+/**
+ * Extrae y valida coordenadas geográficas utilizables de un objeto parada.
+ * @param {Object} parada 
+ * @returns {{lat: number, lng: number}|null}
+ */
+function obtenerCoordenadasNavegacion(parada) {
+    if (!parada) return null;
+    const lat = parseFloat(parada.lat || parada.latitud);
+    const lng = parseFloat(parada.lng || parada.longitud);
+    if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return null;
+    return { lat, lng };
 }
 
 /**
@@ -116,11 +138,13 @@ export function iniciarViajeNavegacionGPS(parada) {
         
         const coordsDestino = typeof window.obtenerCoordenadasValidasParada === "function"
             ? window.obtenerCoordenadasValidasParada(parada)
-            : (parada.lat && parada.lng ? { lat: parseFloat(parada.lat), lng: parseFloat(parada.lng) } : null);
+            : obtenerCoordenadasNavegacion(parada);
 
         if (coordsDestino) {
             const { lat, lng } = coordsDestino;
             window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`, "_blank");
+        } else {
+            console.warn("⚠️ [MAPA_NAVEGACION]: Coordenadas insuficientes para iniciar navegación GPS externa.");
         }
     }
 }
@@ -137,7 +161,12 @@ export function abrirModalGestionParada(pedido, indice) {
 export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, callbackActualizacion) {
     if (Array.isArray(window.marcadoresRutaMensajero)) {
         window.marcadoresRutaMensajero.forEach((m) => {
-            if (typeof m.setMap === "function") m.setMap(null);
+            if (m) {
+                if (typeof google !== "undefined" && google.maps && google.maps.event) {
+                    google.maps.event.clearInstanceListeners(m);
+                }
+                if (typeof m.setMap === "function") m.setMap(null);
+            }
         });
     }
     window.marcadoresRutaMensajero = [];
@@ -251,8 +280,9 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             mapa.fitBounds(bounds);
         };
 
-        if (pedido.lat && pedido.lng) {
-            const pos = new google.maps.LatLng(parseFloat(pedido.lat), parseFloat(pedido.lng));
+        const coordsDirectas = obtenerCoordenadasNavegacion(pedido);
+        if (coordsDirectas) {
+            const pos = new google.maps.LatLng(coordsDirectas.lat, coordsDirectas.lng);
             crearMarcadorEnPosicion(pos);
         } else {
             const dirCompleta = sanitizarDireccionContexto(pedido.direccion || pedido.dir);
@@ -314,9 +344,6 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                 console.error("❌ [MAPA_MARCADORES]: Error al guardar reubicación local:", err);
             }
 
-            const baseUrl = obtenerEndpointAPI();
-            const urlApi = `${baseUrl}?action=actualizar_parada`;
-
             const payload = {
                 action: "actualizar_parada",
                 id: pedido.id || idParada,
@@ -330,19 +357,28 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                 updated_at: pedido.updated_at
             };
 
-            fetch(urlApi, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Accept: "application/json" },
-                body: JSON.stringify(payload)
-            })
-                .then(async (res) => {
-                    const data = await res.json().catch(() => ({}));
-                    console.log("🌐 [MAPA_MARCADORES_MOVE_SYNC]: Respuesta del servidor:", data);
+            if (esEntornoEstatico()) {
+                console.log("ℹ️ [MAPA_MARCADORES_GITPAGES]: Entorno estático detectado. Reubicación guardada en cola local.");
+                await dbStore.registrarOperacionPendiente("actualizar_parada", payload);
+            } else {
+                const baseUrl = obtenerEndpointAPI();
+                const urlApi = `${baseUrl}?action=actualizar_parada`;
+
+                fetch(urlApi, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify(payload)
                 })
-                .catch(async (err) => {
-                    console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido guardado en cola offline:", err);
-                    await dbStore.registrarOperacionPendiente("actualizar_parada", payload);
-                });
+                    .then(async (res) => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const data = await res.json().catch(() => ({}));
+                        console.log("🌐 [MAPA_MARCADORES_MOVE_SYNC]: Respuesta del servidor:", data);
+                    })
+                    .catch(async (err) => {
+                        console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Sync diferido guardado en cola offline:", err);
+                        await dbStore.registrarOperacionPendiente("actualizar_parada", payload);
+                    });
+            }
 
             if (typeof callbackActualizacion === "function") {
                 callbackActualizacion(pedido);
@@ -361,8 +397,13 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
         console.log(`🗑️ [MAPA_MARCADORES]: Iniciando eliminación atómica para parada: ${idParada}`);
 
         // 1. Ocultar y remover el marcador visual en Google Maps
-        if (marker && typeof marker.setMap === "function") {
-            marker.setMap(null);
+        if (marker) {
+            if (typeof google !== "undefined" && google.maps && google.maps.event) {
+                google.maps.event.clearInstanceListeners(marker);
+            }
+            if (typeof marker.setMap === "function") {
+                marker.setMap(null);
+            }
         }
         if (Array.isArray(window.marcadoresRutaMensajero)) {
             window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter((m) => m !== marker);
@@ -378,28 +419,34 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
         }
         console.log("💾 [MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
 
-        // 4. Sincronización Remota Backend
-        const baseUrl = obtenerEndpointAPI();
-        const urlApi = `${baseUrl}?action=eliminar_parada&id=${encodeURIComponent(idParada)}`;
-
+        // 4. Sincronización Remota Backend o Cola Offline para GitHub Pages
         const payload = {
             action: "eliminar_parada",
             id: idParada
         };
 
-        fetch(urlApi, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify(payload)
-        })
-            .then(async (res) => {
-                const data = await res.json().catch(() => ({}));
-                console.log("🌐 [MAPA_MARCADORES_DEL_SYNC]: Parada eliminada del servidor remoto:", data);
+        if (esEntornoEstatico()) {
+            console.log("ℹ️ [MAPA_MARCADORES_GITPAGES]: Entorno estático detectado. Eliminación registrada en cola local.");
+            await dbStore.registrarOperacionPendiente("eliminar_parada", payload);
+        } else {
+            const baseUrl = obtenerEndpointAPI();
+            const urlApi = `${baseUrl}?action=eliminar_parada&id=${encodeURIComponent(idParada)}`;
+
+            fetch(urlApi, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify(payload)
             })
-            .catch(async (err) => {
-                console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Operación guardada en cola offline:", err);
-                await dbStore.registrarOperacionPendiente("eliminar_parada", payload);
-            });
+                .then(async (res) => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const data = await res.json().catch(() => ({}));
+                    console.log("🌐 [MAPA_MARCADORES_DEL_SYNC]: Parada eliminada del servidor remoto:", data);
+                })
+                .catch(async (err) => {
+                    console.warn("⚠️ [MAPA_MARCADORES_OFFLINE]: Operación guardada en cola offline:", err);
+                    await dbStore.registrarOperacionPendiente("eliminar_parada", payload);
+                });
+        }
 
         // 5. Refresco de Consola de Operaciones pasando directamente la colección purgada
         if (typeof window.refrescarConsolaOperacionesUI === "function") {

@@ -6,13 +6,52 @@
 <!-- Hoja de Estilo Modularizada Cyberpunk -->
 <link rel="stylesheet" href="style/ruta-activa.css" />
 
+<!-- REGLAS DE INMUNIZACIÓN ESTRUCTURAL CONTRA STRINGS CORRUPTOS Y DESBORDAMIENTO -->
+<style id="css-inmunizador-ruta-activa">
+    /* Forzar quiebre de cadenas continuas e impedir desbordamiento horizontal */
+    .cyber-scroll-container,
+    #contenedor-acordeones-zonas,
+    #lista-paradas-zonificadas,
+    .acordeon-zona-item,
+    .tarjeta-parada-item,
+    .tarjeta-parada-row {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+    }
+
+    /* Asignar min-width 0 a contenedores flexbox de texto para respetar el ancho restante */
+    .parada-datos-bloque,
+    .info-parada-item,
+    .contenido-parada,
+    .txt-direccion-parada,
+    .txt-destinatario-parada {
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+    }
+
+    /* Asegurar que la barra de botones mantenga su ancho estático y nunca colapse */
+    .parada-acciones-bloque,
+    .acciones-parada-row,
+    .btn-grupo-acciones {
+        flex-shrink: 0 !important;
+        display: flex !important;
+        gap: 4px !important;
+        align-items: center !important;
+        white-space: nowrap !important;
+    }
+</style>
+
 <div class="vista-header">
     <h2>// RUTAS_ACTIVAS</h2>
     <span class="badge-status online">EN LINEA</span>
 </div>
 
 <!-- CONTENEDOR PRINCIPAL DE LA RUTA -->
-<div class="modulo-ruta-container" style="display: flex; flex-direction: column; gap: 10px;">
+<div class="modulo-ruta-container" style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 100%; overflow: hidden;">
 
     <!-- BARRA DE ACCIONES RÁPIDAS (BOTONES DE APERTURA DE MODALES) -->
     <section class="panel-maquina" style="display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0;">
@@ -116,7 +155,7 @@
     <div id="pool-pedidos-dinamico" style="flex-shrink: 0;"></div>
 
     <!-- LISTA DE PARADAS ZONIFICADAS -->
-    <section class="panel-maquina" style="display: flex; flex-direction: column; min-height: 0;">
+    <section class="panel-maquina" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden; max-width: 100%;">
         <div class="header-status" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; flex-shrink: 0;">
             <span style="color: var(--neon-blue, #00e5ff); font-weight: bold">[📋] HOJA_DE_RUTA_ZONIFICADA</span>
             <div style="display: flex; gap: 6px; align-items: center">
@@ -131,8 +170,8 @@
         </div>
 
         <!-- CONTENEDOR DESPLAZABLE ÚNICO (SCROLLMASTER) SIN SCROLLS ANIDADOS -->
-        <div id="contenedor-acordeones-zonas" class="cyber-scroll-container">
-            <div id="lista-paradas-zonificadas"></div>
+        <div id="contenedor-acordeones-zonas" class="cyber-scroll-container" style="overflow-x: hidden; overflow-y: auto; max-width: 100%;">
+            <div id="lista-paradas-zonificadas" style="max-width: 100%; overflow-x: hidden; word-break: break-word;"></div>
         </div>
     </section>
 
@@ -141,6 +180,7 @@
 <!-- SCRIPT DE INMUNIZACIÓN INMEDIATA CONTRA RACES DE CARGA DE MÓDULOS -->
 <script>
     (function () {
+        console.log("🛡️ [INMUNIZADOR_INLINE]: Verificando inicialización de bindings UI...");
         if (typeof window.mostrarModalGestionParadaUI !== "function") {
             window.mostrarModalGestionParadaUI = function () {
                 console.log("🛡️ [INMUNIZADOR_INLINE]: Desplegando #modal-gestion-parada");
@@ -150,7 +190,7 @@
         }
         if (typeof window.cerrarModalGestionParadaUI !== "function") {
             window.cerrarModalGestionParadaUI = function () {
-                console.log("🛡️ [INMUNIZADOR_INLINE]: Cerrando #modal-gestion-parada");
+                console.log("🛡️️ [INMUNIZADOR_INLINE]: Cerrando #modal-gestion-parada");
                 if (typeof window.limpiarFormularioParadaUI === "function") window.limpiarFormularioParadaUI();
                 const m = document.getElementById('modal-gestion-parada');
                 if (m) typeof m.close === 'function' ? m.close() : m.style.display = 'none';

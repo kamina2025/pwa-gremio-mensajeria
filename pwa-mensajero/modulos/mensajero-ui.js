@@ -12,6 +12,23 @@ import { guardarRutaZonificada, obtenerParadasGuardadas } from "./mensajero-pers
 // =========================================================================
 
 /**
+ * Sanitiza y limita el tamaño de textos de las paradas provenientes de IA o APIs externas
+ * para evitar colapsos visuales o desbordamientos del layout.
+ * @param {string} val 
+ * @param {number} maxLen 
+ * @returns {string}
+ */
+function sanitizarTextoInmune(val, maxLen = 150) {
+    if (!val) return "";
+    const str = String(val).trim();
+    if (str.length > maxLen) {
+        console.warn(`🛡️ [MENSAJERO_UI]: Texto recortado por superar el límite de inmunidad (${str.length} > ${maxLen} caracteres)`);
+        return str.substring(0, maxLen) + "...";
+    }
+    return str;
+}
+
+/**
  * Normaliza un identificador de parada eliminando prefijos (#, PNT-, etc.).
  * @param {string|number} id 
  * @returns {string}
@@ -31,19 +48,15 @@ function obtenerElementoInputMulti(claves) {
     const contexto = modalEl || document;
 
     for (const clave of claves) {
-        // 1. Por ID directo en contexto o DOM
         let el = contexto.querySelector(`#${clave}`) || document.getElementById(clave);
         if (el) return el;
 
-        // 2. Por atributo name
         el = contexto.querySelector(`[name="${clave}"]`);
         if (el) return el;
 
-        // 3. Por clase o dataset
         el = contexto.querySelector(`.${clave}`);
         if (el) return el;
 
-        // 4. Por búsqueda flexible en placeholder (fallback para modales dinámicos)
         const inputs = contexto.querySelectorAll("input, textarea, select");
         for (const input of inputs) {
             const ph = (input.placeholder || "").toLowerCase();
@@ -79,7 +92,7 @@ export function precargarFormularioParadaUI(paradaOId) {
         return;
     }
 
-    console.log("📝 [MENSAJERO_UI]: Precargando datos en el formulario modal de parada:", parada);
+    console.log("📝 [MENSAJERO_UI]: Precargando datos sanitizados en el formulario modal de parada:", parada);
 
     const setValMulti = (selectores, valor) => {
         const input = obtenerElementoInputMulti(selectores);
@@ -88,18 +101,17 @@ export function precargarFormularioParadaUI(paradaOId) {
         }
     };
 
-    const idReal = parada.id || parada.ssc || parada.scc || "";
+    const idReal = normalizarIdParada(parada.id || parada.ssc || parada.scc || "");
 
     setValMulti(["input-parada-id", "input-id-parada", "input-id", "id_parada", "id"], idReal);
-    setValMulti(["input-parada-cliente", "input-destinatario", "input-cliente", "destinatario", "cliente", "nombre", "nombre_cliente"], parada.destinatario || parada.cliente || parada.nombre_cliente || "");
-    setValMulti(["input-parada-direccion", "input-direccion", "input-direccion-entrega", "direccion", "dir"], parada.direccion || parada.dir || "");
-    setValMulti(["input-parada-telefono", "input-telefono", "input-telefono-contacto", "telefono", "tel"], parada.telefono || parada.tel || "");
-    setValMulti(["input-parada-ssc", "input-ssc", "input-scc", "input-guia", "ssc", "scc", "guia"], parada.ssc || parada.scc || idReal);
-    setValMulti(["input-parada-cuota", "input-cuota", "input-copago", "cuotaModeradora", "copago", "cuota"], parada.cuotaModeradora || parada.copago || "");
-    setValMulti(["input-parada-observaciones", "input-observaciones", "input-notas", "observaciones", "notas"], parada.observaciones || parada.notas || "");
-    setValMulti(["input-parada-zona", "input-zona", "zona"], parada.zona || parada.zonaCanonika || "GENERAL");
+    setValMulti(["input-parada-cliente", "input-destinatario", "input-cliente", "destinatario", "cliente", "nombre", "nombre_cliente"], sanitizarTextoInmune(parada.destinatario || parada.cliente || parada.nombre_cliente || "", 100));
+    setValMulti(["input-parada-direccion", "input-direccion", "input-direccion-entrega", "direccion", "dir"], sanitizarTextoInmune(parada.direccion || parada.dir || "", 150));
+    setValMulti(["input-parada-telefono", "input-telefono", "input-telefono-contacto", "telefono", "tel"], sanitizarTextoInmune(parada.telefono || parada.tel || "", 30));
+    setValMulti(["input-parada-ssc", "input-ssc", "input-scc", "input-guia", "ssc", "scc", "guia"], sanitizarTextoInmune(parada.ssc || parada.scc || idReal, 50));
+    setValMulti(["input-parada-cuota", "input-cuota", "input-copago", "cuotaModeradora", "copago", "cuota"], sanitizarTextoInmune(parada.cuotaModeradora || parada.copago || "", 30));
+    setValMulti(["input-parada-observaciones", "input-observaciones", "input-notas", "observaciones", "notas"], sanitizarTextoInmune(parada.observaciones || parada.notas || "", 200));
+    setValMulti(["input-parada-zona", "input-zona", "zona"], sanitizarTextoInmune(parada.zona || parada.zonaCanonika || "GENERAL", 40));
 
-    // Marcar el modal en MODO EDICIÓN con el ID original
     const modalEl = document.getElementById('modal-gestion-parada') || document.getElementById('modal-formulario-parada') || document.getElementById('modal-editar-parada');
     const formModal = modalEl ? (modalEl.querySelector("form") || modalEl) : null;
     if (formModal) {
@@ -155,14 +167,14 @@ export async function guardarParadaManualUI() {
         return input ? input.value.trim() : "";
     };
 
-    const idInput = getValMulti(["input-parada-id", "input-id-parada", "input-id", "id"]) || editIdOriginal;
-    const clienteVal = getValMulti(["input-parada-cliente", "input-destinatario", "input-cliente", "destinatario", "cliente", "nombre"]);
-    const direccionVal = getValMulti(["input-parada-direccion", "input-direccion", "input-direccion-entrega", "direccion", "dir"]);
-    const telefonoVal = getValMulti(["input-parada-telefono", "input-telefono", "input-telefono-contacto", "telefono", "tel"]);
-    const sscVal = getValMulti(["input-parada-ssc", "input-ssc", "input-scc", "input-guia", "ssc", "scc"]);
-    const cuotaVal = getValMulti(["input-parada-cuota", "input-cuota", "input-copago", "cuotaModeradora", "cuota"]);
-    const observacionesVal = getValMulti(["input-parada-observaciones", "input-observaciones", "input-notas", "observaciones", "notas"]);
-    const zonaVal = getValMulti(["input-parada-zona", "input-zona", "zona"]) || "GENERAL";
+    const idInput = sanitizarTextoInmune(getValMulti(["input-parada-id", "input-id-parada", "input-id", "id"]) || editIdOriginal, 50);
+    const clienteVal = sanitizarTextoInmune(getValMulti(["input-parada-cliente", "input-destinatario", "input-cliente", "destinatario", "cliente", "nombre"]), 100);
+    const direccionVal = sanitizarTextoInmune(getValMulti(["input-parada-direccion", "input-direccion", "input-direccion-entrega", "direccion", "dir"]), 150);
+    const telefonoVal = sanitizarTextoInmune(getValMulti(["input-parada-telefono", "input-telefono", "input-telefono-contacto", "telefono", "tel"]), 30);
+    const sscVal = sanitizarTextoInmune(getValMulti(["input-parada-ssc", "input-ssc", "input-scc", "input-guia", "ssc", "scc"]), 50);
+    const cuotaVal = sanitizarTextoInmune(getValMulti(["input-parada-cuota", "input-cuota", "input-copago", "cuotaModeradora", "cuota"]), 30);
+    const observacionesVal = sanitizarTextoInmune(getValMulti(["input-parada-observaciones", "input-observaciones", "input-notas", "observaciones", "notas"]), 200);
+    const zonaVal = sanitizarTextoInmune(getValMulti(["input-parada-zona", "input-zona", "zona"]) || "GENERAL", 40);
 
     let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
 
@@ -170,8 +182,7 @@ export async function guardarParadaManualUI() {
     const idxExistente = todasLasParadas.findIndex(p => p && normalizarIdParada(p.id || p.ssc || p.scc) === normEditId);
 
     if (esModoEdicion && idxExistente !== -1) {
-        // --- CASO A: ACTUALIZACIÓN / EDICIÓN ---
-        console.log(`✏️ [MENSAJERO_UI]: Actualizando parada ID '${todasLasParadas[idxExistente].id}' en índice [${idxExistente}] con cliente: '${clienteVal}' y dir: '${direccionVal}'`);
+        console.log(`✏️ [MENSAJERO_UI]: Actualizando parada ID '${todasLasParadas[idxExistente].id}' en índice [${idxExistente}]`);
         
         const objetivo = todasLasParadas[idxExistente];
         if (clienteVal) {
@@ -202,7 +213,6 @@ export async function guardarParadaManualUI() {
         objetivo.zona = zonaVal || objetivo.zona;
         objetivo.updated_at = new Date().toISOString();
 
-        // Persistir individualmente si la store está instanciada
         if (dbStore && typeof dbStore.actualizarParada === "function") {
             try {
                 await dbStore.actualizarParada(objetivo);
@@ -212,9 +222,8 @@ export async function guardarParadaManualUI() {
         }
 
     } else {
-        // --- CASO B: CREACIÓN ---
         const nuevoId = idInput || `PNT-${Math.floor(1000 + Math.random() * 9000)}`;
-        console.log(`➕ [MENSAJERO_UI]: Creando nueva parada con ID '${nuevoId}'`);
+        console.log(`➕ [MENSAJERO_UI]: Creando nueva parada sanitizada con ID '${nuevoId}'`);
 
         const nuevaParada = {
             id: nuevoId,
@@ -241,16 +250,12 @@ export async function guardarParadaManualUI() {
         todasLasParadas.push(nuevaParada);
     }
 
-    // Persistencia Local-First obligatoria
     await guardarRutaZonificada(todasLasParadas);
-
     sincronizarMemoriasGlobales(todasLasParadas);
-
-    // Refrescar consolas de operaciones y mapa
     await renderizarConsolaOperaciones(todasLasParadas, 0, 0);
 
     limpiarFormularioParadaUI();
-    console.log("✅ [MENSAJERO_UI]: Operación de guardado modal completada.");
+    console.log("✅ [MENSAJERO_UI]: Operación de guardado modal completada de forma segura.");
 }
 
 (function inmunizarModalesUIGlobales() {
@@ -291,7 +296,7 @@ export async function guardarParadaManualUI() {
     };
 
     window.mostrarModalGestionParadaUI = function (datosParada = null) {
-        console.log("✏️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.");
+        console.log("✏️️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.");
         const modal = document.getElementById('modal-gestion-parada') || document.getElementById('modal-formulario-parada') || document.getElementById('modal-editar-parada');
         
         if (modal) {
@@ -403,7 +408,19 @@ function resolverFn(fnModulo, nombreGlobal) {
 }
 
 function sincronizarMemoriasGlobales(listaActualizada) {
-    paradasMemoriaLocal = Array.isArray(listaActualizada) ? [...listaActualizada] : [];
+    const sanitizada = (Array.isArray(listaActualizada) ? listaActualizada : []).map(p => {
+        if (!p || typeof p !== "object") return p;
+        return {
+            ...p,
+            destinatario: sanitizarTextoInmune(p.destinatario || p.cliente || p.nombre_cliente || "", 100),
+            cliente: sanitizarTextoInmune(p.cliente || p.destinatario || "", 100),
+            direccion: sanitizarTextoInmune(p.direccion || p.dir || "", 150),
+            dir: sanitizarTextoInmune(p.dir || p.direccion || "", 150),
+            observaciones: sanitizarTextoInmune(p.observaciones || p.notas || "", 200)
+        };
+    });
+
+    paradasMemoriaLocal = [...sanitizada];
     window.__CACHE_PARADAS_MACONDO__ = [...paradasMemoriaLocal];
     window.paradasMemoriaLocal = [...paradasMemoriaLocal];
     window.paradasRutaActiva = [...paradasMemoriaLocal];
@@ -505,7 +522,7 @@ export async function ejecutarZonificacionAutomatica() {
 }
 
 export async function moverParadaSecuencia(idParada, delta) {
-    console.log(`↕️ [MENSAJERO_UI]: Moviendo secuencia de parada ID '${idParada}' (delta: ${delta})...`);
+    console.log(`↕️️ [MENSAJERO_UI]: Moviendo secuencia de parada ID '${idParada}' (delta: ${delta})...`);
     emitirHaptico(20);
     const moverFn = resolverFn(moverParadaSecuenciaUIFn, "moverParadaSecuenciaUI");
     if (typeof moverFn === "function") {
@@ -541,14 +558,14 @@ export async function guardarEdicionParadaUI(e, idx) {
     emitirHaptico(40);
     
     if (paradasMemoriaLocal[idx]) {
-        paradasMemoriaLocal[idx].destinatario = document.getElementById(`input-edit-destinatario-${idx}`)?.value || paradasMemoriaLocal[idx].destinatario;
+        paradasMemoriaLocal[idx].destinatario = sanitizarTextoInmune(document.getElementById(`input-edit-destinatario-${idx}`)?.value || paradasMemoriaLocal[idx].destinatario, 100);
         paradasMemoriaLocal[idx].cliente = paradasMemoriaLocal[idx].destinatario;
-        paradasMemoriaLocal[idx].telefono = document.getElementById(`input-edit-telefono-${idx}`)?.value || paradasMemoriaLocal[idx].telefono;
+        paradasMemoriaLocal[idx].telefono = sanitizarTextoInmune(document.getElementById(`input-edit-telefono-${idx}`)?.value || paradasMemoriaLocal[idx].telefono, 30);
         paradasMemoriaLocal[idx].tel = paradasMemoriaLocal[idx].telefono;
-        paradasMemoriaLocal[idx].direccion = document.getElementById(`input-edit-direccion-${idx}`)?.value || paradasMemoriaLocal[idx].direccion;
+        paradasMemoriaLocal[idx].direccion = sanitizarTextoInmune(document.getElementById(`input-edit-direccion-${idx}`)?.value || paradasMemoriaLocal[idx].direccion, 150);
         paradasMemoriaLocal[idx].dir = paradasMemoriaLocal[idx].direccion;
-        paradasMemoriaLocal[idx].ssc = document.getElementById(`input-edit-ssc-${idx}`)?.value || paradasMemoriaLocal[idx].ssc;
-        paradasMemoriaLocal[idx].cuotaModeradora = document.getElementById(`input-edit-cuota-${idx}`)?.value || paradasMemoriaLocal[idx].cuotaModeradora;
+        paradasMemoriaLocal[idx].ssc = sanitizarTextoInmune(document.getElementById(`input-edit-ssc-${idx}`)?.value || paradasMemoriaLocal[idx].ssc, 50);
+        paradasMemoriaLocal[idx].cuotaModeradora = sanitizarTextoInmune(document.getElementById(`input-edit-cuota-${idx}`)?.value || paradasMemoriaLocal[idx].cuotaModeradora, 30);
         paradasMemoriaLocal[idx].updated_at = new Date().toISOString();
 
         console.log(`📝 [MENSAJERO_UI]: Datos actualizados -> ${paradasMemoriaLocal[idx].destinatario} | ${paradasMemoriaLocal[idx].direccion}`);
@@ -609,7 +626,7 @@ export async function eliminarParadaUI(e, idxOId) {
     if (paradaRemovida) {
         console.log("🗑️ [MENSAJERO_UI]: Parada removida de memoria local:", paradaRemovida);
     } else {
-        console.warn(`⚠️ [MENSAJERO_UI]: No se pudo encontrar la parada con identificador: ${target}`);
+        console.warn(`⚠️️ [MENSAJERO_UI]: No se pudo encontrar la parada con identificador: ${target}`);
     }
 
     console.log("🔢 [MENSAJERO_UI]: Re-secuenciando paradas restantes...");

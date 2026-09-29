@@ -42,7 +42,7 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         return;
     }
 
-    // Agrupar pedidos estrictamente por la clave canónica de zona
+    // Agrupar pedidos strictly por la clave canónica de zona
     const zonasMap = {};
     listaPedidos.forEach((ped) => {
         const claveCanonica = obtenerZonaParadaCanonica(ped) || "GENERAL";
@@ -126,16 +126,16 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         botonesBar.className = "zona-acciones-bar";
         botonesBar.style.cssText = "display: flex; gap: 6px; overflow-x: auto;";
         botonesBar.innerHTML = `
-            <button type="button" class="btn-zona-action btn-zona-iniciar" data-action="iniciar" data-zona="${claveCanonica}" style="background: #0d1117; color: #00e5ff; border: 1px solid #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
+            <button type="button" class="btn-zona-action btn-zona-iniciar" data-action="iniciar" data-zona="${claveCanonica}" style="background: #0d1117; color: #00e5ff; border: 1px solid #00e5ff; font-weight: bold; cursor: pointer; padding: 6px 10px; border-radius: 4px; min-height: 38px;">
                 ► _INICIAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-optimizar" data-action="optimizar" data-zona="${claveCanonica}" style="background: #0d1117; color: #ffb300; border: 1px solid #ffb300; font-weight: bold; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
+            <button type="button" class="btn-zona-action btn-zona-optimizar" data-action="optimizar" data-zona="${claveCanonica}" style="background: #0d1117; color: #ffb300; border: 1px solid #ffb300; font-weight: bold; cursor: pointer; padding: 6px 10px; border-radius: 4px; min-height: 38px;">
                 ⚡ OPTIMIZAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-planillar" data-action="planillar" data-zona="${claveCanonica}" style="background: #0d1117; color: #8af7b3; border: 1px solid #8af7b3; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
+            <button type="button" class="btn-zona-action btn-zona-planillar" data-action="planillar" data-zona="${claveCanonica}" style="background: #0d1117; color: #8af7b3; border: 1px solid #8af7b3; cursor: pointer; padding: 6px 10px; border-radius: 4px; min-height: 38px;">
                 📝 _PLANILLAR
             </button>
-            <button type="button" class="btn-zona-action btn-zona-mapa" data-action="mapa" data-zona="${claveCanonica}" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 4px 8px; border-radius: 4px;">
+            <button type="button" class="btn-zona-action btn-zona-mapa" data-action="mapa" data-zona="${claveCanonica}" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 6px 10px; border-radius: 4px; min-height: 38px;">
                 🗺️ VER MAPA
             </button>
         `;
@@ -154,7 +154,6 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
             const rawId = String(parada.id || parada.scc || parada.ssc || `p_${idx}`);
             const numSecuencia = parada.secuenciaZona || parada.secuencia || idx + 1;
 
-            // Renderizar encabezado divisor de Bucle/Clúster
             if (parada.grupoId && parada.grupoId !== ultimoGrupoRenderizado) {
                 ultimoGrupoRenderizado = parada.grupoId;
                 const divisorGrupo = document.createElement("div");
@@ -179,14 +178,14 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
                         <strong style="color: #00ff66;">[#${numSecuencia}] ${parada.destinatario || parada.cliente || "Cliente"}</strong> ${badgeSubgrupo}
                         <div style="color: #c9d1d9; font-size: 0.8rem; margin-top: 2px;">📍 ${parada.direccion || "Sin Dirección"}</div>
                         <div style="font-size: 0.72rem; color: #8b949e; margin-top: 2px;">
-                            SCC: <span style="color: #00e5ff;">${parada.scc || parada.ssc || "N/A"}</span> | Tel: ${parada.telefono || "N/A"} | Estado: <span style="color:#7ee787;">${parada.causal || "PENDIENTE"}</span>
+                            SCC: <span style="color: #00e5ff;">${parada.scc || parada.ssc || "N/A"}</span> | Tel: ${parada.telefono || "N/A"} | Estado: <span style="color:#7ee787;">${parada.causal || parada.estado || "PENDIENTE"}</span>
                         </div>
                     </div>
                     <div class="btn-group-reorder" style="display:flex; gap:3px;">
-                        <button type="button" class="btn-reorder" data-action="subir" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:2px 6px; border-radius:3px;">▲</button>
-                        <button type="button" class="btn-reorder" data-action="bajar" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:2px 6px; border-radius:3px;">▼</button>
-                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ffb300; color: #ffb300; cursor:pointer; padding:2px 6px; border-radius:3px;" data-action="editar" data-id="${rawId}">✏️</button>
-                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ff3366; color: #ff3366; cursor:pointer; padding:2px 6px; border-radius:3px;" data-action="eliminar" data-id="${rawId}">🗑️</button>
+                        <button type="button" class="btn-reorder" data-action="subir" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">▲</button>
+                        <button type="button" class="btn-reorder" data-action="bajar" data-id="${rawId}" data-zona="${claveCanonica}" style="background:#0d1117; color:#fff; border:1px solid #30363d; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;">▼</button>
+                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ffb300; color: #ffb300; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;" data-action="editar" data-id="${rawId}">✏️</button>
+                        <button type="button" class="btn-reorder" style="background:#0d1117; border-color: #ff3366; color: #ff3366; cursor:pointer; padding:4px 8px; border-radius:3px; min-height: 36px;" data-action="eliminar" data-id="${rawId}">🗑️</button>
                     </div>
                 </div>
             `;
@@ -206,44 +205,207 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
 }
 
 /**
- * Event delegation para acciones de botones globales y reordenamiento manual.
+ * Función robusta para forzar visibilidad DOM y transición limpia hacia cualquier vista/mapa.
+ */
+function ejecutarNavegacionTransicion(targetContainer) {
+    console.log(`🔄 [NAVEGACION_ROBUSTA]: Redirigiendo atómicamente a -> ${targetContainer}`);
+    
+    window.__BLOQUEAR_REBOOT_VISTA__ = true;
+    localStorage.setItem("vista_activa", targetContainer);
+
+    const selectorLimpio = targetContainer.replace("#", "");
+
+    // 1. Invocar enrutadores globales PWA con selector limpio y con id selector
+    if (typeof window.alternarVista === "function") {
+        window.alternarVista(selectorLimpio);
+        window.alternarVista(targetContainer);
+    } else if (typeof window.navegarA === "function") {
+        window.navegarA(targetContainer);
+    }
+
+    // 2. Fallback de desocultamiento directo en el DOM para el nodo objetivo
+    const nodoMapa = document.getElementById(selectorLimpio) || document.querySelector(targetContainer);
+    if (nodoMapa) {
+        document.querySelectorAll(".contenedor-pestana, .vista-pantalla, .pestana-contenido").forEach((el) => {
+            if (el !== nodoMapa && !el.contains(nodoMapa)) {
+                el.classList.remove("activa");
+            }
+        });
+        nodoMapa.style.display = "block";
+        nodoMapa.classList.remove("oculto");
+        nodoMapa.classList.add("activa");
+    }
+
+    // 3. Notificar redimensionamiento y refrescar Google Maps
+    setTimeout(() => {
+        window.dispatchEvent(new Event("resize"));
+        if (typeof window.refrescarMapaPWA === "function") {
+            window.refrescarMapaPWA();
+        }
+        window.__BLOQUEAR_REBOOT_VISTA__ = false;
+    }, 150);
+}
+
+/**
+ * Event delegation robusto para acciones de botones globales.
  */
 function vincularEventosGlobalesAcciones(contenedor) {
-    contenedor.onclick = (e) => {
+    contenedor.onclick = async (e) => {
         const btn = e.target.closest("button");
         if (!btn) return;
 
         const action = btn.dataset.action;
-        const zona = btn.dataset.zona;
+        const zona = btn.dataset.zona || localStorage.getItem("zona_activa_operacion") || "GENERAL";
         const id = btn.dataset.id;
+
+        localStorage.setItem("zona_activa_operacion", zona);
+        window.zonaActivaOperacion = zona;
+
+        console.log(`⚡ [RUTAS_UI_ACTION]: Clic capturado -> Acción: ${action} | Zona: ${zona} | Target ID: ${id}`);
 
         switch (action) {
             case "iniciar":
-                if (typeof window.iniciarRutaZona === "function") window.iniciarRutaZona(zona);
+            case "iniciar-ruta":
+                if (typeof window.iniciarRutaZona === "function") {
+                    window.iniciarRutaZona(zona);
+                } else if (typeof window.verMapaZona === "function") {
+                    window.verMapaZona(zona);
+                } else if (typeof window.iniciarRutaCompleta === "function") {
+                    window.iniciarRutaCompleta();
+                }
+
+                ejecutarNavegacionTransicion("#mapa-fullscreen-container");
                 break;
+
             case "optimizar":
-                if (typeof window.optimizarProximidadZona === "function") window.optimizarProximidadZona(zona);
+            case "optimizar-ruta":
+                if (typeof window.optimizarProximidadZona === "function") {
+                    await window.optimizarProximidadZona(zona);
+                } else if (typeof window.optimizarRutaPorProximidadZona === "function") {
+                    await window.optimizarRutaPorProximidadZona(zona);
+                } else if (typeof window.ejecutarOptimizacionProximidadUI === "function") {
+                    await window.ejecutarOptimizacionProximidadUI(zona);
+                } else {
+                    console.log(`⚡ [RUTAS_UI]: Ejecutando reordenamiento local por proximidad (Nearest Neighbor)...`);
+                    await reordenarPorProximidadLocal(zona);
+                }
                 break;
+
             case "planillar":
-                if (typeof window.planillarRutaZona === "function") window.planillarRutaZona(zona);
+            case "planillar-ruta":
+                if (typeof window.planillarRutaZona === "function") {
+                    window.planillarRutaZona(zona);
+                } else if (typeof window.generarPlanillaDespachoUI === "function") {
+                    window.generarPlanillaDespachoUI(zona);
+                } else if (typeof window.abrirPlanillasZona === "function") {
+                    window.abrirPlanillasZona(zona);
+                }
+
+                ejecutarNavegacionTransicion("#pestana-notificaciones-planillas");
                 break;
+
             case "mapa":
-                if (typeof window.verMapaZona === "function") window.verMapaZona(zona);
+            case "ver-mapa":
+                console.log(`🗺️ [RUTAS_UI]: Invocando aislamiento y apertura de mapa para zona ${zona}...`);
+                
+                if (typeof window.verMapaZona === "function") {
+                    window.verMapaZona(zona);
+                } else if (typeof window.iniciarRutaZona === "function") {
+                    window.iniciarRutaZona(zona);
+                } else if (typeof window.abrirMapaZona === "function") {
+                    window.abrirMapaZona(zona);
+                } else if (typeof window.filtrarAislarMapaPorZona === "function") {
+                    window.filtrarAislarMapaPorZona(zona);
+                }
+
+                ejecutarNavegacionTransicion("#mapa-fullscreen-container");
                 break;
+
             case "subir":
-                if (typeof window.moverParadaManual === "function") window.moverParadaManual(id, -1, zona);
+                if (typeof window.moverParadaManual === "function") {
+                    window.moverParadaManual(id, -1, zona);
+                }
                 break;
+
             case "bajar":
-                if (typeof window.moverParadaManual === "function") window.moverParadaManual(id, 1, zona);
+                if (typeof window.moverParadaManual === "function") {
+                    window.moverParadaManual(id, 1, zona);
+                }
                 break;
+
             case "editar":
-                if (typeof window.editarParadaUI === "function") window.editarParadaUI(id);
+                if (typeof window.editarParadaUI === "function") {
+                    window.editarParadaUI(id);
+                }
                 break;
+
             case "eliminar":
-                if (typeof window.eliminarParadaUI === "function") window.eliminarParadaUI(id);
+                if (typeof window.eliminarParadaUI === "function") {
+                    window.eliminarParadaUI(e, id);
+                }
+                break;
+
+            default:
                 break;
         }
     };
+}
+
+/**
+ * Algoritmo Nearest Neighbor para optimización Local-First sin servidor.
+ */
+async function reordenarPorProximidadLocal(zonaTarget) {
+    let paradas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || [];
+    if (!paradas.length) return;
+
+    const zonaCanon = estandarizarZonaCanonica(zonaTarget);
+    const delGrupo = paradas.filter(p => obtenerZonaParadaCanonica(p) === zonaCanon);
+    const otras = paradas.filter(p => obtenerZonaParadaCanonica(p) !== zonaCanon);
+
+    if (delGrupo.length < 2) return;
+
+    let pendientes = [...delGrupo];
+    let reordenadas = [];
+    
+    let actual = pendientes.shift();
+    reordenadas.push(actual);
+
+    while (pendientes.length > 0) {
+        let latA = parseFloat(actual.latitud || actual.lat || 0);
+        let lngA = parseFloat(actual.longitud || actual.lng || 0);
+
+        let masCercanoIdx = 0;
+        let minDist = Infinity;
+
+        pendientes.forEach((p, idx) => {
+            let latB = parseFloat(p.latitud || p.lat || 0);
+            let lngB = parseFloat(p.longitud || p.lng || 0);
+            let dist = Math.hypot(latB - latA, lngB - lngA);
+
+            if (dist < minDist) {
+                minDist = dist;
+                masCercanoIdx = idx;
+            }
+        });
+
+        actual = pendientes.splice(masCercanoIdx, 1)[0];
+        reordenadas.push(actual);
+    }
+
+    reordenadas.forEach((p, idx) => {
+        p.secuenciaZona = idx + 1;
+        p.secuencia = idx + 1;
+        p.grupoId = `GRUPO-${Math.ceil((idx + 1) / 4).toString().padStart(2, "0")}`;
+    });
+
+    const finalLista = [...otras, ...reordenadas];
+    await guardarRutaZonificada(finalLista);
+
+    window.__CACHE_PARADAS_MACONDO__ = structuredClone(finalLista);
+    window.paradasMemoriaLocal = structuredClone(finalLista);
+
+    await renderizarParadasZonificadasUI(finalLista);
+    console.log(`✅ [OPTIMIZAR_LOCAL]: ⚡ Paradas de ${zonaCanon} optimizadas secuencialmente.`);
 }
 
 /**
@@ -295,7 +457,6 @@ function vincularEventosDragDrop(cardElement, zonaNombre) {
         document.querySelectorAll(".parada-card").forEach((c) => c.classList.remove("drag-over"));
     });
 
-    // Eventos Táctiles PWA Móvil
     cardElement.addEventListener("touchstart", () => {
         touchElementoInicial = cardElement;
         cardElement.classList.add("dragging");
@@ -327,7 +488,7 @@ function vincularEventosDragDrop(cardElement, zonaNombre) {
 }
 
 /**
- * Persiste la nueva secuencia atómicamente en IndexedDB y recalcula los clústeres visuales.
+ * Persiste la nueva secuencia atómicamente en IndexedDB.
  */
 async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
     const cards = contenedorPadre.querySelectorAll(".parada-card");
@@ -353,14 +514,12 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
             p.secuencia = nuevaSec;
             p.orden = nuevaSec;
             
-            // Re-asignación dinámica de grupoId en bloques de 4 para reordenamiento manual
             const numGrupo = Math.ceil(nuevaSec / 4);
             p.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
             p.updated_at = new Date().toISOString();
         }
     });
 
-    // Ordenamiento global sincronizado
     todasLasParadas.sort((a, b) => (a.secuenciaZona || a.secuencia || 0) - (b.secuenciaZona || b.secuencia || 0));
 
     await guardarRutaZonificada(todasLasParadas);
@@ -371,7 +530,6 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
 
     console.log(`💾 [LOCAL_FIRST]: Secuencia reordenada guardada para ${targetCanonico}.`);
 
-    // Refrescar mapa y UI
     if (typeof window.trazarPolilineaRuta === "function") {
         window.trazarPolilineaRuta(todasLasParadas, targetCanonico);
     } else if (typeof window.actualizarPuntosEnMapa === "function") {
@@ -382,4 +540,6 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
 }
 
 // BINDING GLOBAL
-window.renderizarParadasZonificadasUI = renderizarParadasZonificadasUI;
+if (typeof window !== "undefined") {
+    window.renderizarParadasZonificadasUI = renderizarParadasZonificadasUI;
+}

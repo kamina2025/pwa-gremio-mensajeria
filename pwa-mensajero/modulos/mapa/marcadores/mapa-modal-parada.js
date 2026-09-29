@@ -1,13 +1,49 @@
 /**
  * PROTOCOLO MACONDO - MODAL TÁCTICO DE GESTIÓN DE PARADA Y EVIDENCIAS
  * Ubicación: pwa-mensajero/modulos/mapa/marcadores/mapa-modal-parada.js
- * Arquitectura: Modal Overlay / Local-First / Sync API PHP
+ * Arquitectura: Modal Overlay / Local-First / Sync API PHP & GitHub Pages Compatible
  */
 
 import { IndexedStore } from "../../db/indexed-store.js";
+import { guardarRutaZonificada } from "../../mensajero-persistencia.js";
 
 const dbStore = new IndexedStore();
+const KEY_COLA_OFFLINE = 'macondo_cola_offline_pwa';
 
+/**
+ * Detecta si el entorno actual soporta API REST backend en PHP o es un hosting estático (GitHub Pages).
+ * @returns {boolean}
+ */
+function esEntornoEstatico() {
+    if (typeof window === "undefined") return false;
+    return window.location.hostname.includes("github.io");
+}
+
+/**
+ * Registra defensivamente operaciones pendientes en la cola offline (IndexedDB o localStorage fallback).
+ * @param {string} accion 
+ * @param {Object} payload 
+ */
+async function registrarOperacionPendienteDefensivo(accion, payload) {
+    try {
+        if (typeof dbStore.registrarOperacionPendiente === "function") {
+            await dbStore.registrarOperacionPendiente(accion, payload);
+            console.log(`💾 [OFFLINE_QUEUE]: Operación '${accion}' guardada en IndexedDB.`);
+        } else {
+            const colaExistente = JSON.parse(localStorage.getItem(KEY_COLA_OFFLINE) || "[]");
+            colaExistente.push({ accion, payload, timestamp: new Date().toISOString() });
+            localStorage.setItem(KEY_COLA_OFFLINE, JSON.stringify(colaExistente));
+            console.log(`💾 [OFFLINE_QUEUE_FALLBACK]: Operación '${accion}' guardada en localStorage.`);
+        }
+    } catch (err) {
+        console.warn("⚠️ [OFFLINE_QUEUE]: No se pudo guardar la operación en la cola offline:", err);
+    }
+}
+
+/**
+ * Obtiene la URL base válida para la API REST local o remota.
+ * @returns {string}
+ */
 function obtenerEndpointAPI() {
     if (typeof window !== "undefined" && window.API_ENDPOINT) {
         return window.API_ENDPOINT;
@@ -19,11 +55,32 @@ function obtenerEndpointAPI() {
     return `${origin}/api.php`;
 }
 
+/**
+ * Sincroniza las modificaciones de una parada dentro de todas las colecciones de memoria RAM activa.
+ * @param {Object} paradaActualizada 
+ * @param {string} targetId 
+ */
+function sincronizarBuffersRAM(paradaActualizada, targetId) {
+    const actualizarLista = (buffer) => {
+        if (!Array.isArray(buffer)) return;
+        const idx = buffer.findIndex(p => p && String(p.id || p.ssc || "").replace(/^[#PNT-]+/i, '').trim() === String(targetId).replace(/^[#PNT-]+/i, '').trim());
+        if (idx !== -1) {
+            buffer[idx] = { ...buffer[idx], ...paradaActualizada };
+        }
+    };
+
+    actualizarLista(window.__CACHE_PARADAS_MACONDO__);
+    actualizarLista(window.paradasMemoriaLocal);
+    actualizarLista(window.paradasRutaActiva);
+    actualizarLista(window.pedidosGlobales);
+}
+
 export function abrirModalGestionParada(pedido, indice, mutarMarcadorCallback) {
     let modalExistente = document.getElementById("modal-gestion-parada-mapa");
     if (modalExistente) modalExistente.remove();
 
     const nombreCliente = pedido.destinatario || pedido.cliente || pedido.nombre_cliente || "Cliente";
+    const estadoActual = (pedido.estado || pedido.status || "asignado").toLowerCase();
 
     const modalHTML = `
         <div id="modal-gestion-parada-mapa" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 7, 15, 0.88); backdrop-filter: blur(6px); z-index: 99999; display: flex; align-items: center; justify-content: center; font-family: 'Fira Code', monospace;">
@@ -59,9 +116,9 @@ export function abrirModalGestionParada(pedido, indice, mutarMarcadorCallback) {
                     <div>
                         <label style="color: #ffb300; font-size: 0.8rem; display: block; margin-bottom: 4px;">ESTADO DE LA PARADA:</label>
                         <select id="modal-estado" style="width: 100%; background: #161b22; border: 1px solid #ffb300; color: #fff; padding: 10px; border-radius: 6px; font-size: 0.88rem; box-sizing: border-box;">
-                            <option value="en-camino" ${(pedido.estado || "").toLowerCase() === "en-camino" ? "selected" : ""}>EN CAMINO</option>
-                            <option value="entregado" ${(pedido.estado || "").toLowerCase() === "entregado" ? "selected" : ""}>ENTREGADO</option>
-                            <option value="no-entregado" ${(pedido.estado || "").toLowerCase() === "no-entregado" ? "selected" : ""}>NO ENTREGADO</option>
+                            <option value="en-camino" ${estadoActual === "en-camino" ? "selected" : ""}>EN CAMINO</option>
+                            <option value="entregado" ${estadoActual === "entregado" ? "selected" : ""}>ENTREGADO</option>
+                            <option value="no-entregado" ${estadoActual === "no-entregado" ? "selected" : ""}>NO ENTREGADO</option>
                         </select>
                     </div>
 
@@ -115,11 +172,13 @@ export function abrirModalGestionParada(pedido, indice, mutarMarcadorCallback) {
         pedido.telefono = nuevoTel;
         pedido.tel = nuevoTel;
         pedido.estado = nuevoEstado;
+        pedido.status = nuevoEstado; // Asignación dual para filtros de UI
         pedido.updated_at = new Date().toISOString();
 
         const idUnico = String(pedido.id || pedido.ssc || `#PNT-${indice}`).trim();
 
         try {
+            // 1. Actualizar registros individuales en IndexedDB
             if (typeof dbStore.actualizarParada === "function") {
                 await dbStore.actualizarParada(pedido, "paradas_rutas");
             } else if (typeof dbStore.guardarRegistro === "function") {
@@ -131,26 +190,44 @@ export function abrirModalGestionParada(pedido, indice, mutarMarcadorCallback) {
                     destinatario: nuevoDest,
                     direccion: nuevaDir,
                     telefono: nuevoTel,
-                    estado: nuevoEstado
+                    estado: nuevoEstado,
+                    status: nuevoEstado
                 });
             }
 
-            console.log("💾 [MAPA_MODAL]: Parada actualizada desde Modal en IndexedDB:", pedido);
-            
+            // 2. Sincronizar memorias RAM globales
+            sincronizarBuffersRAM(pedido, idUnico);
+
+            // 3. Sobrescribir Snapshot contenedora en IndexedDB para asegurar persistencia tras F5
+            const datasetMemoria = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+            if (datasetMemoria.length > 0 && typeof guardarRutaZonificada === "function") {
+                await guardarRutaZonificada(datasetMemoria);
+            }
+
+            console.log("💾 [MAPA_MODAL]: Parada e IndexedDB Snapshot actualizadas desde Modal:", pedido);
+
+            // 4. Mutar marcador en capa gráfica de Google Maps
             if (typeof mutarMarcadorCallback === "function") {
                 mutarMarcadorCallback(idUnico, nuevoEstado);
+            } else if (typeof window.mutarMarcadorPorId === "function") {
+                window.mutarMarcadorPorId(idUnico, nuevoEstado);
             }
+
             cerrarModal();
 
-            const baseUrl = obtenerEndpointAPI();
-            const urlApi = `${baseUrl}?action=actualizar_parada`;
+            // 5. Refrescar Consola de Operaciones de forma reactiva
+            if (typeof window.refrescarConsolaOperacionesUI === "function") {
+                await window.refrescarConsolaOperacionesUI(datasetMemoria);
+            }
 
+            // 6. Sincronización Backend REST o Cola Offline
             const payload = {
                 action: "actualizar_parada",
                 id: pedido.id || idUnico,
                 ssc: pedido.ssc || idUnico,
                 planilla_id: pedido.planilla_id || null,
                 estado: nuevoEstado,
+                status: nuevoEstado,
                 destinatario: nuevoDest,
                 direccion: nuevaDir,
                 telefono: nuevoTel,
@@ -159,26 +236,34 @@ export function abrirModalGestionParada(pedido, indice, mutarMarcadorCallback) {
                 updated_at: pedido.updated_at
             };
 
-            fetch(urlApi, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", Accept: "application/json" },
-                body: JSON.stringify(payload)
-            })
-                .then(async (res) => {
-                    const data = await res.json().catch(() => ({}));
-                    if (!res.ok || data.error) {
-                        console.warn("⚠️ [MAPA_MODAL_SYNC]: Advertencia del servidor:", data);
-                        await dbStore.registrarOperacionPendiente("actualizar_parada", payload);
-                    } else {
-                        console.log("🌐 [MAPA_MODAL_SYNC]: Sincronizado remotamente:", data);
-                    }
+            if (esEntornoEstatico()) {
+                console.log("ℹ️ [MAPA_MODAL_GITPAGES]: Entorno estático detectado. Cambio de estado registrado en cola local.");
+                await registrarOperacionPendienteDefensivo("actualizar_parada", payload);
+            } else {
+                const baseUrl = obtenerEndpointAPI();
+                const urlApi = `${baseUrl}?action=actualizar_parada`;
+
+                fetch(urlApi, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify(payload)
                 })
-                .catch(async (err) => {
-                    console.warn("⚠️ [MAPA_MODAL_OFFLINE]: Sync guardado en cola offline:", err);
-                    await dbStore.registrarOperacionPendiente("actualizar_parada", payload);
-                });
+                    .then(async (res) => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const data = await res.json().catch(() => ({}));
+                        console.log("🌐 [MAPA_MODAL_SYNC]: Sincronizado remotamente con el servidor:", data);
+                    })
+                    .catch(async (err) => {
+                        console.warn("⚠️ [MAPA_MODAL_OFFLINE]: Sync guardado en cola offline:", err);
+                        await registrarOperacionPendienteDefensivo("actualizar_parada", payload);
+                    });
+            }
         } catch (err) {
-            console.error("❌ [MAPA_MODAL]: Error al guardar parada:", err);
+            console.error("❌ [MAPA_MODAL]: Error al guardar parada desde modal:", err);
         }
     });
+}
+
+if (typeof window !== "undefined") {
+    window.abrirModalGestionParada = abrirModalGestionParada;
 }

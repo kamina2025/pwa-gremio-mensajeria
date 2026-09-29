@@ -27,8 +27,7 @@
         <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
-        <!-- Ruta: pwa-mensajero/index2.html -->
-        <!-- LIBRERÍAS EXTERNAS PARA GENERACIÓN DE CANVAS Y PDF (SIN RESTRICCIÓN SRI) -->
+        <!-- LIBRERÍAS EXTERNAS PARA GENERACIÓN DE CANVAS Y PDF -->
         <script
             src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
             crossorigin="anonymous"
@@ -50,7 +49,7 @@
             };
         </script>
     </head>
-    <body>
+    <body class="cyber-theme">
         <!-- Cabecera Principal (Header Grid Area) -->
         <header class="header-principal">
             <button id="toggle-menu-btn" class="nav-btn" type="button">
@@ -111,8 +110,8 @@
             </main>
         </div>
 
-        <!-- CONTENEDOR DE BARRA INFERIOR FLOTANTE A NIVEL RAÍZ -->
-        <nav id="contenedor-menu" class="barra-inferior-global" aria-label="Navegación inferior"></nav>
+        <!-- CONTENEDOR DE BARRA INFERIOR FIJA -->
+        <footer id="contenedor-barra-inferior" class="barra-inferior-fija" aria-label="Navegación inferior táctica"></footer>
 
         <!-- PORTALES DE UI CYBERPUNK (Toasts & Modales de Proceso) -->
         <div id="cyber-toast-container" class="cyber-toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -120,34 +119,6 @@
         <div id="cyber-modal-overlay" class="cyber-modal-overlay hidden" role="dialog" aria-modal="true">
             <div class="cyber-modal-card" id="cyber-modal-card"></div>
         </div>
-
-        <script>
-            window.cargarBarraInferior = function (rutaComponente) {
-                console.log(`[INDEX2] Cargando barra inferior desde: ${rutaComponente}`);
-                const contenedor = document.getElementById("contenedor-menu");
-                if (!contenedor) return;
-
-                if (contenedor.dataset.componenteActual === rutaComponente) return;
-
-                fetch(rutaComponente)
-                    .then((response) => {
-                        if (!response.ok) {
-                            throw new Error(`Error HTTP: ${response.status}`);
-                        }
-                        return response.text();
-                    })
-                    .then((html) => {
-                        contenedor.innerHTML = html;
-                        contenedor.dataset.componenteActual = rutaComponente;
-                    })
-                    .catch((error) => console.error("[INDEX2] Error al cargar la barra inferior:", error));
-            };
-
-            document.addEventListener("DOMContentLoaded", () => {
-                console.log("[INDEX2] Evento DOMContentLoaded detectado.");
-                window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
-            });
-        </script>
 
         <!-- Módulos de Control JavaScript -->
         <script src="./app.js"></script>

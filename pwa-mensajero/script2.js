@@ -62,13 +62,222 @@ if (typeof window !== "undefined") {
 
 console.log("🟢 [script2.js]: Orquestador PWA modularizado cargado.");
 
-// --- EXPOSICIÓN GLOBAL EN WINDOW ---
+// --- CONTROL DE BARRA INFERIOR CON MUTEX ANTI-CARRERA ---
+let cargandoBarraPromesa = null;
+
+/**
+ * Carga dinámicamente la barra inferior en función estricta de la vista activa.
+ */
+export async function cargarBarraInferior(vistaTarget = "", reintentos = 3) {
+    const contenedorFooter = document.getElementById("contenedor-barra-inferior") || document.querySelector("footer");
+    
+    if (!contenedorFooter) {
+        if (reintentos > 0) {
+            setTimeout(() => cargarBarraInferior(vistaTarget, reintentos - 1), 100);
+            return;
+        }
+        console.warn("⚠️ [BARRA_INFERIOR]: Contenedor de barra inferior no hallado en el DOM.");
+        return;
+    }
+
+    const vistaActivaActual = vistaTarget || localStorage.getItem("vista_activa") || "pestana-ruta-activa";
+    const esVistaMapa = vistaActivaActual.includes("mapa-fullscreen-container") || 
+                        vistaActivaActual.includes("mapa-activa") || 
+                        vistaActivaActual.includes("mapa");
+
+    const rutaComponente = esVistaMapa 
+        ? "componentes/barra-inferior/mapa-barra-infe.html" 
+        : "componentes/barra-inferior/inicio-barra-infe.html";
+
+    if (contenedorFooter.dataset.componenteCargado === rutaComponente && contenedorFooter.children.length > 0) {
+        return;
+    }
+
+    if (cargandoBarraPromesa) {
+        await cargandoBarraPromesa;
+        if (contenedorFooter.dataset.componenteCargado === rutaComponente) return;
+    }
+
+    console.log(`[BARRA_INFERIOR] Cargando barra [Target: ${vistaActivaActual}] -> ${rutaComponente}`);
+
+    cargandoBarraPromesa = fetch(rutaComponente)
+        .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.text();
+        })
+        .then((html) => {
+            contenedorFooter.innerHTML = html;
+            contenedorFooter.dataset.componenteCargado = rutaComponente;
+            console.log(`✅ [BARRA_INFERIOR]: Barra (${esVistaMapa ? "MAPA" : "INICIO"}) fijada exitosamente.`);
+        })
+        .catch((err) => {
+            console.error("❌ [BARRA_INFERIOR]: Error al cargar componente de barra:", err);
+        })
+        .finally(() => {
+            cargandoBarraPromesa = null;
+        });
+
+    return cargandoBarraPromesa;
+}
+
+/**
+ * Transición atómica de pestañas y vistas en la PWA garantizando visibilidad y re-renderizado de Google Maps
+ * @param {string} targetInput - Selector (#id), ruta relativa o ID de contenedor
+ * @param {boolean} forzarNavegacion - Omitir bloqueos de seguridad anti-rebote
+ */
+export function alternarVistaPestaña(targetInput, forzarNavegacion = false) {
+    if (!targetInput) return;
+
+    let targetId = String(targetInput).replace("#", "").trim();
+    if (targetId.includes("/")) {
+        const partes = targetId.split("/");
+        targetId = partes[partes.length - 1].replace(".html", "");
+    }
+
+    const mapaAliases = {
+        "mapa-activa": "mapa-fullscreen-container",
+        "mapa": "mapa-fullscreen-container",
+        "pestana-mapa-activa": "mapa-fullscreen-container",
+        "pestana-mapa": "mapa-fullscreen-container",
+        "ruta-activa": "pestana-ruta-activa",
+        "crear": "pestana-ruta-crear",
+        "historial": "pestana-monedero-historial",
+        "saldo": "pestana-monedero-saldo",
+        "planillas": "pestana-notificaciones-planillas",
+        "reportes": "pestana-notificaciones-reportes",
+        "conductor": "pestana-perfil-conductor"
+    };
+
+    if (mapaAliases[targetId]) {
+        targetId = mapaAliases[targetId];
+    }
+
+    const vistaPrevia = localStorage.getItem("vista_activa");
+    const esTransicionMapa = targetId === "mapa-fullscreen-container" || targetId.includes("mapa");
+
+    // CORRECCIÓN ANTI-REBOTE: Solo omitir si se intenta recargar LA MISMA VISTA activa y no es forzado.
+    // Si es una navegación intencional a otra vista (como el mapa), se desbloquea y procede.
+    if (window.__BLOQUEAR_REBOOT_VISTA__ && !forzarNavegacion) {
+        if (vistaPrevia === targetId) {
+            console.log(`🛑 [ALTERNAR_VISTA]: Transición redundante a #${targetId} omitida por anti-rebote.`);
+            return;
+        }
+        console.warn(`🔓 [ALTERNAR_VISTA]: Levantando bloqueo anti-rebote para transición prioritaria a -> #${targetId}`);
+        window.__BLOQUEAR_REBOOT_VISTA__ = false;
+    }
+
+    console.log(`🔄 [ALTERNAR_VISTA]: Transición a -> #${targetId}`);
+    localStorage.setItem("vista_activa", targetId);
+
+    // CORRECCIÓN DEL SELECTOR: Seleccionar solo contenedores principales de vista.
+    // NUNCA usar comodín [id^='mapa-'] porque ocultaba los lienzos internos del mapa (#mapa-lienzo, etc.)
+    const todasLasVistas = document.querySelectorAll(
+        ".contenedor-pestana, .vista-pantalla, .pestana-contenido, [id^='pestana-'], #mapa-fullscreen-container"
+    );
+    let nodoEncontrado = false;
+
+    todasLasVistas.forEach((v) => {
+        // Protección: Si el elemento es hijo del contenedor objetivo, no modificar
+        if (v.id !== targetId && v.closest && v.closest(`#${targetId}`)) {
+            return;
+        }
+
+        if (v.id === targetId) {
+            v.style.display = "block";
+            v.style.width = "100%";
+            v.style.height = "100vh";
+            v.classList.remove("oculto");
+            v.classList.add("activa");
+            nodoEncontrado = true;
+        } else if (v.id && !v.id.includes("lienzo") && !v.id.includes("canvas")) {
+            v.style.display = "none";
+            v.classList.add("oculto");
+            v.classList.remove("activa");
+        }
+    });
+
+    if (!nodoEncontrado) {
+        const nodoDirecto = document.getElementById(targetId);
+        if (nodoDirecto) {
+            nodoDirecto.style.display = "block";
+            nodoDirecto.style.width = "100%";
+            nodoDirecto.style.height = "100vh";
+            nodoDirecto.classList.remove("oculto");
+            nodoDirecto.classList.add("activa");
+        }
+    }
+
+    // Actualizar estado visual de navegación en sidebar
+    document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
+    const sidebarNavBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetId}"]`);
+    if (sidebarNavBtn) sidebarNavBtn.classList.add("active");
+
+    // LÓGICA ESPECÍFICA DE VISTAS Y REDIMENSIONAMIENTO DE MAPA GOOGLE
+    if (targetId === "pestana-notificaciones-planillas") {
+        if (typeof window.cargarPlanillasReportadasUI === "function") window.cargarPlanillasReportadasUI();
+    } else if (targetId === "pestana-perfil-conductor") {
+        if (typeof window.cargarPerfilUI === "function") window.cargarPerfilUI();
+    } else if (esTransicionMapa) {
+        console.log("🗺️ [ALTERNAR_VISTA]: Vista de mapa activa. Sincronizando dimensiones de lienzo Google Maps...");
+        
+        // Asegurar que el lienzo interno del mapa esté visible
+        const mapaLienzo = document.getElementById("mapa-lienzo") || document.querySelector(".mapa-lienzo");
+        if (mapaLienzo) {
+            mapaLienzo.style.display = "block";
+            mapaLienzo.style.width = "100%";
+            mapaLienzo.style.height = "100%";
+        }
+
+        const sincronizarMapaGoogle = () => {
+            // 1. Inicializar si la instancia no existía o quedó pendiente
+            if (typeof inicializarMapaMensajero === "function") {
+                inicializarMapaMensajero();
+            } else if (typeof window.inicializarMapaMensajero === "function") {
+                window.inicializarMapaMensajero();
+            }
+
+            // 2. Notificar redimensionamiento al SDK Google Maps
+            window.dispatchEvent(new Event("resize"));
+            const instanciaMapa = window.mapaInstanciaGlobal || window.mapaMensajero || window.mapaInstancia;
+            if (window.google?.maps && instanciaMapa) {
+                window.google.maps.event.trigger(instanciaMapa, "resize");
+            }
+
+            // 3. Forzar re-dibujado de trazados y marcadores
+            if (typeof refrescarLienzoMapa === "function") {
+                refrescarLienzoMapa();
+            } else if (typeof window.refrescarLienzoMapa === "function") {
+                window.refrescarLienzoMapa();
+            }
+        };
+
+        // Doble refresco escalonado: asegura el repintado tras transiciones CSS del DOM
+        requestAnimationFrame(() => {
+            sincronizarMapaGoogle();
+            setTimeout(sincronizarMapaGoogle, 100);
+            setTimeout(sincronizarMapaGoogle, 300);
+        });
+    }
+
+    // Inyectar o conmutar la barra inferior de forma condicional
+    cargarBarraInferior(targetId);
+}
+
+// Aliases e inyecciones globales
+window.cargarBarraInferior = cargarBarraInferior;
+window.alternarVistaPestaña = alternarVistaPestaña;
+window.alternarVista = alternarVistaPestaña;
+window.inicializarMapaMensajero = inicializarMapaMensajero;
+window.refrescarLienzoMapa = refrescarLienzoMapa;
+
+window.navegarA = (rutaVista, forzar = true) => {
+    alternarVistaPestaña(rutaVista, forzar);
+};
+
 window.manejarNavegacionSidebar = (btnNav) => {
     manejarNavegacionSidebar(btnNav, (targetId) => {
         console.log(`📍 [SIDEBAR_NAV]: Cambiando vista objetivo -> ${targetId}`);
-        if (typeof window.alternarVistaPestaña === "function") {
-            window.alternarVistaPestaña(targetId);
-        }
+        window.alternarVistaPestaña(targetId, true);
     });
 };
 
@@ -84,12 +293,11 @@ window.borrarParadaLocalUI = borrarParadaLocalUI;
 window.purgarTodaLaRutaUI = purgarTodaLaRutaUI;
 window.iniciarRutaCompleta = iniciarRutaCompleta;
 window.procesarCargaManualEnlace = procesarCargaManualEnlace;
-window.refrescarLienzoMapa = refrescarLienzoMapa;
+window.refrescarUI = refrescarUI;
 
-// Inicialización PWA
+// Inicialización de eventos PWA
 inicializarEventosPWA();
 
-// Banderas de control
 let aplicacionInicializada = false;
 
 // --- INICIALIZADOR DE CONSOLA Y COMPONENTES ---
@@ -126,6 +334,9 @@ async function inicializarConsolaYMenu() {
 
         if (typeof sincronizarYRenderizarPool === "function") await sincronizarYRenderizarPool();
         if (typeof sincronizarYRenderizarTransito === "function") await sincronizarYRenderizarTransito();
+
+        const vistaInicial = localStorage.getItem("vista_activa") || "pestana-ruta-activa";
+        await cargarBarraInferior(vistaInicial);
 
         console.log("✅ [PWA_INIT]: Inicialización de componentes completada.");
     } catch (err) {
@@ -173,8 +384,8 @@ document.addEventListener("click", (e) => {
     const cardBtn = e.target.closest(".card-btn");
     if (cardBtn) {
         const targetId = cardBtn.getAttribute("data-target");
-        if (targetId && typeof window.alternarVistaPestaña === "function") {
-            window.alternarVistaPestaña(targetId);
+        if (targetId) {
+            window.alternarVistaPestaña(targetId, true);
         }
         return;
     }
@@ -232,68 +443,7 @@ document.addEventListener("click", (e) => {
     }
 });
 
-// --- NAVEGACIÓN SPA Y CONMUTACIÓN DE VISTAS ---
-export function alternarVistaPestaña(targetId) {
-    console.log(`🔄 [ALTERNAR_VISTA]: Transición a -> #${targetId}`);
-    
-    document.querySelectorAll(".contenedor-pestana").forEach((c) => c.classList.remove("activa"));
-
-    const objetivo = document.getElementById(targetId);
-    if (objetivo) {
-        objetivo.classList.add("activa");
-        if (targetId === "pestana-notificaciones-planillas") {
-            if (typeof window.cargarPlanillasReportadasUI === "function") window.cargarPlanillasReportadasUI();
-        } else if (targetId === "pestana-perfil-conductor") {
-            if (typeof window.cargarPerfilUI === "function") window.cargarPerfilUI();
-        }
-    }
-
-    document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
-    const sidebarNavBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetId}"]`);
-    if (sidebarNavBtn) sidebarNavBtn.classList.add("active");
-
-    if (targetId === "mapa-fullscreen-container") {
-        if (typeof window.cargarBarraInferior === "function") {
-            window.cargarBarraInferior("componentes/barra-inferior/mapa-barra-infe.html");
-        }
-        requestAnimationFrame(() => {
-            setTimeout(() => {
-                if (typeof window.refrescarLienzoMapa === "function") {
-                    window.refrescarLienzoMapa();
-                }
-            }, 150);
-        });
-    } else {
-        if (typeof window.cargarBarraInferior === "function") {
-            window.cargarBarraInferior("componentes/barra-inferior/inicio-barra-infe.html");
-        }
-    }
-}
-
-window.alternarVistaPestaña = alternarVistaPestaña;
-
-window.navegarA = (rutaVista) => {
-    if (rutaVista.includes("mapa-activa")) {
-        alternarVistaPestaña("mapa-fullscreen-container");
-    } else if (rutaVista.includes("ruta-activa")) {
-        alternarVistaPestaña("pestana-ruta-activa");
-    } else if (rutaVista.includes("crear")) {
-        alternarVistaPestaña("pestana-ruta-crear");
-    } else if (rutaVista.includes("historial")) {
-        alternarVistaPestaña("pestana-monedero-historial");
-    } else if (rutaVista.includes("saldo")) {
-        alternarVistaPestaña("pestana-monedero-saldo");
-    } else if (rutaVista.includes("planillas")) {
-        alternarVistaPestaña("pestana-notificaciones-planillas");
-    } else if (rutaVista.includes("reportes")) {
-        alternarVistaPestaña("pestana-notificaciones-reportes");
-    } else if (rutaVista.includes("conductor")) {
-        alternarVistaPestaña("pestana-perfil-conductor");
-    }
-};
-
-window.refrescarUI = refrescarUI;
-
+// --- MÉTODOS DE OPERACIÓN Y FORMULARIOS ---
 window.registrarIntentoLlamada = () => {
     console.log("📞 [OPERACION]: Registrando intento de llamada...");
     registrarLlamadaFlujo(

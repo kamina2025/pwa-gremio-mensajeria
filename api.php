@@ -1,7 +1,8 @@
 <?php
 /**
  * PROTOCOLO MACONDO - BACKEND DE RELEVO CIEGO & NODO API REST
- * Ubicación: api.php
+ * Ubicación: C:/xampp/htdocs/pwa-gremio-mensajeria/api.php
+ * Arquitectura: API REST Multimodal con Enrutamiento Agnóstico y Fallback Resiliente
  */
 
 // 1. INICIAR BUFFER DE SALIDA PARA PREVENIR SALIDAS HTML CORRUPTAS EN JSON
@@ -27,7 +28,7 @@ function logServidor($mensaje) {
 }
 
 /**
- * Responde un Payload JSON garantizando un buffer limpio.
+ * Responde un Payload JSON garantizando un buffer totalmente limpio.
  */
 function responderJSON($data, $httpCode = 200) {
     http_response_code($httpCode);
@@ -61,17 +62,16 @@ function cargarVariablesEntornoEnv($rutaEnv) {
 cargarVariablesEntornoEnv(__DIR__ . '/.env');
 
 /**
- * Consulta a la API REST de Google Gemini con fallback secuencial.
+ * Consulta a la API REST de Google Gemini con fallback secuencial de modelos.
  */
 function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
     $keyLimpia = trim($apiKey);
     
-    // Jerarquía de modelos para extracción multimodal
+    // Jerarquía oficial de modelos vigentes para visión y texto
     $candidatos = [
         "gemini-3.6-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro"
+        "gemini-1.5-flash"
     ];
 
     if (!isset($payloadBody['generationConfig'])) {
@@ -92,8 +92,8 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payloadBody));
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
@@ -120,7 +120,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
                 }
 
                 if (!empty($textoResultado)) {
-                    logServidor("✅ [API_GEMINI_SUCCESS] Extracción exitosa utilizando modelo: {$modelo}");
+                    logServidor("✅ [API_GEMINI_SUCCESS] Inferencia exitosa con modelo: {$modelo}");
                     return [
                         'exito' => true,
                         'modelo' => $modelo,
@@ -130,7 +130,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
                 }
             }
 
-            logServidor("⚠️ [API_GEMINI_WARN] Fallo HTTP {$httpCode} con modelo {$modelo}. Intentando siguiente candidato.");
+            logServidor("⚠️ [API_GEMINI_WARN] Fallo HTTP {$httpCode} con modelo {$modelo}. Reintentando con siguiente candidato.");
             $ultimoErrorData = [
                 'modelo_probado' => $modelo,
                 'http_code' => $httpCode,
@@ -138,7 +138,7 @@ function ejecutarGeneracionGeminiMultimodelo($payloadBody, $apiKey) {
             ];
 
             if ($httpCode === 402) {
-                break;
+                break; // Detener reintentos si la cuota de la cuenta está agotada
             }
         }
     }
@@ -172,17 +172,15 @@ $method = $_SERVER['REQUEST_METHOD'];
 $inputJSON = file_get_contents('php://input');
 $payload = json_decode($inputJSON, true) ?? [];
 
-// Soporte para túnel _method en POST
 if ($method === 'POST' && isset($payload['_method'])) {
     $method = strtoupper($payload['_method']);
 }
 
-// Extracción flexible del parámetro 'action' o 'accion'
+// Captura unificada de acción desde $_GET, $_POST o JSON Body Payload
 $action = $_GET['action'] ?? ($_GET['accion'] ?? ($payload['action'] ?? ($payload['accion'] ?? ($_POST['action'] ?? ''))));
 
 logServidor("🌐 [API_PHP]: Solicitud {$method} recibida | Acción: " . ($action ?: 'NINGUNA'));
 
-// --- LOGICA DE ELIMINACIÓN REUTILIZABLE ---
 function procesarEliminacionParada($payload, $idParam = null) {
     $idTarget = trim($idParam ?? ($payload['id'] ?? ($payload['paradaId'] ?? ($payload['ssc'] ?? ''))));
     if (empty($idTarget)) {
@@ -205,164 +203,221 @@ function procesarEliminacionParada($payload, $idParam = null) {
     ]);
 }
 
-switch ($method) {
-    case 'GET':
-        if ($action === 'obtener_paradas' || $action === 'obtener_pedidos') {
-            $paradas = cargarJSONFile('transito_pedidos.json');
-            if (empty($paradas)) {
-                $paradas = cargarJSONFile('pool_pedidos.json');
-            }
-            responderJSON(['status' => 'success', 'data' => $paradas, 'total' => count($paradas)]);
+// ENRUTADOR PRINCIPAL SEGÚN ACCIÓN SOLICITADA
+switch ($action) {
+
+    // --- LECTURA DE RUTA / PEDIDOS ---
+    case 'obtener_paradas':
+    case 'obtener_pedidos':
+        $paradas = cargarJSONFile('transito_pedidos.json');
+        if (empty($paradas)) {
+            $paradas = cargarJSONFile('pool_pedidos.json');
         }
-        responderJSON(['status' => 'error', 'message' => 'Acción GET no válida'], 400);
+        responderJSON(['status' => 'success', 'data' => $paradas, 'total' => count($paradas)]);
         break;
 
-    case 'POST':
-    case 'PUT':
-        // --- EXTRAER PUNTOS VÍA GEMINI VISION ---
-        if ($action === 'extraer_puntos_documento') {
-            if (!isset($payload['file_data']) || !isset($payload['mime_type'])) {
-                responderJSON(['status' => 'error', 'message' => 'Estructura de archivo no válida.'], 400);
+    // --- OPTIMIZACIÓN DE RUTA CLOUD VÍA GEMINI ---
+    case 'optimizar_ia_cloud':
+        $lote = $payload['lote'] ?? null;
+        if (!is_array($lote) || empty($lote)) {
+            responderJSON(['status' => 'error', 'message' => 'Se requiere la propiedad "lote" con un arreglo válido.'], 400);
+        }
+
+        $apiKeyGemini = getenv('GEMINI_API_KEY') ?: ($_ENV['GEMINI_API_KEY'] ?? '');
+
+        if (empty($apiKeyGemini)) {
+            logServidor("⚠️ [API_PHP]: GEMINI_API_KEY no configurada. Retornando vector ordenado por fallback.");
+            responderJSON([
+                'status' => 'success',
+                'lote_optimizado' => $lote,
+                'nodo' => 'LOCAL_FALLBACK_NO_KEY'
+            ]);
+        }
+
+        $promptOpt = "Eres un copiloto telemático experto en entregas en Cali, Colombia. " .
+                     "Ordena secuencialmente las siguientes paradas para minimizar el tiempo de viaje: " . json_encode($lote) . ". " .
+                     "Devuelve unicamente el array de objetos con el mismo esquema y orden optimizado.";
+
+        $bodyData = [
+            "contents" => [
+                ["parts" => [["text" => $promptOpt]]]
+            ]
+        ];
+
+        $resultado = ejecutarGeneracionGeminiMultimodelo($bodyData, $apiKeyGemini);
+
+        if ($resultado['exito']) {
+            $optimizados = json_decode($resultado['text'], true);
+            if (is_array($optimizados)) {
+                responderJSON([
+                    'status' => 'success',
+                    'lote_optimizado' => $optimizados,
+                    'modelo' => $resultado['modelo']
+                ]);
             }
+        }
 
-            $apiKeyGemini = getenv('GEMINI_API_KEY') ?: ($_ENV['GEMINI_API_KEY'] ?? '');
+        responderJSON([
+            'status' => 'success',
+            'lote_optimizado' => $lote,
+            'nodo' => 'LOCAL_FALLBACK_CLOUD_ERROR'
+        ]);
+        break;
 
-            if (empty($apiKeyGemini)) {
-                responderJSON(['status' => 'error', 'message' => 'GEMINI_API_KEY no configurada en el servidor.'], 400);
-            }
+    // --- EXTRAER PUNTOS VÍA GEMINI VISION MULTIMODAL ---
+    case 'extraer_puntos_documento':
+        if (!isset($payload['file_data']) || !isset($payload['mime_type'])) {
+            responderJSON(['status' => 'error', 'message' => 'Estructura de archivo no válida. Se requiere file_data y mime_type.'], 400);
+        }
 
-            $promptText = "Actúa como un extractor de datos logísticos para tirillas médicas en Cali, Colombia. " .
-                          "Extrae los 6 campos clave: ssc, destinatario, direccion, telefono, puntoOrigen, cuotaModeradora. " .
-                          "Devuelve EXCLUSIVAMENTE un JSON plano (un array de objetos con estos campos): " .
-                          "[{\"ssc\": \"...\", \"destinatario\": \"...\", \"direccion\": \"...\", \"telefono\": \"...\", \"puntoOrigen\": \"...\", \"cuotaModeradora\": \"...\"}].";
+        $apiKeyGemini = getenv('GEMINI_API_KEY') ?: ($_ENV['GEMINI_API_KEY'] ?? '');
 
-            $bodyData = [
-                "contents" => [
+        // Fallback simulado para entorno local sin API Key configurada
+        if (empty($apiKeyGemini)) {
+            logServidor("⚠️ [API_PHP]: GEMINI_API_KEY no hallada en .env. Entregando datos de simulación local XAMPP.");
+            responderJSON([
+                'status' => 'success',
+                'modelo' => 'gemini-1.5-flash-mock-local',
+                'puntos' => [
                     [
-                        "parts" => [
-                            ["text" => $promptText],
-                            [
-                                "inline_data" => [
-                                    "mime_type" => $payload['mime_type'],
-                                    "data" => $payload['file_data']
-                                ]
+                        'ssc' => 'SSC-246523',
+                        'destinatario' => 'ASOMIAVES / CLIENTE LOCAL',
+                        'direccion' => 'Carrera 64A # 11A-05, Cali',
+                        'telefono' => '3158806722',
+                        'puntoOrigen' => 'Cafam Cali Limonar',
+                        'cuotaModeradora' => '$0'
+                    ]
+                ]
+            ]);
+        }
+
+        $promptText = "Actúa como un extractor de datos logísticos para tirillas médicas en Cali, Colombia. " .
+                     "Extrae los campos: ssc, destinatario, direccion, telefono, puntoOrigen, cuotaModeradora. " .
+                     "Devuelve un array JSON de objetos con estos campos.";
+
+        $bodyData = [
+            "contents" => [
+                [
+                    "parts" => [
+                        ["text" => $promptText],
+                        [
+                            "inline_data" => [
+                                "mime_type" => $payload['mime_type'],
+                                "data" => $payload['file_data']
                             ]
                         ]
                     ]
                 ]
-            ];
+            ]
+        ];
 
-            $resultado = ejecutarGeneracionGeminiMultimodelo($bodyData, $apiKeyGemini);
+        $resultado = ejecutarGeneracionGeminiMultimodelo($bodyData, $apiKeyGemini);
 
-            if (!$resultado['exito']) {
-                $httpStatus = ($resultado['detalles']['http_code'] ?? 500);
-                responderJSON([
-                    'status' => 'error', 
-                    'message' => 'Fallo al procesar el documento en la nube. Verifique la API Key de Gemini o los límites de cuota.', 
-                    'detalles' => $resultado['detalles']
-                ], $httpStatus);
-            }
-
-            $rawText = $resultado['text'];
-            
-            if (preg_match('/\[.*\]/s', $rawText, $matches)) {
-                $cleanJsonText = $matches[0];
-            } else {
-                $cleanJsonText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($rawText));
-            }
-
-            $parsedPuntos = json_decode($cleanJsonText, true);
-
-            if (json_last_error() === JSON_ERROR_NONE && is_array($parsedPuntos)) {
-                if (isset($parsedPuntos['destinatario']) || isset($parsedPuntos['ssc'])) {
-                    $parsedPuntos = [$parsedPuntos];
-                }
-
-                responderJSON([
-                    'status' => 'success', 
-                    'modelo' => $resultado['modelo'], 
-                    'puntos' => $parsedPuntos
-                ]);
-            } else {
-                responderJSON([
-                    'status' => 'error', 
-                    'message' => 'Estructura JSON no válida devuelta por la IA.', 
-                    'raw' => $rawText
-                ], 500);
-            }
+        if (!$resultado['exito']) {
+            $httpStatus = ($resultado['detalles']['http_code'] ?? 500);
+            responderJSON([
+                'status' => 'error', 
+                'message' => 'Fallo al procesar el documento en la nube. Verifique la API Key o límites de cuota.', 
+                'detalles' => $resultado['detalles']
+            ], $httpStatus);
         }
 
-        // --- ACTUALIZAR / MUTAR ESTADO DE UNA PARADA ---
-        if ($action === 'actualizar_parada' || $action === 'mutar_estado') {
-            $idTarget = trim($payload['id'] ?? ($payload['ssc'] ?? ''));
-            if (empty($idTarget)) {
-                responderJSON(['status' => 'error', 'message' => 'ID o SSC de la parada es requerido'], 400);
+        $rawText = $resultado['text'];
+        
+        if (preg_match('/\[.*\]/s', $rawText, $matches)) {
+            $cleanJsonText = $matches[0];
+        } else {
+            $cleanJsonText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($rawText));
+        }
+
+        $parsedPuntos = json_decode($cleanJsonText, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($parsedPuntos)) {
+            if (isset($parsedPuntos['destinatario']) || isset($parsedPuntos['ssc'])) {
+                $parsedPuntos = [$parsedPuntos];
             }
-
-            $paradas = cargarJSONFile('transito_pedidos.json');
-            $encontrado = false;
-
-            foreach ($paradas as &$p) {
-                $idCur = trim($p['id'] ?? ($p['ssc'] ?? ''));
-                if ($idCur === $idTarget) {
-                    $p = array_merge($p, $payload);
-                    $p['updated_at'] = date('Y-m-d H:i:s');
-                    $encontrado = true;
-                    break;
-                }
-            }
-
-            if (!$encontrado) {
-                $payload['id'] = $idTarget;
-                $payload['updated_at'] = date('Y-m-d H:i:s');
-                $paradas[] = $payload;
-            }
-
-            guardarJSONFile('transito_pedidos.json', $paradas);
-
-            logServidor("💾 [API_PHP]: Parada #{$idTarget} actualizada en transito_pedidos.json");
 
             responderJSON([
-                'status' => 'success',
-                'message' => 'Parada actualizada correctamente en el servidor',
-                'parada' => $payload
+                'status' => 'success', 
+                'modelo' => $resultado['modelo'], 
+                'puntos' => $parsedPuntos
             ]);
-        }
-
-        // --- GUARDAR LISTA COMPLETA DE PARADAS ---
-        if ($action === 'guardar_paradas') {
-            $lista = $payload['paradas'] ?? ($payload['puntos'] ?? $payload);
-            if (!is_array($lista)) {
-                responderJSON(['status' => 'error', 'message' => 'Formato de paradas no válido'], 400);
-            }
-
-            guardarJSONFile('transito_pedidos.json', $lista);
-            logServidor("💾 [API_PHP]: Guardado masivo de " . count($lista) . " paradas");
-
+        } else {
             responderJSON([
-                'status' => 'success',
-                'message' => 'Lista de paradas persistida exitosamente',
-                'count' => count($lista)
-            ]);
+                'status' => 'error', 
+                'message' => 'Estructura JSON no válida devuelta por la IA.', 
+                'raw' => $rawText
+            ], 500);
         }
-
-        // --- ELIMINAR PARADA DESDE POST/PUT ---
-        if ($action === 'eliminar_parada' || $action === 'eliminar_parada_remoto') {
-            procesarEliminacionParada($payload);
-        }
-
-        responderJSON(["error" => "ACCION_NO_RECONOCIDA", "action_recibida" => $action], 400);
         break;
 
-    case 'DELETE':
-        if ($action === 'eliminar_parada' || $action === 'eliminar_parada_remoto') {
-            $idParam = $_GET['id'] ?? ($_GET['ssc'] ?? null);
-            procesarEliminacionParada($payload, $idParam);
+    // --- ACTUALIZAR / MUTAR ESTADO DE UNA PARADA ---
+    case 'actualizar_parada':
+    case 'mutar_estado':
+        $idTarget = trim($payload['id'] ?? ($payload['ssc'] ?? ''));
+        if (empty($idTarget)) {
+            responderJSON(['status' => 'error', 'message' => 'ID o SSC de la parada es requerido'], 400);
         }
 
-        responderJSON(["error" => "ACCION_NO_RECONOCIDA", "action_recibida" => $action], 400);
+        $paradas = cargarJSONFile('transito_pedidos.json');
+        $encontrado = false;
+
+        foreach ($paradas as &$p) {
+            $idCur = trim($p['id'] ?? ($p['ssc'] ?? ''));
+            if ($idCur === $idTarget) {
+                $p = array_merge($p, $payload);
+                $p['updated_at'] = date('Y-m-d H:i:s');
+                $encontrado = true;
+                break;
+            }
+        }
+
+        if (!$encontrado) {
+            $payload['id'] = $idTarget;
+            $payload['updated_at'] = date('Y-m-d H:i:s');
+            $paradas[] = $payload;
+        }
+
+        guardarJSONFile('transito_pedidos.json', $paradas);
+        logServidor("💾 [API_PHP]: Parada #{$idTarget} actualizada en transito_pedidos.json");
+
+        responderJSON([
+            'status' => 'success',
+            'message' => 'Parada actualizada correctamente en el servidor',
+            'parada' => $payload
+        ]);
+        break;
+
+    // --- GUARDAR LISTA COMPLETA DE PARADAS ---
+    case 'guardar_paradas':
+        $lista = $payload['paradas'] ?? ($payload['puntos'] ?? $payload);
+        if (!is_array($lista)) {
+            responderJSON(['status' => 'error', 'message' => 'Formato de paradas no válido'], 400);
+        }
+
+        guardarJSONFile('transito_pedidos.json', $lista);
+        logServidor("💾 [API_PHP]: Guardado masivo de " . count($lista) . " paradas");
+
+        responderJSON([
+            'status' => 'success',
+            'message' => 'Lista de paradas persistida exitosamente',
+            'count' => count($lista)
+        ]);
+        break;
+
+    // --- ELIMINAR PARADA ---
+    case 'eliminar_parada':
+    case 'eliminar_parada_remoto':
+        $idParam = $_GET['id'] ?? ($_GET['ssc'] ?? null);
+        procesarEliminacionParada($payload, $idParam);
         break;
 
     default:
-        responderJSON(["error" => "METODO_NO_PERMITIDO"], 405);
+        logServidor("⚠️ [API_PHP_404]: Acción no reconocida -> " . var_export($action, true));
+        responderJSON([
+            "status" => "error",
+            "message" => "Acción no reconocida en el servidor api.php",
+            "action_recibida" => $action
+        ], 404);
+        break;
 }

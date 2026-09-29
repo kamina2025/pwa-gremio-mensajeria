@@ -1,17 +1,11 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA MENSAJERO: EXTRACTOR MULTIMODAL IA (GEMINI / VERCEL / PHP)
  * Ubicación: pwa-mensajero/modulos/procesamiento-datos/ia-gemini.js
- * Arquitectura: Local-First con Conexión Dinámica (XAMPP / Vercel Cloud) y Fallback Heurístico
  */
 
 import { procesarRutaHeuristica } from './heuristico.js';
+import { optimizarImagenParaGemini } from '../image-processor.js';
 
-/**
- * Convierte un Blob o File a cadena Base64 pura (sin el prefijo data:URL).
- * 
- * @param {Blob|File} blob - Archivo de imagen o PDF.
- * @returns {Promise<string>} Cadena de datos en Base64.
- */
 function blobToBase64(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -25,85 +19,111 @@ function blobToBase64(blob) {
     });
 }
 
-/**
- * Determina dinámicamente la URL del backend y el timeout según el entorno de ejecución.
- * 
- * @returns {Object} Configuración con URL, tiempo límite y banderas de entorno.
- */
 function determinarConfiguracionEntorno() {
     const hostActual = window.location.hostname;
     const esLocal = hostActual === "localhost" || hostActual === "127.0.0.1" || hostActual.startsWith("192.168.");
 
     if (esLocal) {
-        const urlBaseLocal = window.ENDPOINT_API_PHP || "http://localhost/pwa-gremio-mensajeria/api.php";
-        const endpointPhp = urlBaseLocal.includes("?") ? urlBaseLocal : `${urlBaseLocal}?action=extraer_puntos_documento`;
+        let baseApi = window.ENDPOINT_API_PHP;
+
+        if (!baseApi) {
+            try {
+                baseApi = new URL('../api.php', window.location.href).href;
+            } catch (e) {
+                baseApi = "../api.php";
+            }
+        }
+
+        if (baseApi.includes("?")) {
+            baseApi = baseApi.split("?")[0];
+        }
+
+        const endpointFinalPhp = `${baseApi}?action=extraer_puntos_documento`;
         
-        console.log(`🖥️ [ENTORNO_LOCAL_XAMPP]: PWA operando en local. Apuntando API local -> [${endpointPhp}]`);
+        console.log(`🖥️ [ENTORNO_LOCAL_XAMPP]: PWA operando en local. Apuntando API local -> [${endpointFinalPhp}]`);
         return {
-            endpoint: endpointPhp,
-            timeoutMs: 30000, // Timeout extendido para servidor local en XAMPP
+            endpoint: endpointFinalPhp,
+            endpointFallback: "../api.php?action=extraer_puntos_documento",
+            timeoutMs: 30000,
             modoLocal: true
         };
     }
 
     const endpointVercel = window.ENDPOINT_API_VERCEL || "https://pwa-gremio-mensajeria.vercel.app/api/extraer-puntos";
-    console.log(`🌐 [ENTORNO_NUBE_PROD]: PWA operando en GitHub Pages / Android. Apuntando Vercel Cloud -> [${endpointVercel}]`);
+    console.log(`🌐 [ENTORNO_NUBE_PROD]: PWA operando en Producción. Apuntando Vercel Cloud -> [${endpointVercel}]`);
     
     return {
         endpoint: endpointVercel,
+        endpointFallback: null,
         timeoutMs: 15000,
         modoLocal: false
     };
 }
 
-/**
- * Procesa la imagen o documento PDF de una tirilla médica.
- * Solicita el análisis a la función Backend correspondiente (PHP en XAMPP o Vercel Serverless)
- * y conmuta a procesamiento local heurístico ante cualquier falla de red, timeout o cuota.
- * 
- * @param {Blob|File} archivoBlob - Documento PDF o fotografía de la tirilla médica.
- * @param {Object} [opciones={}] - Opciones de configuración adicionales.
- * @param {number} [opciones.timeoutMs] - Tiempo límite personalizado en milisegundos.
- * @returns {Promise<Array<Object>>} Lista de paradas/tirillas extraídas.
- */
 export async function procesarImagenConGemini(archivoBlob, opciones = {}) {
     const configEntorno = determinarConfiguracionEntorno();
     const tiempoLimite = opciones.timeoutMs || configEntorno.timeoutMs;
 
-    console.log(">>> [IA_GEMINI_PREP]: Convirtiendo archivo a Base64 para consumo multimodal...");
+    let archivoAProcesar = archivoBlob;
+
+    if (archivoBlob.type && archivoBlob.type.startsWith("image/")) {
+        try {
+            console.log(`📷 [IA_GEMINI_PREPROC]: Binarizando "${archivoBlob.name || 'foto'}" para optimizar tokens OCR...`);
+            const blobOpt = await optimizarImagenParaGemini(archivoBlob, { maxDimension: 1024, contraste: 1.4 });
+            archivoAProcesar = new File([blobOpt], archivoBlob.name || "tirilla.jpg", { type: "image/jpeg" });
+        } catch (e) {
+            console.warn("⚠️ [IA_GEMINI_PREPROC_WARN]: Error en binarización visual. Usando archivo original:", e);
+        }
+    }
+
+    console.log(">>> [IA_GEMINI_PREP]: Convirtiendo archivo procesado a Base64 para consumo multimodal...");
 
     let base64Data;
     try {
-        base64Data = await blobToBase64(archivoBlob);
+        base64Data = await blobToBase64(archivoAProcesar);
     } catch (err) {
         console.error(">>> [IA_GEMINI_FILEREADER_ERROR]: Fallo al convertir archivo en Base64:", err);
         return ejecutarFallbackHeuristico(archivoBlob);
     }
 
-    const mimeType = archivoBlob.type || (archivoBlob.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+    const mimeType = archivoAProcesar.type || (archivoAProcesar.name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
 
-    console.log(`>>> [IA_GEMINI_FETCH]: Solicitando análisis a -> [${configEntorno.endpoint}] [MIME: ${mimeType}] [Timeout: ${tiempoLimite}ms]`);
+    const enviarSolicitudFetch = async (targetEndpoint) => {
+        console.log(`>>> [IA_GEMINI_FETCH]: Solicitando análisis a -> [${targetEndpoint}] [MIME: ${mimeType}] [Timeout: ${tiempoLimite}ms]`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), tiempoLimite);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), tiempoLimite);
-
-    try {
-        const response = await fetch(configEntorno.endpoint, {
+        const response = await fetch(targetEndpoint, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            headers: { 
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
             signal: controller.signal,
             body: JSON.stringify({
+                action: "extraer_puntos_documento",
                 mime_type: mimeType,
-                file_data: base64Data,
-                prompt_instrucciones: "Extrae los 6 campos de la tirilla médica: ssc, destinatario, direccion, telefono, puntoOrigen, cuotaModeradora"
+                file_data: base64Data
             })
         });
 
         clearTimeout(timeoutId);
+        return response;
+    };
+
+    try {
+        let response = await enviarSolicitudFetch(configEntorno.endpoint);
+
+        // Fallback defensivo: si la ruta absoluta falla, intentamos con la ruta relativa clásica
+        if (response.status === 404 && configEntorno.endpointFallback) {
+            console.warn(`⚠ [IA_GEMINI_404]: Endpoint [${configEntorno.endpoint}] devolvió 404. Reintentando con fallback [${configEntorno.endpointFallback}]...`);
+            response = await enviarSolicitudFetch(configEntorno.endpointFallback);
+        }
 
         if (!response.ok) {
             console.error(`>>> [IA_GEMINI_HTTP_ERR]: El servidor devolvió el código de estado HTTP ${response.status}`);
-            return ejecutarFallbackHeuristico(base64Data);
+            return ejecutarFallbackHeuristico(archivoBlob);
         }
 
         const textoRespuesta = await response.text();
@@ -113,13 +133,7 @@ export async function procesarImagenConGemini(archivoBlob, opciones = {}) {
             resData = JSON.parse(textoRespuesta);
         } catch (e) {
             console.error(">>> [IA_GEMINI_SYNTAX]: Respuesta no válida devuelta por el servidor:", textoRespuesta);
-            return ejecutarFallbackHeuristico(base64Data);
-        }
-
-        // Manejo de cuota o saldo agotado (HTTP 402 / RESOURCE_EXHAUSTED)
-        if (response.status === 402 || resData.code_reason === "RESOURCE_EXHAUSTED" || resData.http_code === 402) {
-            console.warn(">>> [IA_GEMINI_CUOTA_EXHAUSTED]: Créditos de API agotados (HTTP 402). Activando fallback local...");
-            return ejecutarFallbackHeuristico(base64Data);
+            return ejecutarFallbackHeuristico(archivoBlob);
         }
 
         if (resData.status === "success" && Array.isArray(resData.puntos)) {
@@ -127,28 +141,20 @@ export async function procesarImagenConGemini(archivoBlob, opciones = {}) {
             return resData.puntos;
         } else {
             console.warn(">>> [IA_GEMINI_WARN]: Estructura no válida devuelta por el servidor. Conmutando a fallback...");
-            return ejecutarFallbackHeuristico(base64Data);
+            return ejecutarFallbackHeuristico(archivoBlob);
         }
 
     } catch (err) {
-        clearTimeout(timeoutId);
-
         if (err.name === 'AbortError') {
             console.warn(`>>> [IA_GEMINI_TIMEOUT]: Tiempo de espera agotado (${tiempoLimite}ms). Ejecutando fallback local...`);
         } else {
             console.error(">>> [IA_GEMINI_ERROR]: Error de comunicación con el servicio de IA:", err.message || err);
         }
 
-        return ejecutarFallbackHeuristico(base64Data);
+        return ejecutarFallbackHeuristico(archivoBlob);
     }
 }
 
-/**
- * Invoca la extracción heurística local si ocurre algún fallo con el servicio en la nube.
- * 
- * @param {string|Blob|File} entrada - Datos en Base64 o archivo.
- * @returns {Array<Object>} Arreglo de paradas procesadas localmente.
- */
 function ejecutarFallbackHeuristico(entrada) {
     console.log(">>> [IA_GEMINI_FALLBACK]: Procesando documento con motor heurístico local...");
     if (typeof procesarRutaHeuristica === 'function') {
@@ -157,4 +163,8 @@ function ejecutarFallbackHeuristico(entrada) {
     }
     console.error(">>> [IA_GEMINI_CRITICAL]: Módulo heurístico local no disponible.");
     return [];
+}
+
+if (typeof window !== "undefined") {
+    window.procesarImagenConGemini = procesarImagenConGemini;
 }

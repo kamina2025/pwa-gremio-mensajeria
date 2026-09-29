@@ -4,8 +4,8 @@
  * Arquitectura: Async Local-First (IndexedDB / LocalStorage) con Invocación Cloud Multimodal
  */
 
-import { 
-    guardarRutaZonificada, 
+import {
+    guardarRutaZonificada,
     obtenerParadasGuardadas,
     sincronizarYRenderizarPool,
     sincronizarYRenderizarTransito,
@@ -15,16 +15,19 @@ import {
 
 import { inicializarMapaMensajero, refrescarLienzoMapa } from "./modulos/mapa/mapa-visor.js";
 import { ImportadorMasivoMensajero } from "./modulos/mensajero-importer.js";
-import { registrarIntentoLlamada as registrarLlamadaFlujo, configurarEventosFormularioNovedad } from "./modulos/mensajero-flujo.js";
+import {
+    registrarIntentoLlamada as registrarLlamadaFlujo,
+    configurarEventosFormularioNovedad
+} from "./modulos/mensajero-flujo.js";
 
 // Submódulos desacoplados
-import { 
-    inicializarRutaPayload, 
-    obtenerListaPedidosGlobal, 
-    obtenerIndicePedidoActivo, 
-    obtenerLlamadasRealizadas, 
-    setLlamadasRealizadas, 
-    refrescarUI, 
+import {
+    inicializarRutaPayload,
+    obtenerListaPedidosGlobal,
+    obtenerIndicePedidoActivo,
+    obtenerLlamadasRealizadas,
+    setLlamadasRealizadas,
+    refrescarUI,
     avanzarAlSiguientePedido,
     determinarSiguientePedidoActivo,
     ejecutarPasoAceptarPedido,
@@ -36,7 +39,11 @@ import {
 } from "./modulos/rutas/rutas-orquestador-flujo.js";
 
 import { procesarCargaManualEnlace } from "./modulos/importer/carga-manual-handler.js";
-import { inicializarControlSidebar, manejarClicSubmenu, manejarNavegacionSidebar } from "./modulos/mensajero-sidebar.js";
+import {
+    inicializarControlSidebar,
+    manejarClicSubmenu,
+    manejarNavegacionSidebar
+} from "./modulos/mensajero-sidebar.js";
 import { inicializarEventosPWA } from "./modulos/mensajero-pwa.js";
 
 // Controller de mapa
@@ -50,16 +57,27 @@ import { guardarPlanillaReportada } from "./modulos/planilla/planillas-db.js";
 // Importaciones Módulo Perfil del Conductor
 import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil/perfil-ui.js";
 
-// --- CONFIGURACIÓN DE ENDPOINT API (FALLBACK LOCAL) ---
-if (typeof window !== "undefined") {
-    const origin = window.location.origin;
-    const pathname = window.location.pathname;
-    window.ENDPOINT_API_PHP = pathname.includes("/pwa-gremio-mensajeria/")
-        ? `${origin}/pwa-gremio-mensajeria/api.php`
-        : `${origin}/api.php`;
-    console.log(`🌐 [CONFIG_ENDPOINT]: API local configurada -> ${window.ENDPOINT_API_PHP}`);
-}
+// --- CONFIGURACIÓN DE ENDPOINT API (RESOLUCIÓN DINÁMICA DE RUTA BASE) ---
+/**
+ * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL Y ORQUESTADOR PWA TÁCTICO
+ * Ubicación: pwa-mensajero/script2.js
+ */
 
+// --- CONFIGURACIÓN DE ENDPOINT API (RESOLUCIÓN ABSOLUTA INMUTABLE) ---
+if (typeof window !== "undefined") {
+    // Calculamos la ruta absoluta de api.php un nivel arriba de pwa-mensajero de forma inmutable
+    let endpointAbsoluto = "../api.php";
+
+    try {
+        // window.location.href garantiza que se incluya el host (ej. localhost) y el puerto
+        endpointAbsoluto = new URL("../api.php", window.location.href).href;
+    } catch (e) {
+        endpointAbsoluto = "../api.php";
+    }
+
+    window.ENDPOINT_API_PHP = endpointAbsoluto;
+    console.log(`🌐 [CONFIG_ENDPOINT]: API local configurada dinámicamente -> ${window.ENDPOINT_API_PHP}`);
+}
 console.log("🟢 [script2.js]: Orquestador PWA modularizado cargado.");
 
 // --- CONTROL DE BARRA INFERIOR CON MUTEX ANTI-CARRERA ---
@@ -70,23 +88,24 @@ let cargandoBarraPromesa = null;
  */
 export async function cargarBarraInferior(vistaTarget = "", reintentos = 3) {
     const contenedorFooter = document.getElementById("contenedor-barra-inferior") || document.querySelector("footer");
-    
+
     if (!contenedorFooter) {
         if (reintentos > 0) {
             setTimeout(() => cargarBarraInferior(vistaTarget, reintentos - 1), 100);
             return;
         }
-        console.warn("⚠️ [BARRA_INFERIOR]: Contenedor de barra inferior no hallado en el DOM.");
+        console.warn("⚠️️ [BARRA_INFERIOR]: Contenedor de barra inferior no hallado en el DOM.");
         return;
     }
 
     const vistaActivaActual = vistaTarget || localStorage.getItem("vista_activa") || "pestana-ruta-activa";
-    const esVistaMapa = vistaActivaActual.includes("mapa-fullscreen-container") || 
-                        vistaActivaActual.includes("mapa-activa") || 
-                        vistaActivaActual.includes("mapa");
+    const esVistaMapa =
+        vistaActivaActual.includes("mapa-fullscreen-container") ||
+        vistaActivaActual.includes("mapa-activa") ||
+        vistaActivaActual.includes("mapa");
 
-    const rutaComponente = esVistaMapa 
-        ? "componentes/barra-inferior/mapa-barra-infe.html" 
+    const rutaComponente = esVistaMapa
+        ? "componentes/barra-inferior/mapa-barra-infe.html"
         : "componentes/barra-inferior/inicio-barra-infe.html";
 
     if (contenedorFooter.dataset.componenteCargado === rutaComponente && contenedorFooter.children.length > 0) {
@@ -136,16 +155,16 @@ export function alternarVistaPestaña(targetInput, forzarNavegacion = false) {
 
     const mapaAliases = {
         "mapa-activa": "mapa-fullscreen-container",
-        "mapa": "mapa-fullscreen-container",
+        mapa: "mapa-fullscreen-container",
         "pestana-mapa-activa": "mapa-fullscreen-container",
         "pestana-mapa": "mapa-fullscreen-container",
         "ruta-activa": "pestana-ruta-activa",
-        "crear": "pestana-ruta-crear",
-        "historial": "pestana-monedero-historial",
-        "saldo": "pestana-monedero-saldo",
-        "planillas": "pestana-notificaciones-planillas",
-        "reportes": "pestana-notificaciones-reportes",
-        "conductor": "pestana-perfil-conductor"
+        crear: "pestana-ruta-crear",
+        historial: "pestana-monedero-historial",
+        saldo: "pestana-monedero-saldo",
+        planillas: "pestana-notificaciones-planillas",
+        reportes: "pestana-notificaciones-reportes",
+        conductor: "pestana-perfil-conductor"
     };
 
     if (mapaAliases[targetId]) {
@@ -155,29 +174,26 @@ export function alternarVistaPestaña(targetInput, forzarNavegacion = false) {
     const vistaPrevia = localStorage.getItem("vista_activa");
     const esTransicionMapa = targetId === "mapa-fullscreen-container" || targetId.includes("mapa");
 
-    // CORRECCIÓN ANTI-REBOTE: Solo omitir si se intenta recargar LA MISMA VISTA activa y no es forzado.
-    // Si es una navegación intencional a otra vista (como el mapa), se desbloquea y procede.
     if (window.__BLOQUEAR_REBOOT_VISTA__ && !forzarNavegacion) {
         if (vistaPrevia === targetId) {
             console.log(`🛑 [ALTERNAR_VISTA]: Transición redundante a #${targetId} omitida por anti-rebote.`);
             return;
         }
-        console.warn(`🔓 [ALTERNAR_VISTA]: Levantando bloqueo anti-rebote para transición prioritaria a -> #${targetId}`);
+        console.warn(
+            `🔓 [ALTERNAR_VISTA]: Levantando bloqueo anti-rebote para transición prioritaria a -> #${targetId}`
+        );
         window.__BLOQUEAR_REBOOT_VISTA__ = false;
     }
 
     console.log(`🔄 [ALTERNAR_VISTA]: Transición a -> #${targetId}`);
     localStorage.setItem("vista_activa", targetId);
 
-    // CORRECCIÓN DEL SELECTOR: Seleccionar solo contenedores principales de vista.
-    // NUNCA usar comodín [id^='mapa-'] porque ocultaba los lienzos internos del mapa (#mapa-lienzo, etc.)
     const todasLasVistas = document.querySelectorAll(
         ".contenedor-pestana, .vista-pantalla, .pestana-contenido, [id^='pestana-'], #mapa-fullscreen-container"
     );
     let nodoEncontrado = false;
 
     todasLasVistas.forEach((v) => {
-        // Protección: Si el elemento es hijo del contenedor objetivo, no modificar
         if (v.id !== targetId && v.closest && v.closest(`#${targetId}`)) {
             return;
         }
@@ -207,20 +223,17 @@ export function alternarVistaPestaña(targetInput, forzarNavegacion = false) {
         }
     }
 
-    // Actualizar estado visual de navegación en sidebar
     document.querySelectorAll(".sidebar .nav-btn").forEach((b) => b.classList.remove("active"));
     const sidebarNavBtn = document.querySelector(`.sidebar .nav-btn[data-target="${targetId}"]`);
     if (sidebarNavBtn) sidebarNavBtn.classList.add("active");
 
-    // LÓGICA ESPECÍFICA DE VISTAS Y REDIMENSIONAMIENTO DE MAPA GOOGLE
     if (targetId === "pestana-notificaciones-planillas") {
         if (typeof window.cargarPlanillasReportadasUI === "function") window.cargarPlanillasReportadasUI();
     } else if (targetId === "pestana-perfil-conductor") {
         if (typeof window.cargarPerfilUI === "function") window.cargarPerfilUI();
     } else if (esTransicionMapa) {
         console.log("🗺️ [ALTERNAR_VISTA]: Vista de mapa activa. Sincronizando dimensiones de lienzo Google Maps...");
-        
-        // Asegurar que el lienzo interno del mapa esté visible
+
         const mapaLienzo = document.getElementById("mapa-lienzo") || document.querySelector(".mapa-lienzo");
         if (mapaLienzo) {
             mapaLienzo.style.display = "block";
@@ -229,21 +242,18 @@ export function alternarVistaPestaña(targetInput, forzarNavegacion = false) {
         }
 
         const sincronizarMapaGoogle = () => {
-            // 1. Inicializar si la instancia no existía o quedó pendiente
             if (typeof inicializarMapaMensajero === "function") {
                 inicializarMapaMensajero();
             } else if (typeof window.inicializarMapaMensajero === "function") {
                 window.inicializarMapaMensajero();
             }
 
-            // 2. Notificar redimensionamiento al SDK Google Maps
             window.dispatchEvent(new Event("resize"));
             const instanciaMapa = window.mapaInstanciaGlobal || window.mapaMensajero || window.mapaInstancia;
             if (window.google?.maps && instanciaMapa) {
                 window.google.maps.event.trigger(instanciaMapa, "resize");
             }
 
-            // 3. Forzar re-dibujado de trazados y marcadores
             if (typeof refrescarLienzoMapa === "function") {
                 refrescarLienzoMapa();
             } else if (typeof window.refrescarLienzoMapa === "function") {
@@ -251,7 +261,6 @@ export function alternarVistaPestaña(targetInput, forzarNavegacion = false) {
             }
         };
 
-        // Doble refresco escalonado: asegura el repintado tras transiciones CSS del DOM
         requestAnimationFrame(() => {
             sincronizarMapaGoogle();
             setTimeout(sincronizarMapaGoogle, 100);
@@ -259,7 +268,6 @@ export function alternarVistaPestaña(targetInput, forzarNavegacion = false) {
         });
     }
 
-    // Inyectar o conmutar la barra inferior de forma condicional
     cargarBarraInferior(targetId);
 }
 
@@ -406,36 +414,36 @@ document.addEventListener("click", (e) => {
     if (btnExportarPdf) {
         const planillaId = btnExportarPdf.getAttribute("data-id");
         const toastId = `pdf-${planillaId}`;
-        
-        if (typeof window.mostrarAvisoProceso === 'function') {
+
+        if (typeof window.mostrarAvisoProceso === "function") {
             window.mostrarAvisoProceso({
                 id: toastId,
-                titulo: 'Exportando PDF',
-                mensaje: 'Generando archivo de planilla y respaldo...',
-                estado: 'procesando',
+                titulo: "Exportando PDF",
+                mensaje: "Generando archivo de planilla y respaldo...",
+                estado: "procesando",
                 progreso: 30
             });
         }
 
         exportarYRespaldarPlanillaPDF(planillaId)
             .then(() => {
-                if (typeof window.actualizarProgresoProceso === 'function') {
-                    window.actualizarProgresoProceso(toastId, 100, '¡PDF generado exitosamente!', 'exito');
+                if (typeof window.actualizarProgresoProceso === "function") {
+                    window.actualizarProgresoProceso(toastId, 100, "¡PDF generado exitosamente!", "exito");
                 }
-                if (typeof window.cerrarAvisoProceso === 'function') {
+                if (typeof window.cerrarAvisoProceso === "function") {
                     window.cerrarAvisoProceso(toastId, 1800);
                 }
             })
             .catch((err) => {
                 console.error("❌ [PLANILLAS]: Error al exportar PDF:", err);
-                if (typeof window.mostrarAvisoProceso === 'function') {
+                if (typeof window.mostrarAvisoProceso === "function") {
                     window.mostrarAvisoProceso({
                         id: toastId,
-                        titulo: 'Error de Exportación',
-                        mensaje: 'No se pudo generar el documento PDF.',
-                        estado: 'error',
+                        titulo: "Error de Exportación",
+                        mensaje: "No se pudo generar el documento PDF.",
+                        estado: "error",
                         progreso: 100,
-                        acciones: [{ texto: 'Cerrar', clase: 'danger', accion: (id) => window.cerrarAvisoProceso(id) }]
+                        acciones: [{ texto: "Cerrar", clase: "danger", accion: (id) => window.cerrarAvisoProceso(id) }]
                     });
                 }
             });
@@ -447,14 +455,14 @@ document.addEventListener("click", (e) => {
 window.registrarIntentoLlamada = () => {
     console.log("📞 [OPERACION]: Registrando intento de llamada...");
     registrarLlamadaFlujo(
-        () => obtenerLlamadasRealizadas(), 
-        (v) => setLlamadasRealizadas(v), 
+        () => obtenerLlamadasRealizadas(),
+        (v) => setLlamadasRealizadas(v),
         refrescarUI
     );
 };
 
 window.refrescarConsolaOperacionesUI = async (paradasOpcionales) => {
-    const paradas = paradasOpcionales || await obtenerParadasGuardadas();
+    const paradas = paradasOpcionales || (await obtenerParadasGuardadas());
     let lista = obtenerListaPedidosGlobal();
     lista.length = 0;
     lista.push(...(Array.isArray(paradas) ? paradas : []));
@@ -485,7 +493,14 @@ window.prepararEdicionParadaUI = (idParada) => {
 };
 
 window.limpiarFormularioParadaUI = () => {
-    ["edit-parada-id", "edit-parada-destinatario", "edit-parada-direccion", "edit-parada-telefono", "edit-parada-ssc", "edit-parada-cuota"].forEach(id => {
+    [
+        "edit-parada-id",
+        "edit-parada-destinatario",
+        "edit-parada-direccion",
+        "edit-parada-telefono",
+        "edit-parada-ssc",
+        "edit-parada-cuota"
+    ].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.value = "";
     });
@@ -515,7 +530,7 @@ window.agregarParadaLocal = async (nuevaParadaDatos) => {
 
     rutaActual.push(nuevaParada);
     await guardarRutaZonificada(rutaActual);
-    
+
     let lista = obtenerListaPedidosGlobal();
     lista.length = 0;
     lista.push(...rutaActual);
@@ -537,13 +552,13 @@ window.guardarParadaManualUI = async () => {
         return;
     }
 
-    const toastId = 'guardar-parada';
-    if (typeof window.mostrarAvisoProceso === 'function') {
+    const toastId = "guardar-parada";
+    if (typeof window.mostrarAvisoProceso === "function") {
         window.mostrarAvisoProceso({
             id: toastId,
-            titulo: id ? 'Actualizando Parada' : 'Creando Parada',
-            mensaje: 'Sincronizando con almacenamiento IndexedDB...',
-            estado: 'procesando',
+            titulo: id ? "Actualizando Parada" : "Creando Parada",
+            mensaje: "Sincronizando con almacenamiento IndexedDB...",
+            estado: "procesando",
             progreso: 40
         });
     }
@@ -583,59 +598,59 @@ window.guardarParadaManualUI = async () => {
         window.limpiarFormularioParadaUI();
     }
 
-    if (typeof window.actualizarProgresoProceso === 'function') {
-        window.actualizarProgresoProceso(toastId, 100, '¡Parada guardada con éxito!', 'exito');
-        if (typeof window.cerrarAvisoProceso === 'function') window.cerrarAvisoProceso(toastId, 1500);
+    if (typeof window.actualizarProgresoProceso === "function") {
+        window.actualizarProgresoProceso(toastId, 100, "¡Parada guardada con éxito!", "exito");
+        if (typeof window.cerrarAvisoProceso === "function") window.cerrarAvisoProceso(toastId, 1500);
     }
 };
 
 window.generarPlanillaDesdeRuta = async () => {
     const paradasActuales = (await obtenerParadasGuardadas()) || [];
     if (!paradasActuales || paradasActuales.length === 0) {
-        alert("⚠️ [ALERTA]: No hay datos de paradas para planillar.");
+        alert("⚠️️ [ALERTA]: No hay datos de paradas para planillar.");
         return;
     }
 
     const toastId = `planilla-${Date.now()}`;
-    if (typeof window.mostrarAvisoProceso === 'function') {
+    if (typeof window.mostrarAvisoProceso === "function") {
         window.mostrarAvisoProceso({
             id: toastId,
-            titulo: 'Generando Planilla',
-            mensaje: 'Procesando historial y estados SCC...',
-            estado: 'procesando',
+            titulo: "Generando Planilla",
+            mensaje: "Procesando historial y estados SCC...",
+            estado: "procesando",
             progreso: 30
         });
     }
 
     const nuevaPlanilla = {
-        scc: paradasActuales.map(p => p.ssc || p.id).join(", "),
+        scc: paradasActuales.map((p) => p.ssc || p.id).join(", "),
         fecha: new Date().toLocaleDateString("es-CO"),
         nombreMensajero: localStorage.getItem("nombreMensajero") || "Mensajero Acreditado",
         placaMensajero: localStorage.getItem("placaMensajero") || "MXX-000",
-        estadoScc: paradasActuales.every(p => p.estado === "FINALIZADO") ? "Entregado" : "Devuelto",
-        paradas: paradasActuales.map(p => ({
+        estadoScc: paradasActuales.every((p) => p.estado === "FINALIZADO") ? "Entregado" : "Devuelto",
+        paradas: paradasActuales.map((p) => ({
             id: p.id,
             ssc: p.ssc || p.id,
-            destinatario: p.destinatario || 'Cliente General',
-            direccion: p.direccion || 'Dirección no especificada',
-            telefono: p.telefono || 'N/A',
-            cuotaModeradora: p.cuotaModeradora || '$0',
-            estado: p.estado === 'FINALIZADO' ? 'ENTREGADO' : (p.estado || 'DEVUELTO'),
+            destinatario: p.destinatario || "Cliente General",
+            direccion: p.direccion || "Dirección no especificada",
+            telefono: p.telefono || "N/A",
+            cuotaModeradora: p.cuotaModeradora || "$0",
+            estado: p.estado === "FINALIZADO" ? "ENTREGADO" : p.estado || "DEVUELTO",
             registroOperaciones: p.registroOperaciones || {}
         })),
         creadoEn: new Date().toISOString()
     };
 
     try {
-        if (typeof window.actualizarProgresoProceso === 'function') {
-            window.actualizarProgresoProceso(toastId, 75, 'Guardando en módulo de planillas...');
+        if (typeof window.actualizarProgresoProceso === "function") {
+            window.actualizarProgresoProceso(toastId, 75, "Guardando en módulo de planillas...");
         }
 
         await guardarPlanillaReportada(nuevaPlanilla);
 
-        if (typeof window.actualizarProgresoProceso === 'function') {
-            window.actualizarProgresoProceso(toastId, 100, '¡Planilla guardada exitosamente!', 'exito');
-            if (typeof window.cerrarAvisoProceso === 'function') window.cerrarAvisoProceso(toastId, 1500);
+        if (typeof window.actualizarProgresoProceso === "function") {
+            window.actualizarProgresoProceso(toastId, 100, "¡Planilla guardada exitosamente!", "exito");
+            if (typeof window.cerrarAvisoProceso === "function") window.cerrarAvisoProceso(toastId, 1500);
         }
 
         if (typeof window.navegarA === "function") {
@@ -643,14 +658,14 @@ window.generarPlanillaDesdeRuta = async () => {
         }
     } catch (err) {
         console.error("❌ [PLANILLA]: Error generando planilla:", err);
-        if (typeof window.mostrarAvisoProceso === 'function') {
+        if (typeof window.mostrarAvisoProceso === "function") {
             window.mostrarAvisoProceso({
                 id: toastId,
-                titulo: 'Error de Planilla',
-                mensaje: 'Ocurrió un fallo al guardar la planilla local.',
-                estado: 'error',
+                titulo: "Error de Planilla",
+                mensaje: "Ocurrió un fallo al guardar la planilla local.",
+                estado: "error",
                 progreso: 100,
-                acciones: [{ texto: 'Cerrar', clase: 'danger', accion: (id) => window.cerrarAvisoProceso(id) }]
+                acciones: [{ texto: "Cerrar", clase: "danger", accion: (id) => window.cerrarAvisoProceso(id) }]
             });
         }
     }

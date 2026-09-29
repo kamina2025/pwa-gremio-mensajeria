@@ -7,6 +7,7 @@ import { procesarArchivoTextoCSV } from "./base-de-datos.js";
 import { procesarImagenConGemini } from "./procesamiento-datos/ia-gemini.js";
 import { fusionarYGuardarParadas } from "./importer/fusionador.js";
 import { parsearTextoPlanoWhatsApp, parsearPayloadODocumento } from "./importer/parser-payload.js";
+import { optimizarImagenParaGemini } from "./image-processor.js";
 import { 
     dispararRefrescoUI, 
     actualizarEstadoIngestionUI, 
@@ -18,6 +19,8 @@ export { parsearTextoPlanoWhatsApp, parsearPayloadODocumento };
 
 // Buffer local en memoria para acumular fotos del Modo 1
 let loteFotosAcumuladas = [];
+// Mapa de URLs binarias para liberar memoria posteriormente
+const mapaUrlsBinarias = new Map();
 
 /**
  * Emitir vibración háptica en dispositivos móviles
@@ -137,7 +140,7 @@ export class ImportadorMasivoMensajero {
     }
 
     /**
-     * Renderiza las miniaturas e indicadores del lote
+     * Renderiza las miniaturas e indicadores del lote liberando URLs huérfanas
      */
     renderizarGaleriaLote() {
         const contenedorGaleria = document.getElementById("galeria-fotos-lote");
@@ -161,8 +164,14 @@ export class ImportadorMasivoMensajero {
             thumbDiv.style.cssText = "position: relative; width: 55px; height: 55px; min-width: 55px; border: 1px solid #00f3ff; border-radius: 4px; overflow: hidden; background: #000;";
 
             if (file.type.startsWith("image/")) {
+                let urlVisual = mapaUrlsBinarias.get(file);
+                if (!urlVisual) {
+                    urlVisual = URL.createObjectURL(file);
+                    mapaUrlsBinarias.set(file, urlVisual);
+                }
+
                 const img = document.createElement("img");
-                img.src = URL.createObjectURL(file);
+                img.src = urlVisual;
                 img.style.cssText = "width: 100%; height: 100%; object-fit: cover;";
                 thumbDiv.appendChild(img);
             } else {
@@ -184,12 +193,21 @@ export class ImportadorMasivoMensajero {
 
     eliminarFotoDelLote(index) {
         console.log(`🗑️ [LOTE_FOTOS]: Eliminando foto índice ${index}`);
+        const archivoEliminado = loteFotosAcumuladas[index];
+        
+        if (archivoEliminado && mapaUrlsBinarias.has(archivoEliminado)) {
+            URL.revokeObjectURL(mapaUrlsBinarias.get(archivoEliminado));
+            mapaUrlsBinarias.delete(archivoEliminado);
+        }
+
         loteFotosAcumuladas.splice(index, 1);
         this.renderizarGaleriaLote();
     }
 
     limpiarLoteFotos() {
-        console.log("🧹 [LOTE_FOTOS]: Vaciando lote completo.");
+        console.log("🧹 [LOTE_FOTOS]: Vaciando lote completo y liberando memoria.");
+        mapaUrlsBinarias.forEach((url) => URL.revokeObjectURL(url));
+        mapaUrlsBinarias.clear();
         loteFotosAcumuladas = [];
         this.renderizarGaleriaLote();
     }
@@ -279,7 +297,7 @@ export class ImportadorMasivoMensajero {
     }
 
     /**
-     * MODO 1: Procesamiento por Lote Acumulado con IA Cloud (Gemini)
+     * MODO 1: Procesamiento por Lote Acumulado con Preprocesamiento OCR & IA Cloud (Gemini)
      */
     async ejecutarImportacionArchivo(callbackRefresco, forzarIA = true) {
         if (this.isProcessing) {
@@ -287,7 +305,7 @@ export class ImportadorMasivoMensajero {
             return;
         }
 
-        console.log(">>> [IMPORTADOR_EXEC_IA]: Disparando proceso acumulativo MODO 1 (IA Cloud)...");
+        console.log(">>> [IMPORTADOR_EXEC_IA]: Disparando proceso acumulativo MODO 1 (IA Cloud con Preprocesamiento)...");
         emitirHaptico(30);
 
         const inputArchivo = document.getElementById("archivo-base-datos") || document.getElementById("archivo-base-datos-local");
@@ -319,7 +337,7 @@ export class ImportadorMasivoMensajero {
                 const archivo = listaArchivos[i];
 
                 if (window.visorAnimaciones && typeof window.visorAnimaciones.actualizarProgreso === "function") {
-                    window.visorAnimaciones.actualizarProgreso(i, listaArchivos.length, `Analizando tirilla ${i + 1} de ${listaArchivos.length}: ${archivo.name}`);
+                    window.visorAnimaciones.actualizarProgreso(i, listaArchivos.length, `Procesando tirilla ${i + 1} de ${listaArchivos.length}: ${archivo.name}`);
                 }
 
                 try {
@@ -332,7 +350,24 @@ export class ImportadorMasivoMensajero {
                     }
 
                     if (!puntosExtraidos || puntosExtraidos.length === 0) {
-                        puntosExtraidos = await procesarImagenConGemini(archivo);
+                        let archivoAProcesar = archivo;
+
+                        // Preprocesar fotos a escala de grises / alto contraste tipo escáner antes del envío a Gemini
+                        if (esImagen) {
+                            console.log(`📷 [IMPORTER_PREPROC]: Binarizando imagen "${archivo.name}" a escala de grises...`);
+                            try {
+                                const blobOptimizada = await optimizarImagenParaGemini(archivo, {
+                                    maxDimension: 1024,
+                                    contraste: 1.4
+                                });
+                                archivoAProcesar = new File([blobOptimizada], archivo.name, { type: "image/jpeg" });
+                                console.log(`✅ [IMPORTER_PREPROC_OK]: Imagen optimizada. Tamaño: ${(archivoAProcesar.size / 1024).toFixed(1)} KB`);
+                            } catch (errPreproc) {
+                                console.warn(`⚠️ [IMPORTER_PREPROC_WARN]: Falló preprocesamiento visual. Enviando original:`, errPreproc);
+                            }
+                        }
+
+                        puntosExtraidos = await procesarImagenConGemini(archivoAProcesar);
                     }
 
                     if (Array.isArray(puntosExtraidos) && puntosExtraidos.length > 0) {

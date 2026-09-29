@@ -4,19 +4,23 @@
  * Arquitectura: Async Local-First (Service Worker + HTML Inserter)
  */
 
-// --- 1. REGISTRO DE SERVICE WORKER ---
+// --- 1. REGISTRO DE SERVICE WORKER CON DESVINCULACIÓN DE CACHÉ ---
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
         try {
-            const reg = await navigator.serviceWorker.register("./sw.js");
+            // updateViaCache: 'none' impide que Chrome mantenga en caché el script sw.js
+            const reg = await navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" });
             console.log("✅ [SW]: Registrado correctamente en ámbito:", reg.scope);
+            
+            // Forzar actualización inmediata si el archivo sw.js cambió en el servidor
+            reg.update();
         } catch (err) {
             console.error("❌ [SW]: Error crítico en el registro del Service Worker:", err);
         }
     });
 }
 
-// --- 2. CARGADOR MODULAR DESACOPADO ---
+// --- 2. CARGADOR MODULAR DESACOPLADO ---
 /**
  * Procesa dinámicamente todos los elementos con la etiqueta [data-include]
  * inyectando las vistas HTML y notificando al orquestador al finalizar.

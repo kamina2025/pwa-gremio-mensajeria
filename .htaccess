@@ -1,0 +1,17 @@
+# PROTOCOLO MACONDO - CONFIGURACIÓN APACHE / XAMPP API
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /pwa-gremio-mensajeria/
+
+    # Excluir explicitamente la API REST PHP de las reglas de enrutamiento PWA
+    RewriteRule ^api\.php$ - [L]
+    RewriteRule ^api/ - [L]
+</IfModule>
+
+# Forzar cabeceras CORS y prevenir cacheo de respuestas de la API REST
+<Files "api.php">
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+</Files>

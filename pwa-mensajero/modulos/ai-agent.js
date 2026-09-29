@@ -5,7 +5,7 @@
  */
 
 /**
- * Optimiza la secuencia de la ruta de entregas evaluando la capacidad de cómputo disponible.
+ * Optimiza la secuencia de la ruta de entregas reduciendo los tokens del payload.
  * 
  * @param {Array<Object>} datosRutaRaw - Arreglo de paradas con los datos de las tirillas médicas.
  * @returns {Promise<Array<Object>>} Arreglo de paradas optimizado secuencialmente.
@@ -18,29 +18,47 @@ export async function procesarCargaConAI(datosRutaRaw) {
         return datosRutaRaw;
     }
 
-    // --- PRIORIDAD 1: INTENTAR EDGE AI LOCAL NATIVO (Gemini Nano en Dispositivo) ---
-    if (typeof window !== "undefined" && window.ai && typeof window.ai.createTextSession === "function") {
-        try {
-            console.log(">>> [AI_LOCAL]: Procesando optimización de ruta en la trinchera con Gemini Nano...");
-            const session = await window.ai.createTextSession();
-            
-            const promptLocal = `Actúa como el copiloto telemático de entregas en Cali, Colombia. ` +
-                `Optimiza la secuencia de entrega para minimizar el tiempo de tráfico y distancia entre paradas: ` +
-                `${JSON.stringify(datosRutaRaw)}. ` +
-                `Mantén los campos ssc, destinatario, direccion, telefono, puntoOrigen y cuotaModeradora intactos. ` +
-                `Responde EXCLUSIVAMENTE con un JSON plano (un array de objetos con el mismo formato recibido). ` +
-                `NO incluyas formateo markdown ni texto adicional.`;
+    // Proyección ligera de datos para reducir el consumo de tokens en Gemini
+    const payloadMinificado = datosRutaRaw.map((p, idx) => ({
+        _idx: idx,
+        ssc: p.ssc || "",
+        dir: p.direccion || "",
+        origen: p.puntoOrigen || ""
+    }));
 
-            let respuestaTexto = await session.prompt(promptLocal);
-            respuestaTexto = respuestaTexto.replace(/```json/gi, "").replace(/```/g, "").trim();
+    // --- PRIORIDAD 1: INTENTAR EDGE AI LOCAL NATIVO (Gemini Nano) ---
+    const windowAI = typeof window !== "undefined" ? (window.ai?.languageModel || window.ai) : null;
+
+    if (windowAI) {
+        try {
+            console.log(">>> [AI_LOCAL]: Intentando procesar ruta en chip local con Gemini Nano...");
             
-            const datosOptimizados = JSON.parse(respuestaTexto);
-            if (Array.isArray(datosOptimizados) && datosOptimizados.length > 0) {
-                console.log(">>> [AI_LOCAL_OK]: Secuencia de ruta optimizada en chip local.");
-                return datosOptimizados;
+            let session;
+            if (window.ai.languageModel && typeof window.ai.languageModel.create === "function") {
+                session = await window.ai.languageModel.create();
+            } else if (typeof window.ai.createTextSession === "function") {
+                session = await window.ai.createTextSession();
+            }
+
+            if (session) {
+                const promptLocal = `Eres un copiloto telemático de entregas en Cali, Colombia. ` +
+                    `Ordena la siguiente lista para optimizar el recorrido vial: ` +
+                    `${JSON.stringify(payloadMinificado)}. ` +
+                    `Responde EXCLUSIVAMENTE un JSON plano (un array de objetos con las mismas llaves y orden óptimo). Sin markdown.`;
+
+                let respuestaTexto = await session.prompt(promptLocal);
+                respuestaTexto = respuestaTexto.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+                const indicesOptimizados = JSON.parse(respuestaTexto);
+
+                if (Array.isArray(indicesOptimizados) && indicesOptimizados.length === datosRutaRaw.length) {
+                    console.log(">>> [AI_LOCAL_OK]: Secuencia de ruta optimizada localmente con éxito.");
+                    // Mapear los datos completos basados en la respuesta devuelta por el modelo
+                    return indicesOptimizados.map(item => datosRutaRaw[item._idx] || item);
+                }
             }
         } catch (e) {
-            console.warn(">>> [AI_LOCAL_FAIL]: Gemini Nano no disponible o capacidad local saturada.", e);
+            console.warn(">>> [AI_LOCAL_FAIL]: Gemini Nano local no disponible o respuesta no parseable.", e);
         }
     }
 
@@ -53,7 +71,7 @@ export async function procesarCargaConAI(datosRutaRaw) {
         const res = await fetch(targetUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lote: datosRutaRaw })
+            body: JSON.stringify({ lote: payloadMinificado })
         });
 
         if (!res.ok) {
@@ -64,7 +82,12 @@ export async function procesarCargaConAI(datosRutaRaw) {
         
         if (data.status === 'success' && Array.isArray(data.lote_optimizado)) {
             console.log(">>> [AI_CLOUD_OK]: Vector de optimización satelital recibido exitosamente.");
-            return data.lote_optimizado;
+            
+            // Reconstruir el lote completo a partir de la minificación devuelta
+            return data.lote_optimizado.map(item => {
+                const original = datosRutaRaw.find(r => String(r.ssc) === String(item.ssc));
+                return original ? { ...original, ...item } : item;
+            });
         } else {
             throw new Error(data.message || 'Respuesta Cloud no estructurada');
         }

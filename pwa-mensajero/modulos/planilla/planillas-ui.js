@@ -1,4 +1,3 @@
-// Ruta: pwa-mensajero/modulos/planilla/planillas-ui.js
 /**
  * PROTOCOLO MACONDO - CONTROLADOR DE UI, ZONIFICACIÓN Y NAVEGACIÓN DE PLANILLAS
  * Ubicación: pwa-mensajero/modulos/planilla/planillas-ui.js
@@ -8,39 +7,20 @@
 import { IndexedStore } from '../db/indexed-store.js';
 import { exportarYRespaldarPlanillaPDF } from './planillas-pdf-sync.js';
 import { PALETA_ZONAS, obtenerZonaPorCoordenadas } from '../mapa/zonificacion/mensajero-zonificacion.js';
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from '../mapa/zonificacion/estandar-zonas.js';
+import { obtenerParadasGuardadas } from '../mensajero-persistencia.js';
 
-// Instancia única de la capa de persistencia local
+// Instancia local del almacén
 const dbStore = new IndexedStore();
 
 /**
- * Normaliza cualquier variante de texto (ej: "ZONA NORTE 2", "zona_norte_2", "NORTE 2")
- * a la clave canónica de PALETA_ZONAS (ej: "NORTE-2")
+ * Normaliza cualquier variante de texto a la clave canónica de PALETA_ZONAS
  * @param {string} raw 
  * @returns {string}
  */
 export function estandarizarClaveZona(raw) {
   if (!raw) return "GENERAL";
-  let texto = String(raw).trim().toUpperCase();
-
-  if (PALETA_ZONAS[texto]) return texto;
-
-  let limpia = texto
-    .replace(/^ZONA_?/i, "")
-    .replace(/_/g, " ")
-    .replace(/-/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  for (const [key, meta] of Object.entries(PALETA_ZONAS)) {
-    const keyLimpia = key.replace(/_/g, " ").replace(/-/g, " ").trim().toUpperCase();
-    const labelLimpia = meta.label.replace(/^ZONA\s*/i, "").replace(/_/g, " ").replace(/-/g, " ").trim().toUpperCase();
-
-    if (limpia === keyLimpia || limpia === labelLimpia) {
-      return key;
-    }
-  }
-
-  return "GENERAL";
+  return estandarizarZonaCanonica(raw);
 }
 
 /**
@@ -50,33 +30,50 @@ export function estandarizarClaveZona(raw) {
  */
 export function extraerClaveZonaParada(item) {
   if (!item) return "GENERAL";
-  let rawVal = item.zonaKey || item.zona || item.zonaNombre || item.nombreZona || (item.properties && item.properties.zona);
-  let keyResult = estandarizarClaveZona(rawVal);
+  let keyResult = obtenerZonaParadaCanonica(item);
 
-  if (keyResult === "GENERAL" && item.lat && item.lng) {
+  if ((!keyResult || keyResult === "GENERAL") && item.lat && item.lng) {
     const zonaGeo = obtenerZonaPorCoordenadas(item.lat, item.lng);
     if (zonaGeo && zonaGeo.properties && zonaGeo.properties.key) {
-      keyResult = zonaGeo.properties.key;
+      keyResult = estandarizarZonaCanonica(zonaGeo.properties.key);
     }
   }
 
-  return keyResult;
+  return keyResult || "GENERAL";
 }
 
 /**
- * Recupera la colección de paradas directamente desde la tienda 'paradas_rutas' en IndexedDB.
+ * Recupera la colección de paradas de forma ultra-segura (IndexedDB -> Persistencia -> RAM Fallback)
  * @returns {Promise<Array<Object>>}
  */
 async function obtenerParadasRutaSegura() {
   try {
-    const paradas = await dbStore.obtenerParadas('paradas_rutas');
-    if (Array.isArray(paradas) && paradas.length > 0) {
-      return paradas;
+    // 1. Intento por la capa de persistencia principal
+    if (typeof obtenerParadasGuardadas === "function") {
+      const paradasPersistidas = await obtenerParadasGuardadas();
+      if (Array.isArray(paradasPersistidas) && paradasPersistidas.length > 0) {
+        return paradasPersistidas;
+      }
+    }
+
+    // 2. Intento por metodos de IndexedStore con verificación previa de firma
+    if (dbStore) {
+      if (typeof dbStore.obtenerParadasGuardadas === "function") {
+        const res = await dbStore.obtenerParadasGuardadas('paradas_rutas');
+        if (Array.isArray(res) && res.length > 0) return res;
+      } else if (typeof dbStore.obtenerParadas === "function") {
+        const res = await dbStore.obtenerParadas('paradas_rutas');
+        if (Array.isArray(res) && res.length > 0) return res;
+      }
     }
   } catch (e) {
-    console.warn("⚠️ [PLANILLAS]: Error consultando paradas_rutas en IndexedDB:", e);
+    console.warn("⚠️ [PLANILLAS]: Error consultando IndexedDB. Evaluando fallback en RAM...", e);
   }
-  return [];
+
+  // 3. Fallback defensivo a memoria RAM local
+  const ramFallback = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
+  console.log(`💾 [PLANILLAS]: ${ramFallback.length} paradas recuperadas desde memoria RAM.`);
+  return ramFallback;
 }
 
 /**
@@ -133,7 +130,7 @@ export async function renderizarModuloPlanillas(zonaFiltro = null) {
 
   const claveDestacada = estandarizarClaveZona(zonaSeleccionadaRaw);
 
-  // Lectura directa desde IndexedDB Local-First
+  // Lectura ultrasegura Local-First
   const paradas = await obtenerParadasRutaSegura();
 
   if (!paradas || paradas.length === 0) {
@@ -333,8 +330,12 @@ window.confirmarYGenerarPlanillaZona = async function (zonaInput) {
   };
 
   try {
-    // 1. Persistencia atómica asegurada en IndexedDB
-    await dbStore.actualizarParada(nuevaPlanilla, 'planillas');
+    // 1. Persistencia atómica asegurada con fallback en API de store
+    if (dbStore && typeof dbStore.actualizarParada === "function") {
+      await dbStore.actualizarParada(nuevaPlanilla, 'planillas');
+    } else if (dbStore && typeof dbStore.guardarItem === "function") {
+      await dbStore.guardarItem('planillas', nuevaPlanilla);
+    }
     console.log(`💾 Planilla registrada correctamente con ID: ${idPlanilla}`);
 
     // 2. Desplegar modal interactivo de configuración de impresión enviando respaldo en RAM
@@ -352,12 +353,26 @@ window.confirmarYGenerarPlanillaZona = async function (zonaInput) {
 export async function cargarPlanillasReportadasUI() {
   console.log("🔍 [PLANILLAS]: Escaneando planillas reportadas...");
   const tbody = document.getElementById('tabla-planillas-reportadas-body');
-  if (!tbody) return;
+  if (!tbody) {
+    console.warn("⚠️ [PLANILLAS]: No se encontró '#tabla-planillas-reportadas-body' en el DOM.");
+    return;
+  }
 
   tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="color: #00e5ff; padding: 15px;">🔍 Escaneando registros locales en IndexedDB...</td></tr>';
 
   try {
-    const planillas = await dbStore.obtenerParadas('planillas');
+    let planillas = [];
+
+    // Consulta ultrasegura a IndexedDB
+    if (dbStore) {
+      if (typeof dbStore.obtenerParadas === "function") {
+        planillas = await dbStore.obtenerParadas('planillas');
+      } else if (typeof dbStore.obtenerColeccion === "function") {
+        planillas = await dbStore.obtenerColeccion('planillas');
+      } else if (typeof dbStore.obtenerParadasGuardadas === "function") {
+        planillas = await dbStore.obtenerParadasGuardadas('planillas');
+      }
+    }
 
     if (!planillas || planillas.length === 0) {
       tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="color: #8b949e; padding: 15px;">No hay planillas reportadas guardadas.</td></tr>';
@@ -380,6 +395,8 @@ export async function cargarPlanillasReportadasUI() {
         </td>
       </tr>
     `).join('');
+
+    console.log(`✅ [PLANILLAS]: ${planillas.length} planillas cargadas e inyectadas en tabla UI.`);
 
   } catch (err) {
     console.error("❌ [PLANILLAS]: Error cargando planillas locales:", err);

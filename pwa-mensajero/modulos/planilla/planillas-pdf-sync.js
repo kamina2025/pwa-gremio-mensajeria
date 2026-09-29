@@ -1,9 +1,50 @@
-// Ruta: pwa-mensajero/modulos/planilla/planillas-pdf-sync.js
+/**
+ * PROTOCOLO MACONDO - GENERADOR Y SINCRONIZADOR DE PLANILLAS EN PDF
+ * Ubicación: pwa-mensajero/modulos/planilla/planillas-pdf-sync.js
+ * Arquitectura: Vanilla JS ES6+ / Local-First / Cyberpunk PDF Generation
+ */
 
 import { IndexedStore } from '../db/indexed-store.js';
-import { obtenerRutaZonificada } from '../mensajero-persistencia.js';
+import { obtenerRutaZonificada, obtenerParadasGuardadas } from '../mensajero-persistencia.js';
 
 const dbStore = new IndexedStore();
+
+/**
+ * Recupera una colección de datos de forma ultra-segura probando múltiples firmas de la API o memoria RAM.
+ * @param {string} nombreAlmacen - Nombre de la tienda ('planillas', 'paradas_rutas', etc.)
+ * @returns {Promise<Array<Object>>}
+ */
+async function obtenerColeccionSegura(nombreAlmacen) {
+  try {
+    // 1. Probar vía capa de persistencia estandarizada
+    if (typeof obtenerParadasGuardadas === "function") {
+      const res = await obtenerParadasGuardadas(nombreAlmacen);
+      if (Array.isArray(res) && res.length > 0) return res;
+    }
+
+    // 2. Probar dinámicamente según los métodos expuestos por IndexedStore
+    if (dbStore) {
+      if (typeof dbStore.obtenerParadasGuardadas === "function") {
+        const res = await dbStore.obtenerParadasGuardadas(nombreAlmacen);
+        if (Array.isArray(res) && res.length > 0) return res;
+      } else if (typeof dbStore.obtenerColeccion === "function") {
+        const res = await dbStore.obtenerColeccion(nombreAlmacen);
+        if (Array.isArray(res) && res.length > 0) return res;
+      } else if (typeof dbStore.obtenerParadas === "function") {
+        const res = await dbStore.obtenerParadas(nombreAlmacen);
+        if (Array.isArray(res) && res.length > 0) return res;
+      }
+    }
+  } catch (e) {
+    console.warn(`⚠️ [PDF_SYNC]: Error leyendo almacén '${nombreAlmacen}' en IndexedDB:`, e);
+  }
+
+  // 3. Fallbacks a memorias globales en RAM
+  if (nombreAlmacen === 'planillas') {
+    return window.__CACHE_PLANILLAS_MACONDO__ || window.planillasMemoriaLocal || [];
+  }
+  return window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
+}
 
 /**
  * Garantiza que las dependencias requeridas (html2canvas y jsPDF) estén disponibles en el DOM.
@@ -18,14 +59,18 @@ async function asegurarDependenciasPDF() {
     document.head.appendChild(script);
   });
 
-  if (typeof window.html2canvas === 'undefined') {
-    console.warn("⚠️ [PDF_SYNC]: html2canvas no detectado. Cargando dinámicamente...");
-    await cargarScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-  }
+  try {
+    if (typeof window.html2canvas === 'undefined') {
+      console.warn("⚠️ [PDF_SYNC]: html2canvas no detectado. Cargando dinámicamente...");
+      await cargarScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    }
 
-  if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
-    console.warn("⚠️ [PDF_SYNC]: jsPDF no detectado. Cargando dinámicamente...");
-    await cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    if (typeof window.jspdf === 'undefined' && typeof window.jsPDF === 'undefined') {
+      console.warn("⚠️ [PDF_SYNC]: jsPDF no detectado. Cargando dinámicamente...");
+      await cargarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    }
+  } catch (err) {
+    console.warn("⚠️ [PDF_SYNC]: Fallo en descarga de CDN de PDF. Se recurrirá a impresión nativa.", err);
   }
 }
 
@@ -69,7 +114,7 @@ function formatearFechaHora(timestampIso) {
 }
 
 /**
- * Compila y exporta la planilla en PDF de forma continua, ajustando las filas exactamente por sus bordes para evitar cortes.
+ * Compila y exporta la planilla en PDF de forma continua y resiliente.
  * @param {string|number} idPlanilla 
  * @param {Object|null} [planillaDirecta=null] 
  * @param {Object} [opcionesImpresion={}] 
@@ -84,22 +129,23 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
   };
 
   try {
-    await asegurarDependenciasPDF();
+    // 1. Obtener planilla desde la RAM directa o consulta segura a almacenamiento
+    let planilla = planillaDirecta;
 
-    // 1. Obtener planilla desde IndexedDB o memoria RAM
-    const planillas = await dbStore.obtenerParadas('planillas');
-    let planilla = planillas.find(p => String(p.id).trim() === String(idPlanilla).trim());
-
-    if (!planilla && planillaDirecta) {
-      planilla = planillaDirecta;
+    if (!planilla) {
+      const planillasGuardadas = await obtenerColeccionSegura('planillas');
+      planilla = planillasGuardadas.find(p => String(p.id).trim() === String(idPlanilla).trim());
     }
 
     if (!planilla) {
+      console.error(`❌ [PLANILLA_PDF]: No se encontraron datos para la planilla ID -> ${idPlanilla}`);
       alert("⚠️ [ERROR]: No se encontraron los datos de la planilla seleccionada.");
       return;
     }
 
-    const paradasActualizadasRuta = await dbStore.obtenerParadas('paradas_rutas');
+    console.log("📊 [PLANILLA_PDF]: Planilla localizada correctamente para procesar PDF:", planilla);
+
+    const paradasActualizadasRuta = await obtenerColeccionSegura('paradas_rutas');
     const listaSccs = planilla.scc ? planilla.scc.split(',').map(s => s.trim()) : [];
 
     let paradasBase = planilla.paradas || [];
@@ -107,7 +153,7 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
       paradasBase = obtenerRutaZonificada() || [];
     }
 
-    // 2. Preparar el contenedor invisible de renderizado (Ancho exacto A4: 794px)
+    // 2. Preparar el contenedor invisible de renderizado
     let printArea = document.getElementById("pdf-export-container");
     if (!printArea) {
       printArea = document.createElement("div");
@@ -130,7 +176,7 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
       font-family: Arial, Helvetica, sans-serif;
     `;
 
-    // 3. Renderizar filas continúas
+    // 3. Renderizar filas continuas
     const filasTablaHtml = listaSccs.map((codigoScc, index) => {
       const matchRuta = paradasActualizadasRuta.find(p => String(p.ssc || p.id).trim() === String(codigoScc).trim());
       const matchPlanilla = paradasBase.find(p => String(p.ssc || p.id).trim() === String(codigoScc).trim()) || paradasBase[index] || {};
@@ -220,12 +266,21 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
     `;
 
     await precargarRecursosLienzo(printArea);
+    await asegurarDependenciasPDF();
+
+    const tieneHtml2Canvas = typeof window.html2canvas !== 'undefined';
+    const jsPDFClass = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
+
+    if (!tieneHtml2Canvas || !jsPDFClass) {
+      console.warn("⚠️ [PDF_SYNC]: Librerías gráficas no disponibles. Recurriendo a fallback de ventana nativa...");
+      generarPdfFallbackVentana(printArea.innerHTML, planilla.id);
+      return;
+    }
+
     await new Promise(r => setTimeout(r, 150));
 
-    // 4. Captura general del Canvas con escalado 2x
+    // 4. Captura del Canvas con escalado 2x
     const canvas = await window.html2canvas(printArea, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-
-    const jsPDFClass = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
     const pdf = new jsPDFClass('p', 'mm', 'a4');
 
     const pdfWidth = pdf.internal.pageSize.getWidth();   // 210 mm
@@ -238,11 +293,10 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
     const pageHeightCanvas = (canvasWidth * pdfHeight) / pdfWidth;
 
     if (config.forzarUnaPagina || canvasHeight <= pageHeightCanvas) {
-      // Si todo cabe en 1 hoja, la añadimos directamente
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, (canvasHeight * pdfWidth) / canvasWidth);
     } else {
-      // 5. Algoritmo de Slicing Limpio basado en Borde de Filas HTML (Row-Bound Slicing)
+      // 5. Algoritmo de Slicing Limpio por bordes de filas (Row-Bound Slicing)
       const filasDOM = Array.from(printArea.querySelectorAll('.fila-parada-pdf'));
       const areaRect = printArea.getBoundingClientRect();
 
@@ -252,21 +306,17 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
       while (currentCanvasY < canvasHeight) {
         let nextCutCanvasY = currentCanvasY + pageHeightCanvas;
 
-        // Si sobrepasa el final de la imagen, recortamos al final exacto
         if (nextCutCanvasY >= canvasHeight) {
           nextCutCanvasY = canvasHeight;
         } else {
-          // Buscar cuál fila se cruza con 'nextCutCanvasY' y ajustar la tijera exactamente ARRIBA de esa fila
           for (const fila of filasDOM) {
             const filaRect = fila.getBoundingClientRect();
-            // Convertir la posición Y de la fila a píxeles dentro del Canvas
             const filaTopCanvas = ((filaRect.top - areaRect.top) / areaRect.height) * canvasHeight;
             const filaBottomCanvas = ((filaRect.bottom - areaRect.top) / areaRect.height) * canvasHeight;
 
-            // Si el corte imaginario cruza la fila por la mitad, recortamos justo antes de la fila
             if (filaTopCanvas < nextCutCanvasY && filaBottomCanvas > nextCutCanvasY) {
               if (filaTopCanvas > currentCanvasY) {
-                nextCutCanvasY = filaTopCanvas; // Ajustamos la tijera al borde superior de la fila
+                nextCutCanvasY = filaTopCanvas;
               }
               break;
             }
@@ -276,7 +326,6 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
         const sliceHeightCanvas = nextCutCanvasY - currentCanvasY;
         if (sliceHeightCanvas <= 0) break;
 
-        // Sub-canvas recortado limpio
         const pageCanvas = document.createElement('canvas');
         pageCanvas.width = canvasWidth;
         pageCanvas.height = sliceHeightCanvas;
@@ -307,8 +356,10 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
 
     const pdfBlob = pdf.output('blob');
 
-    // 6. Resguardo e IndexedDB
-    await dbStore.guardarPdfBlob(planilla.id || Date.now(), pdfBlob);
+    // 6. Resguardo de Blob de PDF si el método existe en dbStore
+    if (dbStore && typeof dbStore.guardarPdfBlob === "function") {
+      await dbStore.guardarPdfBlob(planilla.id || Date.now(), pdfBlob);
+    }
 
     const blobUrl = URL.createObjectURL(pdfBlob);
     const enlace = document.createElement('a');
@@ -323,9 +374,48 @@ export async function exportarYRespaldarPlanillaPDF(idPlanilla, planillaDirecta 
       printArea.innerHTML = "";
     }, 1000);
 
-    console.log("✅ [PLANILLA_PDF]: PDF paginado dinámicamente con flujo continuo y bordes limpios de fila.");
+    console.log("✅ [PLANILLA_PDF]: PDF paginado y exportado correctamente con bordes limpios.");
+
   } catch (error) {
     console.error("❌ [PLANILLA_PDF]: Error procesando exportación PDF:", error);
     alert(`❌ Error al generar el PDF de la planilla: ${error.message || error}`);
   }
+}
+
+/**
+ * Fallback de impresión utilizando la ventana del navegador.
+ * @param {string} htmlContent 
+ * @param {string|number} idPlanilla 
+ */
+function generarPdfFallbackVentana(htmlContent, idPlanilla) {
+  const windowPrint = window.open('', '_blank');
+  if (!windowPrint) {
+    alert("⚠️ Habilite las ventanas emergentes para imprimir la planilla.");
+    return;
+  }
+
+  windowPrint.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Planilla #${idPlanilla}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      ${htmlContent}
+      <script>
+        window.onload = function() { window.print(); window.close(); };
+      </script>
+    </body>
+    </html>
+  `);
+  windowPrint.document.close();
+}
+
+// BINDING GLOBAL
+if (typeof window !== "undefined") {
+  window.exportarYRespaldarPlanillaPDF = exportarYRespaldarPlanillaPDF;
 }

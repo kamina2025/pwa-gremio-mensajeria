@@ -6,14 +6,14 @@
 
 import { renderizarParadasZonificadasUI } from "./rutas/rutas-ui-acordeon.js";
 import { guardarRutaZonificada, obtenerParadasGuardadas } from "./mensajero-persistencia.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./mapa/zonificacion/estandar-zonas.js";
 
 // =========================================================================
 // SECCIÓN 1: INMUNIZACIÓN ESTÁTICA, PRECARGA Y GESTIÓN DE MODALES UI
 // =========================================================================
 
 /**
- * Sanitiza y limita el tamaño de textos de las paradas provenientes de IA o APIs externas
- * para evitar colapsos visuales o desbordamientos del layout.
+ * Sanitiza y limita el tamaño de textos de las paradas provenientes de IA o APIs externas.
  * @param {string} val 
  * @param {number} maxLen 
  * @returns {string}
@@ -22,7 +22,7 @@ function sanitizarTextoInmune(val, maxLen = 150) {
     if (!val) return "";
     const str = String(val).trim();
     if (str.length > maxLen) {
-        console.warn(`🛡️ [MENSAJERO_UI]: Texto recortado por superar el límite de inmunidad (${str.length} > ${maxLen} caracteres)`);
+        console.warn(`🛡️ [MENSAJERO_UI]: Texto recortado por superar límite de inmunidad (${str.length} > ${maxLen} chars)`);
         return str.substring(0, maxLen) + "...";
     }
     return str;
@@ -102,6 +102,7 @@ export function precargarFormularioParadaUI(paradaOId) {
     };
 
     const idReal = normalizarIdParada(parada.id || parada.ssc || parada.scc || "");
+    const zonaCanonica = estandarizarZonaCanonica(obtenerZonaParadaCanonica(parada));
 
     setValMulti(["input-parada-id", "input-id-parada", "input-id", "id_parada", "id"], idReal);
     setValMulti(["input-parada-cliente", "input-destinatario", "input-cliente", "destinatario", "cliente", "nombre", "nombre_cliente"], sanitizarTextoInmune(parada.destinatario || parada.cliente || parada.nombre_cliente || "", 100));
@@ -110,7 +111,7 @@ export function precargarFormularioParadaUI(paradaOId) {
     setValMulti(["input-parada-ssc", "input-ssc", "input-scc", "input-guia", "ssc", "scc", "guia"], sanitizarTextoInmune(parada.ssc || parada.scc || idReal, 50));
     setValMulti(["input-parada-cuota", "input-cuota", "input-copago", "cuotaModeradora", "copago", "cuota"], sanitizarTextoInmune(parada.cuotaModeradora || parada.copago || "", 30));
     setValMulti(["input-parada-observaciones", "input-observaciones", "input-notas", "observaciones", "notas"], sanitizarTextoInmune(parada.observaciones || parada.notas || "", 200));
-    setValMulti(["input-parada-zona", "input-zona", "zona"], sanitizarTextoInmune(parada.zona || parada.zonaCanonika || "GENERAL", 40));
+    setValMulti(["input-parada-zona", "input-zona", "zona"], zonaCanonica);
 
     const modalEl = document.getElementById('modal-gestion-parada') || document.getElementById('modal-formulario-parada') || document.getElementById('modal-editar-parada');
     const formModal = modalEl ? (modalEl.querySelector("form") || modalEl) : null;
@@ -174,7 +175,9 @@ export async function guardarParadaManualUI() {
     const sscVal = sanitizarTextoInmune(getValMulti(["input-parada-ssc", "input-ssc", "input-scc", "input-guia", "ssc", "scc"]), 50);
     const cuotaVal = sanitizarTextoInmune(getValMulti(["input-parada-cuota", "input-cuota", "input-copago", "cuotaModeradora", "cuota"]), 30);
     const observacionesVal = sanitizarTextoInmune(getValMulti(["input-parada-observaciones", "input-observaciones", "input-notas", "observaciones", "notas"]), 200);
-    const zonaVal = sanitizarTextoInmune(getValMulti(["input-parada-zona", "input-zona", "zona"]) || "GENERAL", 40);
+    
+    const zonaRaw = getValMulti(["input-parada-zona", "input-zona", "zona"]) || "GENERAL";
+    const zonaVal = estandarizarZonaCanonica(zonaRaw);
 
     let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
 
@@ -182,7 +185,7 @@ export async function guardarParadaManualUI() {
     const idxExistente = todasLasParadas.findIndex(p => p && normalizarIdParada(p.id || p.ssc || p.scc) === normEditId);
 
     if (esModoEdicion && idxExistente !== -1) {
-        console.log(`✏️ [MENSAJERO_UI]: Actualizando parada ID '${todasLasParadas[idxExistente].id}' en índice [${idxExistente}]`);
+        console.log(`✏️️ [MENSAJERO_UI]: Actualizando parada ID '${todasLasParadas[idxExistente].id}' en índice [${idxExistente}]`);
         
         const objetivo = todasLasParadas[idxExistente];
         if (clienteVal) {
@@ -211,19 +214,24 @@ export async function guardarParadaManualUI() {
             objetivo.notas = observacionesVal;
         }
         objetivo.zona = zonaVal || objetivo.zona;
+        objetivo.zonaKey = zonaVal;
         objetivo.updated_at = new Date().toISOString();
 
         if (dbStore && typeof dbStore.actualizarParada === "function") {
             try {
                 await dbStore.actualizarParada(objetivo);
             } catch (err) {
-                console.warn("⚠️ [MENSAJERO_UI]: Error al actualizar parada en IndexedDB direct Store:", err);
+                console.warn("⚠️ [MENSAJERO_UI]: Error al actualizar parada en IndexedDB Store:", err);
             }
         }
 
     } else {
         const nuevoId = idInput || `PNT-${Math.floor(1000 + Math.random() * 9000)}`;
-        console.log(`➕ [MENSAJERO_UI]: Creando nueva parada sanitizada con ID '${nuevoId}'`);
+        console.log(`➕ [MENSAJERO_UI]: Creando nueva parada sanitizada con ID '${nuevoId}' en Zona: ${zonaVal}`);
+
+        // Contar cuántas paradas existen actualmente en esa zona para asignar consecutivoZona
+        const paradasMismaZona = todasLasParadas.filter(p => estandarizarZonaCanonica(obtenerZonaParadaCanonica(p)) === zonaVal);
+        const nuevoConsecutivo = paradasMismaZona.length + 1;
 
         const nuevaParada = {
             id: nuevoId,
@@ -241,8 +249,11 @@ export async function guardarParadaManualUI() {
             observaciones: observacionesVal || "",
             notas: observacionesVal || "",
             zona: zonaVal,
+            zonaKey: zonaVal,
+            consecutivoZona: nuevoConsecutivo,
+            secuenciaZona: nuevoConsecutivo,
+            orden: todasLasParadas.length + 1,
             secuencia: todasLasParadas.length + 1,
-            secuenciaZona: todasLasParadas.length + 1,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
@@ -250,7 +261,13 @@ export async function guardarParadaManualUI() {
         todasLasParadas.push(nuevaParada);
     }
 
-    await guardarRutaZonificada(todasLasParadas);
+    // Recalcular orden y consecutivos generales y por zona
+    if (typeof window.procesarNumeracionConsecutivaPorZona === "function") {
+        todasLasParadas = await window.procesarNumeracionConsecutivaPorZona(todasLasParadas);
+    } else {
+        await guardarRutaZonificada(todasLasParadas);
+    }
+
     sincronizarMemoriasGlobales(todasLasParadas);
     await renderizarConsolaOperaciones(todasLasParadas, 0, 0);
 
@@ -296,7 +313,7 @@ export async function guardarParadaManualUI() {
     };
 
     window.mostrarModalGestionParadaUI = function (datosParada = null) {
-        console.log("✏️️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.");
+        console.log("✏️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.");
         const modal = document.getElementById('modal-gestion-parada') || document.getElementById('modal-formulario-parada') || document.getElementById('modal-editar-parada');
         
         if (modal) {
@@ -410,8 +427,11 @@ function resolverFn(fnModulo, nombreGlobal) {
 function sincronizarMemoriasGlobales(listaActualizada) {
     const sanitizada = (Array.isArray(listaActualizada) ? listaActualizada : []).map(p => {
         if (!p || typeof p !== "object") return p;
+        const zonaCanonica = estandarizarZonaCanonica(obtenerZonaParadaCanonica(p));
         return {
             ...p,
+            zona: zonaCanonica,
+            zonaKey: zonaCanonica,
             destinatario: sanitizarTextoInmune(p.destinatario || p.cliente || p.nombre_cliente || "", 100),
             cliente: sanitizarTextoInmune(p.cliente || p.destinatario || "", 100),
             direccion: sanitizarTextoInmune(p.direccion || p.dir || "", 150),
@@ -522,7 +542,7 @@ export async function ejecutarZonificacionAutomatica() {
 }
 
 export async function moverParadaSecuencia(idParada, delta) {
-    console.log(`↕️️ [MENSAJERO_UI]: Moviendo secuencia de parada ID '${idParada}' (delta: ${delta})...`);
+    console.log(`↕ [MENSAJERO_UI]: Moviendo secuencia de parada ID '${idParada}' (delta: ${delta})...`);
     emitirHaptico(20);
     const moverFn = resolverFn(moverParadaSecuenciaUIFn, "moverParadaSecuenciaUI");
     if (typeof moverFn === "function") {
@@ -544,7 +564,7 @@ export function activarEdicionParadaUI(e, idx) {
 
 export function cancelarEdicionParadaUI(e, idx) {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
-    console.log(`↩️ [MENSAJERO_UI]: Cancelando edición para índice -> ${idx}`);
+    console.log(`↩️️ [MENSAJERO_UI]: Cancelando edición para índice -> ${idx}`);
     emitirHaptico(20);
     const lectura = document.getElementById(`vista-lectura-${idx}`);
     const edicion = document.getElementById(`vista-edicion-${idx}`);
@@ -566,9 +586,14 @@ export async function guardarEdicionParadaUI(e, idx) {
         paradasMemoriaLocal[idx].dir = paradasMemoriaLocal[idx].direccion;
         paradasMemoriaLocal[idx].ssc = sanitizarTextoInmune(document.getElementById(`input-edit-ssc-${idx}`)?.value || paradasMemoriaLocal[idx].ssc, 50);
         paradasMemoriaLocal[idx].cuotaModeradora = sanitizarTextoInmune(document.getElementById(`input-edit-cuota-${idx}`)?.value || paradasMemoriaLocal[idx].cuotaModeradora, 30);
+        
+        const zonaEditadaRaw = document.getElementById(`input-edit-zona-${idx}`)?.value || paradasMemoriaLocal[idx].zona;
+        const zonaCanonica = estandarizarZonaCanonica(zonaEditadaRaw);
+        paradasMemoriaLocal[idx].zona = zonaCanonica;
+        paradasMemoriaLocal[idx].zonaKey = zonaCanonica;
         paradasMemoriaLocal[idx].updated_at = new Date().toISOString();
 
-        console.log(`📝 [MENSAJERO_UI]: Datos actualizados -> ${paradasMemoriaLocal[idx].destinatario} | ${paradasMemoriaLocal[idx].direccion}`);
+        console.log(`📝 [MENSAJERO_UI]: Datos actualizados -> ${paradasMemoriaLocal[idx].destinatario} | ${paradasMemoriaLocal[idx].direccion} | Zona: ${zonaCanonica}`);
 
         if (dbStore && typeof dbStore.actualizarParada === "function") {
             try {
@@ -579,7 +604,9 @@ export async function guardarEdicionParadaUI(e, idx) {
             }
         }
 
-        if (typeof guardarRutaZonificada === "function") {
+        if (typeof window.procesarNumeracionConsecutivaPorZona === "function") {
+            paradasMemoriaLocal = await window.procesarNumeracionConsecutivaPorZona(paradasMemoriaLocal);
+        } else if (typeof guardarRutaZonificada === "function") {
             await guardarRutaZonificada(paradasMemoriaLocal);
         }
 
@@ -599,7 +626,7 @@ export async function eliminarParadaUI(e, idxOId) {
         target = e;
     }
 
-    console.log(`🗑️ [MENSAJERO_UI]: Solicitud para eliminar parada -> ${target}`);
+    console.log(`🗑️️ [MENSAJERO_UI]: Solicitud para eliminar parada -> ${target}`);
     emitirHaptico([50, 30, 50]);
     
     if (typeof window !== "undefined" && window.confirm && !confirm("¿Desea eliminar esta parada de la ruta?")) {
@@ -626,16 +653,20 @@ export async function eliminarParadaUI(e, idxOId) {
     if (paradaRemovida) {
         console.log("🗑️ [MENSAJERO_UI]: Parada removida de memoria local:", paradaRemovida);
     } else {
-        console.warn(`⚠️️ [MENSAJERO_UI]: No se pudo encontrar la parada con identificador: ${target}`);
+        console.warn(`⚠️ [MENSAJERO_UI]: No se pudo encontrar la parada con identificador: ${target}`);
     }
 
     console.log("🔢 [MENSAJERO_UI]: Re-secuenciando paradas restantes...");
-    paradasRestantes.forEach((p, idx) => {
-        p.secuencia = idx + 1;
-        p.secuenciaZona = idx + 1;
-        p.orden = idx + 1;
-        p.updated_at = new Date().toISOString();
-    });
+    if (typeof window.procesarNumeracionConsecutivaPorZona === "function") {
+        paradasRestantes = await window.procesarNumeracionConsecutivaPorZona(paradasRestantes);
+    } else {
+        paradasRestantes.forEach((p, idx) => {
+            p.secuencia = idx + 1;
+            p.secuenciaZona = idx + 1;
+            p.orden = idx + 1;
+            p.updated_at = new Date().toISOString();
+        });
+    }
 
     try {
         if (paradaRemovida && paradaRemovida.id && dbStore && typeof dbStore.eliminarParada === "function") {

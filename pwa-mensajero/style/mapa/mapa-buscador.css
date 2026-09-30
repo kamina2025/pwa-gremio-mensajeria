@@ -4,7 +4,9 @@
    Arquitectura: Cyberpunk Dark Mode / Safe-Areas / Hardware Accelerated
    ========================================================================== */
 
-/* Contenedor Principal Flotante del Buscador */
+/* --------------------------------------------------------------------------
+   1. CONTENEDOR PRINCIPAL FLOTANTE DEL BUSCADOR
+   -------------------------------------------------------------------------- */
 .cyber-search-wrapper,
 .cyber-search-container,
 .contenedor-busqueda-mapa {
@@ -49,7 +51,8 @@
 
 #buscador-paradas-mapa,
 .cyber-search-input,
-#input-mapa-buscar-dir {
+#input-mapa-buscar-dir,
+#input-filtrar-paradas {
     flex: 1;
     background: transparent !important;
     border: none !important;
@@ -64,7 +67,8 @@
 
 #buscador-paradas-mapa::placeholder,
 .cyber-search-input::placeholder,
-#input-mapa-buscar-dir::placeholder {
+#input-mapa-buscar-dir::placeholder,
+#input-filtrar-paradas::placeholder {
     color: var(--text-color, #c3ccdb);
     opacity: 0.65;
     font-weight: 400;
@@ -119,15 +123,18 @@
     transform: scale(0.85);
 }
 
-/* Lista Desplegable de Sugerencias */
-.cyber-sugerencias-lista {
+/* --------------------------------------------------------------------------
+   2. DESPLEGABLE Y TARJETAS DE RESULTADOS / SUGERENCIAS
+   -------------------------------------------------------------------------- */
+.cyber-sugerencias-lista,
+.lista-resultados-scroll {
     list-style: none;
     margin: 8px 0 0 0;
     padding: 4px 0;
     background: rgba(13, 17, 23, 0.98) !important;
     border: 1.5px solid var(--neon-cyan, #00e5ff) !important;
     border-radius: 8px;
-    max-height: 290px;
+    max-height: calc(60vh - env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.95), 0 0 18px rgba(0, 229, 255, 0.3) !important;
     backdrop-filter: blur(16px);
@@ -136,46 +143,85 @@
     width: 100%;
     left: 0;
     top: 100%;
-    z-index: 1001 !important;
+    z-index: 1005 !important;
     box-sizing: border-box;
 }
 
-.cyber-sugerencias-lista::-webkit-scrollbar {
+.cyber-sugerencias-lista::-webkit-scrollbar,
+.lista-resultados-scroll::-webkit-scrollbar {
     width: 6px;
 }
 
-.cyber-sugerencias-lista::-webkit-scrollbar-track {
+.cyber-sugerencias-lista::-webkit-scrollbar-track,
+.lista-resultados-scroll::-webkit-scrollbar-track {
     background: #080c14;
 }
 
-.cyber-sugerencias-lista::-webkit-scrollbar-thumb {
+.cyber-sugerencias-lista::-webkit-scrollbar-thumb,
+.lista-resultados-scroll::-webkit-scrollbar-thumb {
     background: var(--neon-cyan, #00e5ff);
     border-radius: 3px;
 }
 
-.cyber-sugerencia-item {
+.cyber-sugerencia-item,
+.item-busqueda-card-cyberpunk {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 4px;
     padding: 10px 14px;
     border-bottom: 1px solid rgba(48, 54, 61, 0.7);
-    background: transparent;
+    background: #161b22;
+    border-left: 4px solid var(--neon-cyan, #00e5ff);
     cursor: pointer;
-    transition: background 0.2s ease;
+    transition: all 0.2s ease-in-out;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
 }
 
-.cyber-sugerencia-item:last-child {
+.cyber-sugerencia-item:last-child,
+.item-busqueda-card-cyberpunk:last-child {
     border-bottom: none;
 }
 
 .cyber-sugerencia-item:hover,
-.cyber-sugerencia-item:active {
-    background: rgba(0, 229, 255, 0.18) !important;
+.cyber-sugerencia-item:active,
+.item-busqueda-card-cyberpunk:hover {
+    background: #21262d !important;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+    transform: translateX(4px);
 }
 
-/* Badges de Clasificación de Sugerencias */
+.header-card-busqueda {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+/* Badges Cyberpunk Unificadas */
+.badge-zona-cyberpunk {
+    background: var(--neon-magenta, #ff3366) !important;
+    color: #ffffff !important;
+    font-weight: 800;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 6px rgba(255, 51, 102, 0.5);
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+}
+
+.badge-stop-cyberpunk {
+    background: var(--neon-amber, #ffb300) !important;
+    color: #0d1117 !important;
+    font-weight: 900;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    font-family: var(--cyber-font, 'Fira Code', monospace);
+}
+
 .cyber-sug-badge {
     font-size: 0.7rem;
     font-weight: 900;
@@ -223,30 +269,74 @@
     box-shadow: 0 0 10px rgba(57, 255, 20, 0.6);
 }
 
-.cyber-sug-info {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    font-family: var(--cyber-font, 'Fira Code', monospace);
-}
-
+.destinatario-busqueda,
 .cyber-sug-info strong {
-    color: #ffffff !important;
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-weight: 600;
+    color: #f0f6fc !important;
+    font-size: 0.88rem;
+    font-family: var(--cyber-font, 'Fira Code', monospace);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+.direccion-busqueda,
 .cyber-sug-info small {
+    font-size: 0.78rem;
     color: var(--text-color, #c3ccdb) !important;
-    font-size: 0.75rem;
+    font-family: var(--cyber-font, 'Fira Code', monospace);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     margin-top: 2px;
-    opacity: 0.8;
+    opacity: 0.85;
+}
+
+/* --------------------------------------------------------------------------
+   3. MODAL OVERLAY Y ESCÁNER DE CÁMARA
+   -------------------------------------------------------------------------- */
+.modal-cyberpunk-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(13, 17, 23, 0.88);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-cyberpunk-overlay.active {
+    display: flex;
+}
+
+.modal-cyberpunk-container {
+    width: 90%;
+    max-width: 520px;
+    background: #0d1117;
+    border: 1px solid var(--neon-cyan, #00e5ff);
+    box-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
+    border-radius: 8px;
+    overflow: hidden;
+    color: #ffffff;
+}
+
+.modal-cyberpunk-header {
+    padding: 12px 16px;
+    background: #161b22;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.25);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.neon-cyan {
+    color: var(--neon-cyan, #00e5ff);
+    text-shadow: 0 0 6px rgba(0, 229, 255, 0.7);
 }
 
 /* Modal del Escáner SCC de Cámara */

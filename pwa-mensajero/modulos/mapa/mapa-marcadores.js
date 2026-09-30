@@ -10,6 +10,7 @@ import { actualizarParadaEnPlanillaLocal } from "../planilla/planillas-db.js";
 import { guardarRutaZonificada } from "../mensajero-persistencia.js";
 import { obtenerClaseMenuRadialOverlay } from "./marcadores/mapa-overlay-orbital.js";
 import { abrirModalGestionParada as abrirModalGestionParadaImpl } from "./marcadores/mapa-modal-parada.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "./zonificacion/estandar-zonas.js";
 
 // Instancia de persistencia Local-First para operaciones de IndexedDB
 const dbStore = new IndexedStore();
@@ -179,6 +180,12 @@ export function abrirModalGestionParada(pedido, indice) {
     abrirModalGestionParadaImpl(pedido, indice, mutarMarcadorPorId);
 }
 
+/**
+ * Renderiza marcadores interactivos sincronizados con el consecutivo por zona.
+ * @param {Array<Object>} listaPedidos - Lista de paradas a renderizar
+ * @param {number} indiceActivo - Índice activo en la ruta global
+ * @param {Function} callbackActualizacion - Callback post-modificación
+ */
 export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, callbackActualizacion) {
     if (Array.isArray(window.marcadoresRutaMensajero)) {
         window.marcadoresRutaMensajero.forEach((m) => {
@@ -207,7 +214,10 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             estadoCalculado = "en-camino";
         }
 
+        const zonaCanonica = estandarizarZonaCanonica(obtenerZonaParadaCanonica(pedido));
+        const consecutivo = pedido.consecutivoZona || pedido.secuenciaZona || (idx + 1);
         const idUnicoParada = String(pedido.id || pedido.ssc || `#PNT-${idx + 1}`).trim();
+        const claveUnicaEmparejamiento = `${idUnicoParada}_${zonaCanonica}_${consecutivo}`;
         const nombreCliente = pedido.destinatario || pedido.cliente || pedido.nombre_cliente || "Cliente";
 
         const crearMarcadorEnPosicion = (latLngPos) => {
@@ -215,7 +225,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
 
             const iconoCyberpunk = crearIconoParadaCyberpunkSVG({
                 estado: estadoCalculado,
-                secuencia: idx + 1,
+                secuencia: consecutivo,
                 causal: pedido.causal || ""
             });
 
@@ -224,20 +234,30 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                 map: mapa,
                 draggable: false,
                 icon: iconoCyberpunk,
-                title: `[STOP #${idx + 1}] ${nombreCliente}`
+                title: `[${zonaCanonica} - STOP #${consecutivo}] ${nombreCliente}`
             });
 
-            const grupoAsignado = String(pedido.grupoId || pedido.grupo || pedido.cluster || "").trim();
+            const grupoAsignado = String(pedido.grupoId || pedido.grupo || pedido.cluster || zonaCanonica).trim();
             marker.set("idParada", idUnicoParada);
             marker.set("sscParada", pedido.ssc || idUnicoParada);
-            marker.set("secuencia", idx + 1);
+            marker.set("secuencia", consecutivo);
+            marker.set("consecutivoZona", consecutivo);
+            marker.set("zona", zonaCanonica);
+            marker.set("claveUnica", claveUnicaEmparejamiento);
             marker.set("grupoId", grupoAsignado);
-            marker.set("cluster", grupoAsignado);
+
+            // Adjuntar metadatos de sincronización
+            marker.metadata = {
+                idParada: idUnicoParada,
+                zona: zonaCanonica,
+                consecutivoZona: consecutivo,
+                claveUnica: claveUnicaEmparejamiento
+            };
 
             const templateInfo = `
                 <div style="background: #0d1117; color: #fff; padding: 10px; border: 1px solid #00e5ff; font-family: 'Fira Code', monospace; font-size: 0.78rem; border-radius: 6px; min-width: 180px;">
                     <div style="color: #00e5ff; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #2d3748; padding-bottom: 2px;">
-                        [STOP #${idx + 1}] ${nombreCliente}
+                        [<span style="color:#ff3366">${zonaCanonica}</span> - STOP #${consecutivo}] ${nombreCliente}
                     </div>
                     <div><span style="color: #8af7b3;">📍 DIR:</span> ${pedido.direccion || pedido.dir || "N/A"}</div>
                     <div><span style="color: #8af7b3;">📞 TEL:</span> ${pedido.telefono || pedido.tel || "N/A"}</div>
@@ -261,7 +281,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
             const registrarSeleccionDirecta = () => {
                 try {
                     localStorage.setItem(KEY_ULTIMA_PARADA, idUnicoParada);
-                    console.log(`📌 [MAPA_MARCADORES]: Selección directa registrada -> ${idUnicoParada} (${nombreCliente})`);
+                    console.log(`📌 [MAPA_MARCADORES]: Selección registrada -> ${claveUnicaEmparejamiento} (${nombreCliente})`);
                 } catch (err) {
                     console.warn("⚠️ Error guardando selección directa en localStorage:", err);
                 }
@@ -279,7 +299,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                     onEdit: () => window.cargarEdicionDesdePin(pedido),
                     onSequence: () => {
                         if (typeof window.moverParadaManual === "function") {
-                            window.moverParadaManual(idUnicoParada, -1, pedido.zonaKey || pedido.zona);
+                            window.moverParadaManual(idUnicoParada, -1, zonaCanonica);
                         }
                     },
                     onMove: () => activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion),
@@ -290,7 +310,7 @@ export function renderizarMarcadoresInteractivos(listaPedidos, indiceActivo, cal
                         const lng = pedido.lng || marker.getPosition().lng();
                         navigator.clipboard.writeText(`${lat}, ${lng}`).then(() => alert(`📋 Coordenadas copiadas: ${lat}, ${lng}`));
                     },
-                    onReport: () => abrirModalGestionParada(pedido, idx + 1),
+                    onReport: () => abrirModalGestionParada(pedido, consecutivo),
                     onExternalNav: () => iniciarViajeNavegacionGPS(pedido)
                 });
 
@@ -360,10 +380,12 @@ function activarArrastreMarcador(marker, pedido, geocoder, callbackActualizacion
                 }
                 await actualizarParadaEnPlanillaLocal(pedido);
 
-                // Reescritura del snapshot contenedor para garantizar consistencia tras F5
-                const snapshotMemoria = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
-                if (snapshotMemoria.length > 0 && typeof guardarRutaZonificada === "function") {
-                    await guardarRutaZonificada(snapshotMemoria);
+                // Recalcular consecutivos y snapshot persistente
+                let listadoActual = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
+                if (typeof window.procesarNumeracionConsecutivaPorZona === "function") {
+                    listadoActual = await window.procesarNumeracionConsecutivaPorZona(listadoActual);
+                } else if (typeof guardarRutaZonificada === "function") {
+                    await guardarRutaZonificada(listadoActual);
                 }
 
                 console.log("💾 [MAPA_MARCADORES]: Reubicación persistida atómicamente en IndexedDB.");
@@ -436,17 +458,22 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
             window.marcadoresRutaMensajero = window.marcadoresRutaMensajero.filter((m) => m !== marker);
         }
 
-        // 2. Limpieza sincrónica de memoria RAM y sobrescritura de snapshot en IndexedDB
-        const paradasActualizadas = limpiarParadaDeBuffersRAM(idParada);
+        // 2. Limpieza sincrónica de memoria RAM
+        let paradasActualizadas = limpiarParadaDeBuffersRAM(idParada);
 
-        // 3. Persistencia Local en IndexedDB eliminando explícitamente de las tablas secundarias
+        // 3. Recalcular secuencia y consecutivos por zona
+        if (typeof window.procesarNumeracionConsecutivaPorZona === "function") {
+            paradasActualizadas = await window.procesarNumeracionConsecutivaPorZona(paradasActualizadas);
+        }
+
+        // 4. Persistencia Local en IndexedDB eliminando explícitamente de las tablas secundarias
         if (typeof dbStore.eliminarParada === "function") {
             await dbStore.eliminarParada(idParada, "paradas_rutas");
             await dbStore.eliminarParada(idParada, "rutas_zonificadas").catch(() => {});
         }
         console.log("💾 [MAPA_MARCADORES]: Parada eliminada de IndexedDB:", idParada);
 
-        // 4. Sincronización Remota Backend o Cola Offline defensiva para GitHub Pages
+        // 5. Sincronización Remota Backend o Cola Offline defensiva para GitHub Pages
         const payload = {
             action: "eliminar_parada",
             id: idParada
@@ -475,7 +502,7 @@ async function eliminarParadaProceso(marker, idParada, callbackActualizacion) {
                 });
         }
 
-        // 5. Refresco de Consola de Operaciones pasando directamente la colección purgada
+        // 6. Refresco de Consola de Operaciones pasando directamente la colección purgada
         if (typeof window.refrescarConsolaOperacionesUI === "function") {
             await window.refrescarConsolaOperacionesUI(paradasActualizadas);
         }
@@ -496,7 +523,7 @@ export function mutarMarcadorPorId(idParada, nuevoEstado, causal = "") {
     );
 
     if (marker) {
-        const sec = marker.get("secuencia") || 1;
+        const sec = marker.get("consecutivoZona") || marker.get("secuencia") || 1;
         const nuevoIcono = crearIconoParadaCyberpunkSVG({
             estado: nuevoEstado,
             secuencia: sec,

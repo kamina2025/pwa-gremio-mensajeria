@@ -59,14 +59,14 @@
             type="button" 
             class="btn-terminal btn-crypto" 
             onclick="window.mostrarModalImportarRutaUI()" 
-            style="flex: 1; min-width: 200px; color: var(--neon-purple, #b359ff); border-color: var(--neon-purple, #b359ff);">
+            style="flex: 1; min-width: 180px; color: var(--neon-purple, #b359ff); border-color: var(--neon-purple, #b359ff);">
             [📥] IMPORTAR RUTA (WA / TELEGRAM)
         </button>
         <button 
             type="button" 
             class="btn-terminal btn-crypto" 
             onclick="window.mostrarModalGestionParadaUI()" 
-            style="flex: 1; min-width: 200px; color: var(--neon-green, #00ff66); border-color: var(--neon-green, #00ff66);">
+            style="flex: 1; min-width: 180px; color: var(--neon-green, #00ff66); border-color: var(--neon-green, #00ff66);">
             [➕ / ✏️] GESTIÓN MANUAL DE PARADA
         </button>
     </section>
@@ -107,7 +107,7 @@
         </div>
     </dialog>
 
-    <!-- MODAL 2: CREAR / EDITAR PARADA MANUALMENTE -->
+    <!-- MODAL 2: CREAR / EDITAR PARADA MANUALMENTE (ESTANDARIZADO) -->
     <dialog id="modal-gestion-parada" class="panel-maquina" style="border-color: var(--neon-green, #00ff66); max-width: 500px; width: 90%; margin: auto; padding: 15px; background: rgba(10, 10, 15, 0.95); color: #fff;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid var(--neon-green, #00ff66); padding-bottom: 6px;">
             <span style="color: var(--neon-green, #00ff66); font-weight: bold; font-size: 0.9rem;">
@@ -115,40 +115,63 @@
             </span>
             <button type="button" onclick="window.cerrarModalGestionParadaUI()" style="background: transparent; border: none; color: #ff3366; font-weight: bold; cursor: pointer; font-size: 1.1rem;">[X]</button>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 8px">
-            <input type="hidden" id="edit-parada-id" value="" />
+        <form id="form-gestion-parada" style="display: flex; flex-direction: column; gap: 8px" onsubmit="event.preventDefault(); window.guardarYcerrarParadaManualUI();">
+            <input type="hidden" id="input-parada-id" name="input-parada-id" value="" />
 
             <input
                 type="text"
-                id="edit-parada-destinatario"
+                id="input-parada-cliente"
+                name="input-parada-cliente"
                 class="input-terminal"
-                placeholder="Nombre Destinatario" />
+                placeholder="Nombre Destinatario / Cliente"
+                required />
             <input
                 type="text"
-                id="edit-parada-direccion"
+                id="input-parada-direccion"
+                name="input-parada-direccion"
                 class="input-terminal"
-                placeholder="Dirección de Entrega" />
-            <input type="text" id="edit-parada-telefono" class="input-terminal" placeholder="Teléfono Contacto" />
+                placeholder="Dirección de Entrega"
+                required />
+            <input 
+                type="text" 
+                id="input-parada-telefono" 
+                name="input-parada-telefono"
+                class="input-terminal" 
+                placeholder="Teléfono Contacto" />
             <input
                 type="text"
-                id="edit-parada-ssc"
+                id="input-parada-ssc"
+                name="input-parada-ssc"
                 class="input-terminal"
                 placeholder="SSC / No. Guía (Opcional)" />
             <input
                 type="text"
-                id="edit-parada-cuota"
+                id="input-parada-cuota"
+                name="input-parada-cuota"
                 class="input-terminal"
                 placeholder="Cuota Moderadora / Copago" />
+            <input
+                type="text"
+                id="input-parada-zona"
+                name="input-parada-zona"
+                class="input-terminal"
+                placeholder="Zona (Ej: NORTE-1, CENTRO, SUR-2)" />
+            <textarea
+                id="input-parada-observaciones"
+                name="input-parada-observaciones"
+                rows="2"
+                class="input-terminal"
+                placeholder="Observaciones / Notas adicionales"></textarea>
 
             <div style="display: flex; gap: 8px; margin-top: 6px">
-                <button type="button" class="btn-terminal btn-crypto" onclick="window.guardarYcerrarParadaManualUI()" style="flex: 1; color: var(--neon-green, #00ff66); border-color: var(--neon-green, #00ff66);">
+                <button type="submit" class="btn-terminal btn-crypto" style="flex: 1; color: var(--neon-green, #00ff66); border-color: var(--neon-green, #00ff66);">
                     [💾] GUARDAR EN BASE LOCAL
                 </button>
                 <button type="button" class="btn-terminal btn-crypto" onclick="window.cerrarModalGestionParadaUI()" style="flex: 1; color: #aaa; border-color: #555;">
                     [CANCELAR]
                 </button>
             </div>
-        </div>
+        </form>
     </dialog>
 
     <!-- POOL DINÁMICA DE CONTRATOS DISPONIBLES -->
@@ -181,45 +204,91 @@
 <script>
     (function () {
         console.log("🛡️ [INMUNIZADOR_INLINE]: Verificando inicialización de bindings UI...");
+
         if (typeof window.mostrarModalGestionParadaUI !== "function") {
-            window.mostrarModalGestionParadaUI = function () {
+            window.mostrarModalGestionParadaUI = function (datosParada) {
                 console.log("🛡️ [INMUNIZADOR_INLINE]: Desplegando #modal-gestion-parada");
+                if (typeof window.precargarFormularioParadaUI === "function" && datosParada) {
+                    window.precargarFormularioParadaUI(datosParada);
+                }
                 const m = document.getElementById('modal-gestion-parada');
-                if (m) typeof m.showModal === 'function' ? m.showModal() : m.style.display = 'block';
+                if (m) {
+                    m.classList.add("active");
+                    typeof m.showModal === 'function' ? m.showModal() : m.style.display = 'block';
+                }
             };
         }
+
         if (typeof window.cerrarModalGestionParadaUI !== "function") {
             window.cerrarModalGestionParadaUI = function () {
-                console.log("🛡️️ [INMUNIZADOR_INLINE]: Cerrando #modal-gestion-parada");
-                if (typeof window.limpiarFormularioParadaUI === "function") window.limpiarFormularioParadaUI();
+                console.log("🛡️ [INMUNIZADOR_INLINE]: Cerrando #modal-gestion-parada");
+                if (typeof window.limpiarFormularioParadaUI === "function") {
+                    window.limpiarFormularioParadaUI();
+                }
                 const m = document.getElementById('modal-gestion-parada');
-                if (m) typeof m.close === 'function' ? m.close() : m.style.display = 'none';
+                if (m) {
+                    m.classList.remove("active");
+                    typeof m.close === 'function' ? m.close() : m.style.display = 'none';
+                }
             };
         }
+
         if (typeof window.mostrarModalImportarRutaUI !== "function") {
             window.mostrarModalImportarRutaUI = function () {
                 console.log("🛡️ [INMUNIZADOR_INLINE]: Desplegando #modal-importar-ruta");
                 const m = document.getElementById('modal-importar-ruta');
-                if (m) typeof m.showModal === 'function' ? m.showModal() : m.style.display = 'block';
+                if (m) {
+                    m.classList.add("active");
+                    typeof m.showModal === 'function' ? m.showModal() : m.style.display = 'block';
+                }
             };
         }
+
         if (typeof window.cerrarModalImportarRutaUI !== "function") {
             window.cerrarModalImportarRutaUI = function () {
                 console.log("🛡️ [INMUNIZADOR_INLINE]: Cerrando #modal-importar-ruta");
                 const m = document.getElementById('modal-importar-ruta');
-                if (m) typeof m.close === 'function' ? m.close() : m.style.display = 'none';
+                if (m) {
+                    m.classList.remove("active");
+                    typeof m.close === 'function' ? m.close() : m.style.display = 'none';
+                }
             };
         }
+
         if (typeof window.ejecutarImportacionYRutaUI !== "function") {
             window.ejecutarImportacionYRutaUI = async function () {
-                if (typeof window.procesarCargaManualEnlace === 'function') await window.procesarCargaManualEnlace();
+                if (typeof window.procesarCargaManualEnlace === 'function') {
+                    await window.procesarCargaManualEnlace();
+                }
                 window.cerrarModalImportarRutaUI();
             };
         }
+
         if (typeof window.guardarYcerrarParadaManualUI !== "function") {
             window.guardarYcerrarParadaManualUI = async function () {
-                if (typeof window.guardarParadaManualUI === 'function') await window.guardarParadaManualUI();
+                if (typeof window.guardarParadaManualUI === 'function') {
+                    await window.guardarParadaManualUI();
+                }
                 window.cerrarModalGestionParadaUI();
+            };
+        }
+
+        if (typeof window.purgarTodaLaRutaUI !== "function") {
+            window.purgarTodaLaRutaUI = async function () {
+                if (confirm("⚠️ ¿Está seguro de que desea eliminar TODAS las paradas de la ruta activa?")) {
+                    console.log("🗑️ [INMUNIZADOR_INLINE]: Purgando la ruta completa...");
+                    if (typeof window.purgarRutaCompleta === 'function') {
+                        await window.purgarRutaCompleta();
+                    } else if (typeof window.guardarRutaZonificada === 'function') {
+                        await window.guardarRutaZonificada([]);
+                    }
+                    window.__CACHE_PARADAS_MACONDO__ = [];
+                    window.paradasMemoriaLocal = [];
+                    window.paradasRutaActiva = [];
+                    if (typeof window.renderizarConsolaOperaciones === 'function') {
+                        await window.renderizarConsolaOperaciones([], 0, 0);
+                    }
+                }
             };
         }
     })();

@@ -1,11 +1,12 @@
 /**
- * PROTOCOLO MACONDO - SUBSISTEMA DE BÚSQUEDA MULTIMODAL Y ENFOQUE
+ * PROTOCOLO MACONDO - SUBSISTEMA DE BÚSQUEDA MULTIMODAL Y ENFOQUE POR ZONA
  * Ubicación: pwa-mensajero/modulos/mapa/eventos/mapa-buscador.js
  * Arquitectura: Multimodal / Local-First Query / Haversine
  */
 
 import { crearIconoParadaRadarSVG } from "../mapa-iconos.js";
 import { calcularDistanciaHaversine } from "../zonificacion/mensajero-zonificacion.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../zonificacion/estandar-zonas.js";
 import { enfocarParadaEnMapa, enfocarYResaltarGrupoSCC } from "../core/mapa-lienzo.js";
 import { obtenerParadasGuardadas } from "../../mensajero-persistencia.js";
 
@@ -51,11 +52,11 @@ function clasificarIntencionBusqueda(query) {
 
 export const mapaBuscador = {
     inicializar() {
-        console.log("🔍 [MAPA_BUSCADOR]: Inicializando Buscador Multimodal SCC.");
+        console.log("🔍 [MAPA_BUSCADOR]: Inicializando Buscador Multimodal SCC con soporte de Zonas.");
 
-        const inputBuscador = document.getElementById("buscador-paradas-mapa");
-        const listaSugerencias = document.getElementById("sugerencias-paradas-mapa");
-        const btnLimpiar = document.getElementById("btn-limpiar-busqueda");
+        const inputBuscador = document.getElementById("buscador-paradas-mapa") || document.getElementById("input-filtrar-paradas");
+        const listaSugerencias = document.getElementById("sugerencias-paradas-mapa") || document.getElementById("sugerencias-busqueda-mapa") || document.querySelector(".cyber-sugerencias-lista");
+        const btnLimpiar = document.getElementById("btn-limpiar-busqueda") || document.querySelector(".cyber-btn-clear");
         const btnCerrarCard = document.getElementById("btn-cerrar-tarjeta");
         const btnEnfocarUltimaParada = document.getElementById('btn-enfocar-ultimo-grupo') || document.getElementById('btn-enfocar-ultima-parada');
 
@@ -79,12 +80,7 @@ export const mapaBuscador = {
                 }
 
                 if (paradaObjetivo) {
-                    if (paradaObjetivo.grupoId || paradaObjetivo.grupo) {
-                        enfocarYResaltarGrupoSCC(paradaObjetivo);
-                    } else {
-                        enfocarParadaEnMapa(paradaObjetivo);
-                    }
-                    this.mostrarTarjetaDetalle(paradaObjetivo);
+                    this.seleccionarParadaBuscada(paradaObjetivo);
                 }
             };
 
@@ -141,7 +137,7 @@ export const mapaBuscador = {
 
         if (btnCerrarCard) {
             btnCerrarCard.addEventListener("click", () => {
-                const card = document.getElementById("tarjeta-detalle-parada");
+                const card = document.getElementById("tarjeta-detalle-parada") || document.getElementById("tarjeta-detalle-parada-mapa");
                 if (card) card.style.display = "none";
             });
         }
@@ -154,8 +150,8 @@ export const mapaBuscador = {
         }
 
         paradas.sort((a, b) => {
-            const seqA = parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10);
-            const seqB = parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10);
+            const seqA = parseInt(a.consecutivoZona || a.secuenciaZona || a.orden || 0, 10);
+            const seqB = parseInt(b.consecutivoZona || b.secuenciaZona || b.orden || 0, 10);
             return seqA - seqB;
         });
 
@@ -170,7 +166,7 @@ export const mapaBuscador = {
 
         if (intencion.tipo === 'STOP') {
             resultados = paradas.filter((p, idx) => {
-                const sec = parseInt(p.secuenciaZona || p.secuencia || p.orden || (idx + 1), 10);
+                const sec = parseInt(p.consecutivoZona || p.secuenciaZona || p.orden || (idx + 1), 10);
                 return sec === intencion.numeroStop;
             }).map(p => ({ ...p, _categoriaBusqueda: 'STOP' }));
         } else {
@@ -178,7 +174,7 @@ export const mapaBuscador = {
                 const sccVal = normalizarTextoBusqueda(p.scc || p.ssc || p.id_scc || p.codigo_scc || "");
                 const clienteVal = normalizarTextoBusqueda(p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "");
                 const dirVal = normalizarTextoBusqueda(p.direccion || p.dir || "");
-                const secVal = String(p.secuenciaZona || p.secuencia || p.orden || (idx + 1));
+                const secVal = String(p.consecutivoZona || p.secuenciaZona || p.orden || (idx + 1));
 
                 const coincideSCC = sccVal.length > 0 && sccVal.includes(qNorm);
                 const coincideStop = secVal === qNorm;
@@ -196,32 +192,34 @@ export const mapaBuscador = {
     },
 
     renderizarSugerencias(coincidencias, queryOriginal) {
-        const listaSugerencias = document.getElementById("sugerencias-paradas-mapa");
+        const listaSugerencias = document.getElementById("sugerencias-paradas-mapa") || document.getElementById("sugerencias-busqueda-mapa") || document.querySelector(".cyber-sugerencias-lista");
         if (!listaSugerencias) return;
 
         let html = "";
 
         if (coincidencias.length > 0) {
             html += coincidencias.map((p, idx) => {
-                const sec = p.secuenciaZona || p.secuencia || p.orden || idx + 1;
+                const zonaLabel = estandarizarZonaCanonica(obtenerZonaParadaCanonica(p));
+                const sec = p.consecutivoZona || p.secuenciaZona || p.orden || (idx + 1);
                 const uid = obtenerIdUnicoParada(p);
-                const scc = p.scc || p.ssc || "N/A";
+                const scc = p.scc || p.ssc || uid || "N/A";
                 const cliente = p.destinatario || p.cliente || "Cliente N/A";
                 const direccionTexto = p.direccion || p.dir || "Sin dirección";
-                const grupo = p.grupoId || "GRUPO-01";
-                const subgrupo = p.subgrupoId || "SUB-001";
 
-                let badgeHTML = `<span class="cyber-sug-badge badge-stop">#${sec}</span>`;
+                let badgeHTML = `
+                    <span class="badge-zona-cyberpunk">${zonaLabel}</span>
+                    <span class="badge-stop-cyberpunk">STOP #${sec}</span>
+                `;
+
                 if (p._categoriaBusqueda === 'SCC') {
                     badgeHTML += `<span class="cyber-sug-badge badge-scc" style="background:#00e5ff; color:#000;">SCC</span>`;
                 }
 
-                badgeHTML += `<span class="cyber-sug-badge badge-grupo">${grupo}</span>`;
-                badgeHTML += `<span class="cyber-sug-badge badge-subgrupo">${subgrupo}</span>`;
-
                 return `
-                    <li class="cyber-sugerencia-item" data-type="parada" data-id="${uid}">
-                        ${badgeHTML}
+                    <li class="cyber-sugerencia-item" data-type="parada" data-id="${uid}" data-zona="${zonaLabel}" data-consecutivo="${sec}">
+                        <div class="header-card-busqueda">
+                            ${badgeHTML}
+                        </div>
                         <div class="cyber-sug-info">
                             <strong>SCC: ${scc} — ${cliente}</strong>
                             <small>📍 ${direccionTexto}</small>
@@ -233,7 +231,7 @@ export const mapaBuscador = {
 
         html += `
             <li class="cyber-sugerencia-item" data-type="geocode" data-query="${queryOriginal}">
-                <span class="cyber-sug-badge badge-geo">📍 GEO</span>
+                <span class="cyber-sug-badge badge-geo" style="background:#39ff14; color:#000;">📍 GEO</span>
                 <div class="cyber-sug-info">
                     <strong>Geocodificar: "${queryOriginal}"</strong>
                     <small>Señalar punto exacto en el mapa</small>
@@ -250,9 +248,14 @@ export const mapaBuscador = {
                 const type = item.getAttribute("data-type");
                 if (type === "parada") {
                     const id = item.getAttribute("data-id");
-                    const seleccionada = coincidencias.find(p => obtenerIdUnicoParada(p) === id);
+                    const zona = item.getAttribute("data-zona");
+                    const consecutivo = item.getAttribute("data-consecutivo");
+                    const seleccionada = coincidencias.find(p => obtenerIdUnicoParada(p) === id && estandarizarZonaCanonica(obtenerZonaParadaCanonica(p)) === zona);
+                    
                     if (seleccionada) {
                         this.seleccionarParadaBuscada(seleccionada);
+                    } else if (coincidencias.length > 0) {
+                        this.seleccionarParadaBuscada(coincidencias[0]);
                     }
                 } else if (type === "geocode") {
                     this.ejecutarGeocodificacionDireccion(queryOriginal);
@@ -267,6 +270,10 @@ export const mapaBuscador = {
 
     seleccionarParadaBuscada(parada) {
         const uid = obtenerIdUnicoParada(parada);
+        const zonaLabel = estandarizarZonaCanonica(obtenerZonaParadaCanonica(parada));
+        const consecutivo = parada.consecutivoZona || parada.secuenciaZona || 1;
+        const claveUnica = `${uid}_${zonaLabel}_${consecutivo}`;
+
         if (uid) {
             try {
                 localStorage.setItem(KEY_ULTIMA_PARADA, uid);
@@ -275,19 +282,28 @@ export const mapaBuscador = {
             }
         }
 
-        if (parada.grupoId || parada.grupo) {
-            enfocarYResaltarGrupoSCC(parada);
-        } else {
+        if (typeof window.centrarMapaEnParadaPorClave === "function") {
+            window.centrarMapaEnParadaPorClave({
+                idParada: uid,
+                zona: zonaLabel,
+                consecutivoZona: consecutivo,
+                claveUnica
+            });
+        } else if (typeof enfocarParadaEnMapa === "function") {
             enfocarParadaEnMapa(parada);
         }
 
-        this.mostrarTarjetaDetalle(parada);
-        this.calcularYRenderizarParadasCercanas(parada);
+        if (typeof window.mostrarDetalleParadaEnLienzo === "function") {
+            window.mostrarDetalleParadaEnLienzo(parada);
+        } else {
+            this.mostrarTarjetaDetalle(parada);
+            this.calcularYRenderizarParadasCercanas(parada);
+        }
     },
 
     ejecutarGeocodificacionDireccion(direccion) {
         if (!direccion) return;
-        const mapa = window.mapaMensajero || window.mapaInstancia;
+        const mapa = window.mapaMensajero || window.mapaInstanciaGlobal || window.mapaInstancia;
 
         if (typeof google === "undefined" || !google.maps || !mapa) {
             console.warn("⚠️ [BUSQUEDA_MAPA_WARN]: Google Maps SDK no disponible.");
@@ -323,15 +339,15 @@ export const mapaBuscador = {
     },
 
     mostrarTarjetaDetalle(parada) {
-        const card = document.getElementById("tarjeta-detalle-parada");
+        const card = document.getElementById("tarjeta-detalle-parada") || document.getElementById("tarjeta-detalle-parada-mapa");
         if (!card) return;
 
-        const sec = parada.secuenciaZona || parada.secuencia || parada.orden || 1;
+        const zonaLabel = estandarizarZonaCanonica(obtenerZonaParadaCanonica(parada));
+        const sec = parada.consecutivoZona || parada.secuenciaZona || parada.orden || 1;
         const nombreCliente = parada.destinatario || parada.cliente || parada.nombre_cliente || parada.nombre || "Cliente N/A";
 
         const elemSec = document.getElementById("card-stop-secuencia");
         const elemGrupo = document.getElementById("card-stop-grupo");
-        const elemSubgrupo = document.getElementById("card-stop-subgrupo");
         const elemSCC = document.getElementById("card-stop-scc");
         const elemEst = document.getElementById("card-stop-estado");
         const elemDest = document.getElementById("card-stop-destinatario");
@@ -339,8 +355,7 @@ export const mapaBuscador = {
         const elemTel = document.getElementById("card-stop-telefono");
 
         if (elemSec) elemSec.textContent = `#STOP ${sec}`;
-        if (elemGrupo) elemGrupo.textContent = parada.grupoId || "GRUPO --";
-        if (elemSubgrupo) elemSubgrupo.textContent = parada.subgrupoId || "SUB --";
+        if (elemGrupo) elemGrupo.textContent = zonaLabel;
         if (elemSCC) elemSCC.textContent = `SCC: ${parada.scc || parada.ssc || 'N/A'}`;
         if (elemEst) elemEst.textContent = (parada.estado || "ASIGNADO").toUpperCase();
         if (elemDest) elemDest.textContent = nombreCliente;
@@ -364,9 +379,10 @@ export const mapaBuscador = {
         }
 
         const idOrigen = obtenerIdUnicoParada(paradaOrigen);
+        const zonaOrigen = estandarizarZonaCanonica(obtenerZonaParadaCanonica(paradaOrigen));
 
         const conDistancias = paradas
-            .filter(p => obtenerIdUnicoParada(p) !== idOrigen)
+            .filter(p => obtenerIdUnicoParada(p) !== idOrigen && estandarizarZonaCanonica(obtenerZonaParadaCanonica(p)) === zonaOrigen)
             .map(p => {
                 const latD = parseFloat(p.lat || p.latitud || p.latitud_num);
                 const lngD = parseFloat(p.lng || p.longitud || p.longitud_num);
@@ -378,7 +394,7 @@ export const mapaBuscador = {
             .slice(0, 3);
 
         if (conDistancias.length === 0) {
-            contenedor.innerHTML = `<span class="cyber-cercana-empty">Sin paradas cercanas</span>`;
+            contenedor.innerHTML = `<span class="cyber-cercana-empty">Sin paradas cercanas en esta zona</span>`;
             return;
         }
 
@@ -386,12 +402,12 @@ export const mapaBuscador = {
             const distTexto = p.distanciaMetros >= 1000 
                 ? `${(p.distanciaMetros / 1000).toFixed(2)} km` 
                 : `${Math.round(p.distanciaMetros)} m`;
-            const sec = p.secuenciaZona || p.secuencia || p.orden || "?";
+            const sec = p.consecutivoZona || p.secuenciaZona || p.orden || "?";
             const uid = obtenerIdUnicoParada(p);
             const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "Cliente";
 
             return `
-                <button type="button" class="btn-parada-cercana" data-id="${uid}">
+                <button type="button" class="btn-parada-cercana" data-id="${uid}" data-zona="${zonaOrigen}" data-consecutivo="${sec}">
                     <span>#Stop ${sec} (${distTexto})</span>
                     <small>${nombreCliente}</small>
                 </button>
@@ -402,7 +418,9 @@ export const mapaBuscador = {
             const seleccionar = (e) => {
                 if (e) e.preventDefault();
                 const id = btn.getAttribute("data-id");
-                const destino = paradas.find(p => obtenerIdUnicoParada(p) === id);
+                const zona = btn.getAttribute("data-zona");
+                const consecutivo = btn.getAttribute("data-consecutivo");
+                const destino = paradas.find(p => obtenerIdUnicoParada(p) === id && estandarizarZonaCanonica(obtenerZonaParadaCanonica(p)) === zona);
                 if (destino) {
                     this.seleccionarParadaBuscada(destino);
                 }
@@ -413,3 +431,7 @@ export const mapaBuscador = {
         });
     }
 };
+
+if (typeof window !== "undefined") {
+    window.mapaBuscador = mapaBuscador;
+}

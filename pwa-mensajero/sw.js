@@ -1,9 +1,10 @@
 /**
  * PROTOCOLO MACONDO - SERVICE WORKER LOCAL-FIRST
  * Ubicación: pwa-mensajero/sw.js
+ * Arquitectura: Cache API / Net-First con Fallback Offline Desacoplado
  */
 
-const CACHE_NAME = "pwa-mensajero-v2.3.0";
+const CACHE_NAME = "pwa-mensajero-v2.3.1";
 
 const ASSETS_TO_CACHE = [
     "./",
@@ -29,8 +30,9 @@ const ASSETS_TO_CACHE = [
     "./vistas/notificaciones/reportes.html"
 ];
 
+// Instalar Service Worker e inyectar caché estática core
 self.addEventListener("install", (event) => {
-    console.log("⚙️ [SW]: Instalando Service Worker e inyectando caché v2.3.0...");
+    console.log(`⚙️ [SW]: Instalando Service Worker e inyectando caché ${CACHE_NAME}...`);
     self.skipWaiting();
 
     event.waitUntil(
@@ -42,7 +44,7 @@ self.addEventListener("install", (event) => {
                         await cache.put(url, response);
                     }
                 } catch (err) {
-                    console.warn(`⚠️ [SW_CACHE]: Error al precachear ${url}:`, err);
+                    console.warn(`⚠️ [SW_CACHE]: Error al precachear recurso ${url}:`, err);
                 }
             });
             return Promise.all(peticiones);
@@ -50,8 +52,9 @@ self.addEventListener("install", (event) => {
     );
 });
 
+// Activar Service Worker y purgar cachés obsoletas de versiones anteriores
 self.addEventListener("activate", (event) => {
-    console.log("🧹 [SW]: Activando Service Worker v2.3.0 y purgando cachés obsoletas...");
+    console.log(`🧹 [SW]: Activando Service Worker ${CACHE_NAME} y purgando cachés obsoletas...`);
     event.waitUntil(
         caches.keys().then((keys) => {
             return Promise.all(
@@ -66,12 +69,13 @@ self.addEventListener("activate", (event) => {
     );
 });
 
+// Estrategia de interceptación Network First con respaldo local en Caché
 self.addEventListener("fetch", (event) => {
     const url = new URL(event.request.url);
 
     // BYPASS EXPLICITO DE RED PARA EL ENDPOINT API REST LOCAL O REMOTO
     if (url.pathname.endsWith("api.php") || url.searchParams.has("action") || url.pathname.includes("/api/")) {
-        console.log(`🌐 [SW_BYPASS_V2.3]: Petición API enviada directamente a la red real -> [${event.request.method} ${url.pathname}]`);
+        console.log(`🌐 [SW_BYPASS]: Petición API enviada directamente a la red real -> [${event.request.method} ${url.pathname}]`);
         return; 
     }
 
@@ -80,7 +84,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
         fetch(event.request)
             .then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
+                if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
                     const responseToCache = networkResponse.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
                 }

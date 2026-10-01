@@ -1,0 +1,8 @@
+rutas/
+│   ├── mensajero-rutas.js          (Fachada principal ES6 & bindings window)
+│   ├── rutas-aislamiento.js        (Isolación de paradas e invalidez de hash)
+│   ├── rutas-handlers.js          (Event delegation y selectores reactivos)
+│   ├── rutas-normalizador.js       (Rehidratación de estado e ID biyectivos)
+│   ├── rutas-optimizacion.js       (Cascada: OSRM -> Haversine -> Google Maps)
+│   ├── rutas-orquestador-flujo.js  (Gestión de estados, Toasts y cola offline)
+│   └── rutas-ui-acordeon.js        (Renderizado Cyberpunk & Drag and Drop)

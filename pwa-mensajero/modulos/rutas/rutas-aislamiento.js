@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - MÓDULO DE AISLAMIENTO Y SECUENCIACIÓN DE RUTAS POR ZONA
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-aislamiento.js
- * Arquitectura: Async Local-First / Multi-Zone Mapping / Preveniente de Ciclos Canvas
+ * Arquitectura: Async Local-First / Multi-Zone Mapping / Sincronización RAM Atómica
  */
 
 import { normalizarClaveZona } from "./rutas-normalizador.js";
@@ -23,6 +23,16 @@ function obtenerNumeroSecuencia(p) {
     const val = p.consecutivoZona ?? p.secuenciaZona ?? p.orden ?? p.secuencia ?? 0;
     const num = parseInt(val, 10);
     return isNaN(num) ? 999999 : num;
+}
+
+/**
+ * Extrae o construye un identificador único limpio para la parada.
+ * @param {Object} p - Objeto de parada
+ * @returns {string}
+ */
+function obtenerIdUnicoParada(p) {
+    if (!p) return "";
+    return String(p.id || p.ssc || p.scc || p.idParada || p.id_parada || "").trim();
 }
 
 /**
@@ -48,13 +58,13 @@ export async function calcularRutaAisladaPorZona(zonaKeyInput, forzarRefresco = 
     try {
         todasLasParadas = (await obtenerParadasGuardadas()) || [];
     } catch (err) {
-        console.warn("⚠️️ [ZONA_ISOLATION]: Fallo al consultar IndexedDB local. Recurriendo a RAM:", err);
+        console.warn("⚠ [ZONA_ISOLATION]: Fallo al consultar IndexedDB local. Recurriendo a RAM:", err);
     }
 
     if (!todasLasParadas || todasLasParadas.length === 0) {
         todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
     } else {
-        // Sincronizar las 4 memorias RAM activas con la lectura fresca de IndexedDB
+        // Sincronizar atómicamente las 4 memorias RAM de sesión activa con la lectura fresca de IndexedDB
         window.__CACHE_PARADAS_MACONDO__ = structuredClone(todasLasParadas);
         window.paradasMemoriaLocal = structuredClone(todasLasParadas);
         window.paradasRutaActiva = structuredClone(todasLasParadas);
@@ -76,10 +86,14 @@ export async function calcularRutaAisladaPorZona(zonaKeyInput, forzarRefresco = 
     // 3. Ordenamiento numérico estricto por secuencia
     paradasDeZona.sort((a, b) => obtenerNumeroSecuencia(a) - obtenerNumeroSecuencia(b));
 
-    // 4. Generación de Hash de Control corregido para detectar inversiones o cambios de orden
+    // 4. Generación de Hash de Control inmune a reordenamientos, clústeres y estados
     const listaIdsConSecuencia = paradasDeZona.map(p => {
-        const idStr = String(p.id || p.ssc || p.scc || "").trim();
-        return `${idStr}_${obtenerNumeroSecuencia(p)}`;
+        const idStr = obtenerIdUnicoParada(p);
+        const seqNum = obtenerNumeroSecuencia(p);
+        const grupoStr = p.grupoId || "";
+        const updatedStr = p.updated_at || "";
+        const estadoStr = p.estado || p.status || "";
+        return `${idStr}_${seqNum}_${grupoStr}_${updatedStr}_${estadoStr}`;
     }).join("|");
 
     const hashActual = `${targetCanonico}_${listaIdsConSecuencia}`;

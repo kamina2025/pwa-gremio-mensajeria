@@ -30,7 +30,18 @@ let llamadasRealizadas = 0;
  */
 function esEntornoEstatico() {
     if (typeof window === "undefined") return false;
-    return window.location.hostname.includes("github.io");
+    return window.location.hostname.includes("github.io") || window.location.protocol === "file:";
+}
+
+/**
+ * Extrae y limpia el identificador de la parada para comparaciones homogéneas.
+ * @param {Object|string|number} inputParada 
+ * @returns {string}
+ */
+function obtenerIdLimpio(inputParada) {
+    if (!inputParada) return "";
+    const rawId = typeof inputParada === "object" ? (inputParada.id || inputParada.ssc || inputParada.scc || inputParada.idParada || "") : inputParada;
+    return String(rawId).replace(/^[#PNT-]+/i, "").trim();
 }
 
 /**
@@ -40,9 +51,9 @@ function esEntornoEstatico() {
  */
 async function registrarOperacionPendienteDefensivo(accion, payload) {
     try {
-        if (typeof dbStore.registrarOperacionPendiente === "function") {
+        if (dbStore && typeof dbStore.registrarOperacionPendiente === "function") {
             await dbStore.registrarOperacionPendiente(accion, payload);
-            console.log(`💾 [OFFLINE_QUEUE]: Operación '${accion}' registrada en IndexedDB.`);
+            console.log(`💾 [OFFLINE_QUEUE]: Operación '${accion}' registrada exitosamente en IndexedDB.`);
         } else {
             const cola = JSON.parse(localStorage.getItem(KEY_COLA_OFFLINE) || "[]");
             cola.push({ accion, payload, timestamp: new Date().toISOString() });
@@ -56,12 +67,13 @@ async function registrarOperacionPendienteDefensivo(accion, payload) {
 
 /**
  * Sincroniza atómicamente la colección de pedidos con los 4 buffers RAM globales
- * y guarda la snapshot actualizada en IndexedDB.
+ * y guarda la snapshot actualizada en IndexedDB y localStorage.
  * @param {Array<Object>} nuevaLista 
  */
 async function sincronizarAtomicamenteRAM(nuevaLista = []) {
     listaPedidosGlobal = Array.isArray(nuevaLista) ? [...nuevaLista] : [];
     
+    // Sincronización estricta de las 4 memorias de trabajo
     window.__CACHE_PARADAS_MACONDO__ = [...listaPedidosGlobal];
     window.paradasMemoriaLocal = [...listaPedidosGlobal];
     window.paradasRutaActiva = [...listaPedidosGlobal];
@@ -70,7 +82,7 @@ async function sincronizarAtomicamenteRAM(nuevaLista = []) {
     try {
         localStorage.setItem("ruta_zonificada", JSON.stringify(listaPedidosGlobal));
         await guardarRutaZonificada(listaPedidosGlobal);
-        console.log(`💾 [ORQUESTADOR_RAM]: ${listaPedidosGlobal.length} paradas sincronizadas en RAM e IndexedDB.`);
+        console.log(`💾 [ORQUESTADOR_RAM]: ${listaPedidosGlobal.length} paradas sincronizadas atómicamente en RAM e IndexedDB.`);
     } catch (e) {
         console.warn("⚠️ [ORQUESTADOR_RAM]: Error al persistir snapshot en almacenamiento local:", e);
     }
@@ -97,7 +109,10 @@ export function setLlamadasRealizadas(valor) {
  */
 export function refrescarUI() {
     console.log("🎨 [UI_REFRESH]: Re-renderizando consola de operaciones y mapa...");
-    renderizarConsolaOperaciones(listaPedidosGlobal, indicePedidoActivo, llamadasRealizadas);
+    
+    if (typeof renderizarConsolaOperaciones === "function") {
+        renderizarConsolaOperaciones(listaPedidosGlobal, indicePedidoActivo, llamadasRealizadas);
+    }
 
     if (typeof window.actualizarPuntosEnMapa === "function") {
         window.actualizarPuntosEnMapa(listaPedidosGlobal, indicePedidoActivo);
@@ -109,14 +124,14 @@ export function refrescarUI() {
  */
 export async function determinarSiguientePedidoActivo() {
     indicePedidoActivo = await buscarIndiceActivo(listaPedidosGlobal);
-    console.log(`🎯 [RUTAS]: Indice activo determinado -> ${indicePedidoActivo}`);
+    console.log(`🎯 [RUTAS_ORQUESTADOR]: Índice activo determinado -> ${indicePedidoActivo}`);
 }
 
 /**
  * Inicializa el flujo de la ruta leyendo la URL o el almacenamiento IndexedDB.
  */
 export async function inicializarRutaPayload() {
-    console.log("📦 [RUTAS]: Procesando payload o lectura de almacenamiento local...");
+    console.log("📦 [RUTAS_ORQUESTADOR]: Procesando payload o lectura de almacenamiento local...");
     const resultado = await procesarPayloadOStorage();
     await sincronizarAtomicamenteRAM(resultado);
     await determinarSiguientePedidoActivo();
@@ -127,7 +142,7 @@ export async function inicializarRutaPayload() {
  * Refresca la lista desde IndexedDB y recalcula el siguiente punto activo.
  */
 export async function avanzarAlSiguientePedido() {
-    console.log("⏭️ [RUTAS]: Avanzando al siguiente pedido...");
+    console.log("⏭️ [RUTAS_ORQUESTADOR]: Avanzando al siguiente pedido...");
     const resultado = await obtenerRutaZonificada();
     await sincronizarAtomicamenteRAM(resultado || []);
     await determinarSiguientePedidoActivo();
@@ -152,25 +167,33 @@ export async function ejecutarPasoAceptarPedido(idPedido) {
         });
     }
 
-    const idStr = String(idPedido).trim();
-    const listaActualizada = listaPedidosGlobal.map(p => {
-        if (p && String(p.id || p.ssc).trim() === idStr) {
-            return { ...p, estado: "EN_CAMINO", status: "en-camino", updated_at: new Date().toISOString() };
+    try {
+        const cleanTargetId = obtenerIdLimpio(idPedido);
+        const listaActualizada = listaPedidosGlobal.map(p => {
+            if (p && obtenerIdLimpio(p) === cleanTargetId) {
+                return { ...p, estado: "EN_CAMINO", status: "en-camino", updated_at: new Date().toISOString() };
+            }
+            return p;
+        });
+
+        await sincronizarAtomicamenteRAM(listaActualizada);
+        await determinarSiguientePedidoActivo();
+        refrescarUI();
+
+        if (esEntornoEstatico()) {
+            await registrarOperacionPendienteDefensivo("aceptar_pedido", { id: idPedido, estado: "EN_CAMINO" });
         }
-        return p;
-    });
 
-    await sincronizarAtomicamenteRAM(listaActualizada);
-    await determinarSiguientePedidoActivo();
-    refrescarUI();
-
-    if (esEntornoEstatico()) {
-        await registrarOperacionPendienteDefensivo("aceptar_pedido", { id: idPedido, estado: "EN_CAMINO" });
-    }
-
-    if (typeof window.actualizarProgresoProceso === 'function') {
-        window.actualizarProgresoProceso(toastId, 100, '¡Pedido En Camino!', 'exito');
-        window.cerrarAvisoProceso(toastId, 1200);
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, '¡Pedido En Camino!', 'exito');
+            window.cerrarAvisoProceso(toastId, 1200);
+        }
+    } catch (err) {
+        console.error("❌ Error aceptando pedido:", err);
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, 'Error al aceptar pedido', 'error');
+            window.cerrarAvisoProceso(toastId, 2000);
+        }
     }
 }
 
@@ -192,25 +215,33 @@ export async function ejecutarPasoNotificarLlegada(idPedido) {
         });
     }
 
-    llamadasRealizadas = 0;
-    const idStr = String(idPedido).trim();
-    const listaActualizada = listaPedidosGlobal.map(p => {
-        if (p && String(p.id || p.ssc).trim() === idStr) {
-            return { ...p, estado: "LLEGADO", status: "llegado", updated_at: new Date().toISOString() };
+    try {
+        llamadasRealizadas = 0;
+        const cleanTargetId = obtenerIdLimpio(idPedido);
+        const listaActualizada = listaPedidosGlobal.map(p => {
+            if (p && obtenerIdLimpio(p) === cleanTargetId) {
+                return { ...p, estado: "LLEGADO", status: "llegado", updated_at: new Date().toISOString() };
+            }
+            return p;
+        });
+
+        await sincronizarAtomicamenteRAM(listaActualizada);
+        refrescarUI();
+
+        if (esEntornoEstatico()) {
+            await registrarOperacionPendienteDefensivo("notificar_llegada", { id: idPedido, estado: "LLEGADO" });
         }
-        return p;
-    });
 
-    await sincronizarAtomicamenteRAM(listaActualizada);
-    refrescarUI();
-
-    if (esEntornoEstatico()) {
-        await registrarOperacionPendienteDefensivo("notificar_llegada", { id: idPedido, estado: "LLEGADO" });
-    }
-
-    if (typeof window.actualizarProgresoProceso === 'function') {
-        window.actualizarProgresoProceso(toastId, 100, '¡Arribo Registrado!', 'exito');
-        window.cerrarAvisoProceso(toastId, 1200);
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, '¡Arribo Registrado!', 'exito');
+            window.cerrarAvisoProceso(toastId, 1200);
+        }
+    } catch (err) {
+        console.error("❌ Error notificando llegada:", err);
+        if (typeof window.actualizarProgresoProceso === 'function') {
+            window.actualizarProgresoProceso(toastId, 100, 'Error al notificar llegada', 'error');
+            window.cerrarAvisoProceso(toastId, 2000);
+        }
     }
 }
 
@@ -242,9 +273,9 @@ export async function ejecutarPasoFinalizarPedido(idPedido) {
             window.actualizarProgresoProceso(toastId, 70, 'Guardando evidencia y avanzando...');
         }
 
-        const idStr = String(idPedido).trim();
+        const cleanTargetId = obtenerIdLimpio(idPedido);
         const listaActualizada = listaPedidosGlobal.map(p => {
-            if (p && String(p.id || p.ssc).trim() === idStr) {
+            if (p && obtenerIdLimpio(p) === cleanTargetId) {
                 return { 
                     ...p, 
                     estado: "FINALIZADO", 
@@ -283,27 +314,32 @@ export async function ejecutarPasoFinalizarPedido(idPedido) {
 export async function borrarParadaLocalUI(idParada) {
     console.log(`🗑️ [OPERACION]: Solicitud para borrar parada ID -> ${idParada}`);
     if (confirm(`>>> ¿Desea borrar la parada ID: ${idParada}?`)) {
-        const idStr = String(idParada).replace(/^[#PNT-]+/i, '').trim();
+        const cleanTargetId = obtenerIdLimpio(idParada);
         
         const listaFiltrada = listaPedidosGlobal.filter(p => {
             if (!p) return false;
-            const pId = String(p.id || p.ssc || "").replace(/^[#PNT-]+/i, '').trim();
-            return pId !== idStr;
+            return obtenerIdLimpio(p) !== cleanTargetId;
         });
 
         // Re-secuenciar paradas restantes
-        const listaResecuenciada = listaFiltrada.map((p, idx) => ({
-            ...p,
-            secuencia: idx + 1,
-            secuenciaZona: idx + 1,
-            orden: idx + 1
-        }));
+        const TAMANO_CLUSTER = 4;
+        const listaResecuenciada = listaFiltrada.map((p, idx) => {
+            const seq = idx + 1;
+            return {
+                ...p,
+                secuencia: seq,
+                secuenciaZona: seq,
+                orden: seq,
+                grupoId: `GRUPO-${Math.ceil(seq / TAMANO_CLUSTER).toString().padStart(2, "0")}`,
+                updated_at: new Date().toISOString()
+            };
+        });
 
         await sincronizarAtomicamenteRAM(listaResecuenciada);
         await determinarSiguientePedidoActivo();
         refrescarUI();
 
-        if (typeof dbStore.eliminarParada === "function") {
+        if (dbStore && typeof dbStore.eliminarParada === "function") {
             await dbStore.eliminarParada(idParada, "paradas_rutas").catch(() => {});
         }
 
@@ -335,9 +371,9 @@ export async function purgarTodaLaRutaUI() {
         refrescarUI();
 
         try {
-            if (typeof dbStore.limpiarTabla === "function") {
-                await dbStore.limpiarTabla("paradas_rutas");
-                await dbStore.limpiarTabla("rutas_zonificadas");
+            if (dbStore && typeof dbStore.limpiarTabla === "function") {
+                await dbStore.limpiarTabla("paradas_rutas").catch(() => {});
+                await dbStore.limpiarTabla("rutas_zonificadas").catch(() => {});
             }
             localStorage.removeItem("ruta_zonificada");
             localStorage.removeItem("zona_activa_operacion");
@@ -389,7 +425,7 @@ export async function iniciarRutaCompleta() {
     }
 }
 
-// Bindings globales para compatibilidad desacoplada
+// Bindings globales inmediatos para compatibilidad desacoplada
 if (typeof window !== "undefined") {
     window.obtenerListaPedidosGlobal = obtenerListaPedidosGlobal;
     window.obtenerIndicePedidoActivo = obtenerIndicePedidoActivo;

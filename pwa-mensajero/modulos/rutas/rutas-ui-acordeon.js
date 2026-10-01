@@ -98,7 +98,7 @@ function ejecutarCentradoConRetry(paramsTarget, maxIntentos = 12, intervaloMs = 
 
         if (intentos >= maxIntentos) {
             clearInterval(timer);
-            console.warn(`⚠️ [RUTAS_UI_RETRY]: Tiempo de espera agotado (${maxIntentos * intervaloMs}ms) sin instancia activa de Google Maps.`);
+            console.warn(`⚠️ [RUTAS_UI_RETRY]: Tiempo de espera agotado (${maxIntentos * intervaloMs}ms) sin instancia activa de mapa.`);
         }
     }, intervaloMs);
 }
@@ -137,7 +137,7 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
         return;
     }
 
-    // Agrupar pedidos strictly por la clave canónica de zona
+    // Agrupar pedidos estrictamente por la clave canónica de zona
     const zonasMap = {};
     listaPedidos.forEach((ped) => {
         const claveCanonica = estandarizarZonaCanonica(obtenerZonaParadaCanonica(ped));
@@ -239,7 +239,7 @@ export async function renderizarParadasZonificadasUI(listaPedidosParam = []) {
                 📝 _PLANILLAR
             </button>
             <button type="button" class="btn-zona-action btn-zona-mapa" data-accion-ruta="mapa" data-zona="${claveCanonica}" style="background: #0d1117; color: #ff3366; border: 1px solid #ff3366; cursor: pointer; padding: 6px 10px; border-radius: 4px; min-height: 38px;">
-                🗺️️ VER MAPA
+                🗺 VER MAPA
             </button>
         `;
 
@@ -342,7 +342,7 @@ function vincularEventosGlobalesAcciones(contenedor) {
         switch (action) {
             case "mapa":
             case "ver-mapa":
-                console.log(`🗺 [RUTAS_UI]: Enfocando punto en mapa. Zona: ${zona} | ID: ${idParada || 'GENERAL'}`);
+                console.log(`🗺️ [RUTAS_UI]: Enfocando punto en mapa. Zona: ${zona} | ID: ${idParada || 'GENERAL'}`);
 
                 // 1. Forzar transición de vista hacia el contenedor del mapa
                 ejecutarNavegacionTransicion("#mapa-fullscreen-container");
@@ -392,14 +392,18 @@ function vincularEventosGlobalesAcciones(contenedor) {
 
             case "subir":
             case "arriba":
-                if (typeof window.moverParadaManual === "function") {
+                if (typeof window.reordenarParadaManual === "function") {
+                    await window.reordenarParadaManual(idParada, -1, zona);
+                } else if (typeof window.moverParadaManual === "function") {
                     await window.moverParadaManual(idParada, -1, zona);
                 }
                 break;
 
             case "bajar":
             case "abajo":
-                if (typeof window.moverParadaManual === "function") {
+                if (typeof window.reordenarParadaManual === "function") {
+                    await window.reordenarParadaManual(idParada, 1, zona);
+                } else if (typeof window.moverParadaManual === "function") {
                     await window.moverParadaManual(idParada, 1, zona);
                 }
                 break;
@@ -410,17 +414,15 @@ function vincularEventosGlobalesAcciones(contenedor) {
                     await window.editarParadaManual(idParada, zona);
                 } else if (typeof window.mostrarModalGestionParadaUI === "function") {
                     window.mostrarModalGestionParadaUI(idParada);
-                } else if (typeof window.abrirModalGestionParada === "function") {
-                    window.abrirModalGestionParada(idParada, consecutivo);
                 }
                 break;
 
             case "eliminar":
             case "borrar":
-                if (typeof window.eliminarParadaUI === "function") {
+                if (typeof window.borrarParadaLocalUI === "function") {
+                    await window.borrarParadaLocalUI(idParada);
+                } else if (typeof window.eliminarParadaUI === "function") {
                     window.eliminarParadaUI(e, idParada);
-                } else if (typeof window.eliminarParadaProceso === "function") {
-                    window.eliminarParadaProceso(null, idParada);
                 }
                 break;
 
@@ -504,13 +506,14 @@ async function reordenarPorProximidadLocal(zonaTarget) {
         reordenadas.push(destino);
     }
 
+    const TAMANO_CLUSTER = 4;
     reordenadas.forEach((p, idx) => {
         const numSec = idx + 1;
         p.consecutivoZona = numSec;
         p.secuenciaZona = numSec;
         p.secuencia = numSec;
         p.orden = numSec;
-        p.grupoId = `GRUPO-${Math.ceil(numSec / 4).toString().padStart(2, "0")}`;
+        p.grupoId = `GRUPO-${Math.ceil(numSec / TAMANO_CLUSTER).toString().padStart(2, "0")}`;
         p.updated_at = new Date().toISOString();
     });
 
@@ -630,6 +633,7 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
         ordenMapa.set(String(id), index + 1);
     });
 
+    const TAMANO_CLUSTER = 4;
     todasLasParadas.forEach((p) => {
         const pId = obtenerClavePrimariaParada(p);
         if (estandarizarZonaCanonica(obtenerZonaParadaCanonica(p)) === targetCanonico && ordenMapa.has(pId)) {
@@ -638,9 +642,7 @@ async function guardarNuevaSecuenciaZona(contenedorPadre, zonaNombre) {
             p.secuenciaZona = nuevaSec;
             p.secuencia = nuevaSec;
             p.orden = nuevaSec;
-
-            const numGrupo = Math.ceil(nuevaSec / 4);
-            p.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
+            p.grupoId = `GRUPO-${Math.ceil(nuevaSec / TAMANO_CLUSTER).toString().padStart(2, "0")}`;
             p.updated_at = new Date().toISOString();
         }
     });

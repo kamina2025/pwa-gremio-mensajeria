@@ -5,7 +5,7 @@
  */
 
 import { guardarRutaZonificada, obtenerParadasGuardadas } from "../mensajero-persistencia.js";
-import { estandarizarZonaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
+import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
 
 /**
  * Normaliza y limpia una clave de zona de forma determinista eliminando prefijos "zona".
@@ -24,7 +24,20 @@ export function normalizarClaveZona(zonaRaw) {
 }
 
 /**
- * Ordena un arreglo de paradas asegurando el cumplimiento estricto del campo `secuenciaZona` u `orden`.
+ * Extrae y sanitiza la clave primaria única real de una parada (priorizando SSC/SCC).
+ * 
+ * @param {Object|string} p 
+ * @returns {string} ID biyectivo limpio
+ */
+export function obtenerIdUnicoParada(p) {
+    if (!p) return "";
+    if (typeof p === "string") return String(p).replace(/^[#PNT-]+/i, "").trim();
+    const rawId = p.ssc || p.scc || p.id || p.idParada || p.id_parada || "";
+    return String(rawId).replace(/^[#PNT-]+/i, "").trim();
+}
+
+/**
+ * Ordena un arreglo de paradas asegurando el cumplimiento estricto de la secuencia numérica.
  * 
  * @param {Array<Object>} paradas 
  * @returns {Array<Object>} Arreglo ordenado ascendentemente por secuencia
@@ -33,19 +46,15 @@ export function ordenarParadasPorSecuencia(paradas) {
     if (!Array.isArray(paradas) || !paradas.length) return [];
 
     return [...paradas].sort((a, b) => {
-        const seqA = parseInt(a.secuenciaZona || a.orden || a.secuencia || 0, 10);
-        const seqB = parseInt(b.secuenciaZona || b.orden || b.secuencia || 0, 10);
-        
-        if (seqA !== 0 && seqB !== 0) {
-            return seqA - seqB;
-        }
-        return 0;
+        const seqA = parseInt(a.consecutivoZona || a.secuenciaZona || a.orden || a.secuencia || 0, 10);
+        const seqB = parseInt(b.consecutivoZona || b.secuenciaZona || b.orden || b.secuencia || 0, 10);
+        return seqA - seqB;
     });
 }
 
 /**
  * Normaliza la estructura de una colección de paradas, homologa atributos de cliente/dirección,
- * preserva los estados de entrega (sin resetear a ASIGNADO) y garantiza su orden físico.
+ * asigna clústeres de subgrupos, preserva los estados mutados y garantiza el orden físico.
  * 
  * @param {Array<Object>} listaParadasRaw 
  * @returns {Array<Object>} Lista de paradas normalizada y ordenada
@@ -53,14 +62,16 @@ export function ordenarParadasPorSecuencia(paradas) {
 export function normalizarYOrdenarColeccionParadas(listaParadasRaw) {
     if (!Array.isArray(listaParadasRaw)) return [];
 
+    const TAMANO_CLUSTER = 4;
+
     const paradasNormalizadas = listaParadasRaw
-        .filter(p => p && typeof p === "object") // Filtrar elementos nulos o corruptos
+        .filter(p => p && typeof p === "object")
         .map((p, idx) => {
-            const secuenciaCalculada = parseInt(p.secuenciaZona || p.orden || p.secuencia || (idx + 1), 10);
-            const claveCanonica = estandarizarZonaCanonica(p.zonaKey || p.nombreZona || p.zona || p.zonaNombre);
+            const secuenciaCalculada = parseInt(p.consecutivoZona || p.secuenciaZona || p.orden || p.secuencia || (idx + 1), 10);
+            const claveCanonica = estandarizarZonaCanonica(obtenerZonaParadaCanonica(p) || p.zonaKey || p.nombreZona || p.zona || p.zonaNombre);
             
             // Homologación de identificadores únicos (Biyectiva)
-            const idUnico = String(p.id || p.ssc || p.scc || p.idParada || `#PNT-${secuenciaCalculada}`).trim();
+            const idLimpio = obtenerIdUnicoParada(p) || `PNT-${secuenciaCalculada}`;
 
             // Homologación de atributos de cliente/destinatario para búsquedas
             const nombreCliente = p.destinatario || p.cliente || p.nombre_cliente || p.nombre || "CLIENTE N/A";
@@ -70,15 +81,23 @@ export function normalizarYOrdenarColeccionParadas(listaParadasRaw) {
             const notasTexto = p.observaciones || p.notas || "";
 
             // Preservar el estado mutado (soporta estado y status)
-            const estadoBruto = p.estado || p.status || "ASIGNADO";
+            const estadoBruto = p.estado || p.status || p.causal || "PENDIENTE";
             const estadoUpper = String(estadoBruto).toUpperCase();
             const statusLower = String(estadoBruto).toLowerCase();
 
+            // Extraer coordenadas numéricas válidas
+            const latVal = parseFloat(p.lat ?? p.latitud ?? p.coordenadas?.lat ?? 0);
+            const lngVal = parseFloat(p.lng ?? p.longitud ?? p.coordenadas?.lng ?? 0);
+
+            // Asignación de clúster por bloque
+            const numGrupo = Math.ceil(secuenciaCalculada / TAMANO_CLUSTER);
+            const grupoId = p.grupoId || `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
+
             return {
                 ...p,
-                id: idUnico,
-                ssc: p.ssc || p.scc || idUnico,
-                scc: p.scc || p.ssc || idUnico,
+                id: idLimpio,
+                ssc: p.ssc || idLimpio,
+                scc: p.scc || idLimpio,
                 destinatario: nombreCliente,
                 cliente: nombreCliente,
                 nombre_cliente: nombreCliente,
@@ -90,18 +109,25 @@ export function normalizarYOrdenarColeccionParadas(listaParadasRaw) {
                 copago: cuotaValor,
                 observaciones: notasTexto,
                 notas: notasTexto,
-                lat: p.lat || p.latitud || null,
-                lng: p.lng || p.longitud || null,
+                lat: isNaN(latVal) ? 0 : latVal,
+                lng: isNaN(lngVal) ? 0 : lngVal,
+                latitud: isNaN(latVal) ? 0 : latVal,
+                longitud: isNaN(lngVal) ? 0 : lngVal,
                 zona: claveCanonica,
+                zonaCanonica: claveCanonica,
                 zonaKey: normalizarClaveZona(claveCanonica),
                 nombreZona: `ZONA ${claveCanonica}`,
                 zonaNombre: `ZONA ${claveCanonica}`,
-                secuencia: secuenciaCalculada,
+                consecutivoZona: secuenciaCalculada,
                 secuenciaZona: secuenciaCalculada,
+                secuencia: secuenciaCalculada,
                 orden: secuenciaCalculada,
+                grupoId: grupoId,
                 estado: estadoUpper,
+                causal: estadoUpper,
                 status: statusLower,
-                registroOperaciones: p.registroOperaciones || {}
+                registroOperaciones: p.registroOperaciones || {},
+                updated_at: p.updated_at || new Date().toISOString()
             };
         });
 
@@ -112,7 +138,7 @@ export function normalizarYOrdenarColeccionParadas(listaParadasRaw) {
  * Procesa la carga inicial de paradas respetando prioritariamente IndexedDB local.
  * Si existen datos locales guardados, se utilizan para evitar sobreescribir borrados o cambios de estado con el payload URL.
  * 
- * @returns {Promise<Array<Object>>}
+ * @returns {Promise<Array<Object>>} Lista de paradas normalizada y sincronizada en memoria
  */
 export async function procesarPayloadOStorage() {
     console.log(">>> [RUTAS]: Evaluando origen de datos (URL Payload vs IndexedDB Local)...");
@@ -121,9 +147,9 @@ export async function procesarPayloadOStorage() {
     let paradasGuardadasLocal = [];
 
     try {
-        paradasGuardadasLocal = await obtenerParadasGuardadas();
+        paradasGuardadasLocal = (await obtenerParadasGuardadas()) || [];
     } catch (e) {
-        console.warn("⚠️ [RUTAS_NORMALIZADOR]: Fallo al consultar IndexedDB local:", e);
+        console.warn("⚠️️ [RUTAS_NORMALIZADOR]: Fallo al consultar IndexedDB local:", e);
     }
 
     // 1. Prioridad Local-First: Si ya hay datos en IndexedDB, respetarlos prioritariamente
@@ -151,15 +177,14 @@ export async function procesarPayloadOStorage() {
         }
     }
 
-    // Asegurar ordenamiento físico antes de devolver al orquestador
     const listaOrdenada = ordenarParadasPorSecuencia(listaPedidos);
     
-    // Asignación explícita y sincronizada a las 4 memorias de sesión para Local-First
+    // AISLAMIENTO RIGUROSO DE MEMORIA RAM: Clonación estructurada individual para cada referencia de sesión
     if (typeof window !== "undefined") {
-        window.__CACHE_PARADAS_MACONDO__ = [...listaOrdenada];
-        window.paradasMemoriaLocal = [...listaOrdenada];
-        window.paradasRutaActiva = [...listaOrdenada];
-        window.pedidosGlobales = [...listaOrdenada];
+        window.__CACHE_PARADAS_MACONDO__ = structuredClone(listaOrdenada);
+        window.paradasMemoriaLocal = structuredClone(listaOrdenada);
+        window.paradasRutaActiva = structuredClone(listaOrdenada);
+        window.pedidosGlobales = structuredClone(listaOrdenada);
 
         try {
             localStorage.setItem("ruta_zonificada", JSON.stringify(listaOrdenada));
@@ -177,7 +202,7 @@ export async function procesarPayloadOStorage() {
  * Busca el índice del primer pedido activo o pendiente.
  * 
  * @param {Array<Object>|Promise<Array<Object>>} listaPedidosRaw 
- * @returns {Promise<number>}
+ * @returns {Promise<number>} Índice del elemento activo
  */
 export async function buscarIndiceActivo(listaPedidosRaw) {
     let listaPedidos = await Promise.resolve(listaPedidosRaw);
@@ -192,20 +217,20 @@ export async function buscarIndiceActivo(listaPedidosRaw) {
 
     const index = listaPedidos.findIndex((p) => {
         if (!p) return false;
-        const est = String(p.estado || p.status || "").toUpperCase();
+        const est = String(p.estado || p.status || p.causal || "").toUpperCase();
         return est !== "FINALIZADO" && est !== "NOVEDAD" && est !== "ENTREGADO" && est !== "CANCELADO";
     });
 
     return index !== -1 ? index : 0;
 }
 
-// Bindings globales inmediatos para compatibilidad desacoplada
 if (typeof window !== "undefined") {
+    window.obtenerIdUnicoParada = obtenerIdUnicoParada;
     window.ordenarParadasPorSecuencia = ordenarParadasPorSecuencia;
     window.normalizarYOrdenarColeccionParadas = normalizarYOrdenarColeccionParadas;
     window.procesarPayloadOStorage = procesarPayloadOStorage;
-    window.evaluarOrigenDatos = procesarPayloadOStorage; // Alias de compatibilidad
-    window.normalizarYObtenerParadasActivas = procesarPayloadOStorage; // Alias de compatibilidad
+    window.evaluarOrigenDatos = procesarPayloadOStorage;
+    window.normalizarYObtenerParadasActivas = procesarPayloadOStorage;
     window.normalizarClaveZona = normalizarClaveZona;
     window.buscarIndiceActivo = buscarIndiceActivo;
 }

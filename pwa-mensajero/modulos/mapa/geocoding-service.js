@@ -1,6 +1,7 @@
 /**
  * PROTOCOLO MACONDO - SERVICIO DE GEOCODIFICACIÓN GRATUITO / LOCAL
- * Reemplaza Google Geocoding API usando Nominatim + Cache Local en IndexedDB/LocalStorage
+ * Ubicación: pwa-mensajero/modulos/mapa/geocoding-service.js
+ * Reemplaza Google Geocoding API usando OpenStreetMap Nominatim + Cache Local ($0 USD)
  */
 
 const GEOCODE_CACHE_KEY = "macondo_geocode_cache_v1";
@@ -17,12 +18,12 @@ function guardarCacheGeocode(cache) {
   try {
     localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
   } catch (e) {
-    console.warn("⚠️️ [GEOCODE]: No se pudo guardar en cache local:", e);
+    console.warn("⚠️ [GEOCODE]: No se pudo guardar en caché local:", e);
   }
 }
 
 /**
- * Geocodifica una dirección usando OpenStreetMap Nominatim (0 COSTO)
+ * Geocodifica una dirección usando OpenStreetMap Nominatim ($0 USD)
  * @param {string} direccion - Dirección textual
  * @param {string} ciudad - Ciudad base para acotar (ej. 'Cali, Colombia')
  * @returns {Promise<{lat: number, lng: number}|null>}
@@ -33,7 +34,7 @@ export async function geocodificarDireccionGratis(direccion, ciudad = "Cali, Col
   const queryLimpia = `${direccion.trim()}, ${ciudad}`.toLowerCase();
   const cache = obtenerCacheGeocode();
 
-  // 1. Verificación en Caché Local (Costo 0 / Tiempo 0ms)
+  // 1. Verificación en Caché Local (Costo $0 USD / 0ms)
   if (cache[queryLimpia]) {
     console.log(`⚡ [GEOCODE_CACHE]: Dirección encontrada en caché local: "${direccion}"`);
     return cache[queryLimpia];
@@ -74,4 +75,10 @@ export async function geocodificarDireccionGratis(direccion, ciudad = "Cali, Col
     console.error(`❌ [GEOCODE_NOMINATIM]: Error al consultar Nominatim:`, error);
     return null;
   }
+}
+
+// Vinculación atómica inmediata al objeto global window
+if (typeof window !== "undefined") {
+  window.geocodificarDireccionGratis = geocodificarDireccionGratis;
+  window.geocidificarDireccionGratis = geocodificarDireccionGratis; // Alias defensivo para typos
 }

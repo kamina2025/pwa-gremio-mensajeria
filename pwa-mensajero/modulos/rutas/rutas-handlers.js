@@ -1,13 +1,19 @@
 /**
  * PROTOCOLO MACONDO - CONTROLADOR DE EVENTOS DE NAVEGACIÓN, MODALES Y ACCIONES GLOBALES DE RUTAS
  * Ubicación: pwa-mensajero/modulos/rutas/rutas-handlers.js
- * Arquitectura: Event-Driven / Local-First / Sincronización Atómica
+ * Arquitectura: Event-Driven / Local-First / Cascada $0.00 COP / Sincronización Atómica
  */
 
 import { calcularRutaAisladaPorZona } from "./rutas-aislamiento.js";
 import { optimizarRutaPorProximidadZona, invertirSecuenciaRutaZona } from "./rutas-optimizacion.js";
 import { obtenerParadasGuardadas, guardarRutaZonificada } from "../mensajero-persistencia.js";
 import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zonificacion/estandar-zonas.js";
+import { geocodificarDireccionGratis } from "../mapa/geocoding-service.js";
+
+// Exposición inmediata del servicio de geocodificación $0.00 COP en window
+if (typeof window !== "undefined") {
+    window.geocodificarDireccionGratis = geocodificarDireccionGratis;
+}
 
 // =========================================================================
 // SECCIÓN 1: HANDLERS DE MODALES UI (INYECCIÓN DIRECTA EN WINDOW)
@@ -47,7 +53,7 @@ export function vincularHandlersModalesGlobales() {
     };
 
     window.mostrarModalGestionParadaUI = function (datosParada = null) {
-        console.log("✏️️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.", datosParada || "Nueva Parada");
+        console.log("✏️ [UI_MODAL]: Abriendo modal de gestión/creación de parada.", datosParada || "Nueva Parada");
         const modal = document.getElementById('modal-gestion-parada') || document.getElementById('modal-formulario-parada') || document.getElementById('modal-editar-parada');
         
         if (modal) {
@@ -101,7 +107,7 @@ vincularHandlersModalesGlobales();
 // =========================================================================
 
 export function registrarHandlersGlobales() {
-    vincularHandlersModalesGlobales();
+    if (typeof window === "undefined") return;
 
     if (window.__RUTAS_HANDLERS_INITIALIZED__) {
         console.log("ℹ️ [RUTAS_HANDLERS]: Handlers de rutas ya estaban inicializados en window.");
@@ -109,162 +115,7 @@ export function registrarHandlersGlobales() {
     }
 
     /**
-     * Inicia el modo de navegación enfocando la zona seleccionada.
-     */
-    window.iniciarRutaZona = async function (zona) {
-        if (!zona) return;
-        const targetCanonico = estandarizarZonaCanonica(zona);
-        console.log(`► [MENSAJERO_RUTAS]: Iniciar Ruta ejecutado para Zona: ${zona} -> '${targetCanonico}'`);
-        
-        localStorage.setItem("zona_activa_operacion", targetCanonico);
-
-        if (typeof window.navegarA === "function") {
-            await window.navegarA("vistas/ruta/mapa-activa.html", { zona: targetCanonico });
-            requestAnimationFrame(() => {
-                if (typeof calcularRutaAisladaPorZona === "function") {
-                    calcularRutaAisladaPorZona(targetCanonico, true);
-                }
-            });
-        } else if (typeof window.alternarVistaPestaña === "function") {
-            await window.alternarVistaPestaña("mapa-fullscreen-container");
-            requestAnimationFrame(() => calcularRutaAisladaPorZona(targetCanonico, true));
-        } else {
-            const basePath = window.location.origin;
-            window.location.href = `${basePath}/vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(targetCanonico)}`;
-        }
-    };
-
-    /**
-     * Handler principal para disparar la optimización de la zona con soporte de cascada.
-     */
-    window.optimizarProximidadZona = async function (zona) {
-        if (!zona) return null;
-        const targetCanonico = estandarizarZonaCanonica(zona);
-        console.group(`⚡ [MENSAJERO_RUTAS]: Invocando optimización por proximidad en cascada para Zona: ${zona} -> '${targetCanonico}'`);
-
-        try {
-            let todasLasParadas = await obtenerParadasGuardadas();
-            if (!Array.isArray(todasLasParadas) || todasLasParadas.length === 0) {
-                todasLasParadas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || window.pedidosGlobales || [];
-            }
-
-            const paradasDeZona = todasLasParadas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
-
-            const selectInicio = document.getElementById(`select-inicio-${targetCanonico}`);
-            const selectFin = document.getElementById(`select-fin-${targetCanonico}`);
-
-            const valInicio = selectInicio ? String(selectInicio.value).trim() : "";
-            const valFin = selectFin ? String(selectFin.value).trim() : "";
-
-            const idInicioValido = (valInicio && valInicio !== "null" && valInicio !== "auto" && !valInicio.includes("Automático")) ? valInicio : null;
-            const idFinValido = (valFin && valFin !== "null" && valFin !== "auto" && !valFin.includes("Automático")) ? valFin : null;
-
-            const paradaInicio = idInicioValido ? paradasDeZona.find(p => String(p.id || p.scc || p.ssc || p.idParada || "").trim() === idInicioValido) : null;
-            const paradaFin = idFinValido ? paradasDeZona.find(p => String(p.id || p.scc || p.ssc || p.idParada || "").trim() === idFinValido) : null;
-
-            if (paradaInicio) console.log(`📍 [OPTIMIZAR_HANDLERS]: Punto inicial fijado: ${paradaInicio.destinatario || paradaInicio.cliente || paradaInicio.ssc}`);
-            if (paradaFin) console.log(`🏁 [OPTIMIZAR_HANDLERS]: Punto final fijado: ${paradaFin.destinatario || paradaFin.cliente || paradaFin.ssc}`);
-
-            // Invocación a la cascada de 3 niveles en rutas-optimizacion.js (OSRM -> Haversine -> Google Maps)
-            const secuenciaResultante = await optimizarRutaPorProximidadZona(targetCanonico, paradaInicio, paradaFin);
-            const paradasReordenadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || [];
-
-            if (typeof window.renderizarParadasZonificadasUI === "function") {
-                await window.renderizarParadasZonificadasUI(paradasReordenadas);
-            }
-            if (typeof window.refrescarConsolaOperacionesUI === "function") {
-                await window.refrescarConsolaOperacionesUI(paradasReordenadas);
-            }
-
-            if (typeof calcularRutaAisladaPorZona === "function") {
-                await calcularRutaAisladaPorZona(targetCanonico, true);
-            }
-
-            console.groupEnd();
-            return secuenciaResultante;
-        } catch (error) {
-            console.error(`❌ [OPTIMIZAR_HANDLERS]: Error durante la optimización de zona '${targetCanonico}':`, error);
-            console.groupEnd();
-            return null;
-        }
-    };
-
-    /**
-     * Alias de optimización por proximidad para compatibilidad con firmas externas.
-     */
-    window.optimizarRutaPorProximidadZona = window.optimizarProximidadZona;
-
-    /**
-     * Handler para invertir la secuencia de las paradas en una zona.
-     */
-    window.invertirSecuenciaZona = async function (zona) {
-        if (!zona) return;
-        const targetCanonico = estandarizarZonaCanonica(zona);
-        console.log(`🔄 [MENSAJERO_RUTAS]: Invertir secuencia solicitada para Zona: ${targetCanonico}`);
-        
-        if (typeof invertirSecuenciaRutaZona === "function") {
-            const resultado = await invertirSecuenciaRutaZona(targetCanonico);
-            if (typeof window.renderizarParadasZonificadasUI === "function") {
-                await window.renderizarParadasZonificadasUI(resultado);
-            }
-            if (typeof window.refrescarConsolaOperacionesUI === "function") {
-                await window.refrescarConsolaOperacionesUI(resultado);
-            }
-            if (typeof calcularRutaAisladaPorZona === "function") {
-                await calcularRutaAisladaPorZona(targetCanonico, true);
-            }
-            return resultado;
-        }
-    };
-
-    window.invertirSecuenciaRutaZona = window.invertirSecuenciaZona;
-
-    /**
-     * Generación y redirección al módulo de planillas operativas.
-     */
-    window.planillarRutaZona = function (zona) {
-        if (!zona) return;
-        const targetCanonico = estandarizarZonaCanonica(zona);
-        console.log(`📝 [MENSAJERO_RUTAS]: Generando planilla para Zona: ${zona} -> '${targetCanonico}'`);
-        
-        localStorage.setItem("zona_planillar_activa", targetCanonico);
-
-        if (typeof window.navegarA === "function") {
-            window.navegarA("vistas/notificaciones/planillas.html", { zona: targetCanonico });
-        } else if (typeof window.alternarVistaPestaña === "function") {
-            window.alternarVistaPestaña("pestana-notificaciones-planillas");
-        } else if (typeof window.renderizarModuloPlanillas === "function") {
-            window.renderizarModuloPlanillas(targetCanonico);
-        } else {
-            const basePath = window.location.origin;
-            window.location.href = `${basePath}/vistas/notificaciones/planillas.html?zona=${encodeURIComponent(targetCanonico)}`;
-        }
-    };
-
-    /**
-     * Visualización en pantalla completa del mapa enfocado en la zona.
-     */
-    window.verMapaZona = async function (zona) {
-        if (!zona) return;
-        const targetCanonico = estandarizarZonaCanonica(zona);
-        console.log(`🗺️ [MENSAJERO_RUTAS]: Abrir Mapa Zona: ${zona} -> '${targetCanonico}'`);
-        
-        localStorage.setItem("zona_activa_operacion", targetCanonico);
-
-        if (typeof window.navegarA === "function") {
-            await window.navegarA("vistas/ruta/mapa-activa.html", { zona: targetCanonico });
-            requestAnimationFrame(() => calcularRutaAisladaPorZona(targetCanonico, true));
-        } else if (typeof window.alternarVistaPestaña === "function") {
-            await window.alternarVistaPestaña("mapa-fullscreen-container");
-            requestAnimationFrame(() => calcularRutaAisladaPorZona(targetCanonico, true));
-        } else {
-            const basePath = window.location.origin;
-            window.location.href = `${basePath}/vistas/ruta/mapa-activa.html?zona=${encodeURIComponent(targetCanonico)}`;
-        }
-    };
-
-    /**
-     * Permite subir o bajar manualmente la posición de una parada en la lista.
+     * Permite subir o bajar manualmente la posición de una parada en la lista con aislamiento estricto de RAM.
      */
     window.reordenarParadaManual = async function (paradaId, direccion, zonaNombre) {
         if (!paradaId) return;
@@ -275,8 +126,11 @@ export function registrarHandlersGlobales() {
         let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
         if (!todasLasParadas || todasLasParadas.length === 0) return;
 
-        let paradasZona = todasLasParadas.filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico);
-        paradasZona.sort((a, b) => parseInt(a.secuenciaZona || a.secuencia || 0, 10) - parseInt(b.secuenciaZona || b.secuencia || 0, 10));
+        let paradasZona = todasLasParadas
+            .filter(p => p && obtenerZonaParadaCanonica(p) === targetCanonico)
+            .map(p => structuredClone(p));
+
+        paradasZona.sort((a, b) => parseInt(a.secuenciaZona || a.secuencia || a.orden || 0, 10) - parseInt(b.secuenciaZona || b.secuencia || b.orden || 0, 10));
 
         const idxActual = paradasZona.findIndex(p => String(p.id || p.scc || p.ssc || p.idParada || "").trim() === String(paradaId).trim());
         if (idxActual === -1) return;
@@ -284,9 +138,11 @@ export function registrarHandlersGlobales() {
         const idxNuevo = idxActual + delta;
         if (idxNuevo < 0 || idxNuevo >= paradasZona.length) return;
 
+        // Reordenar elemento en el sub-arreglo de zona
         const itemMover = paradasZona.splice(idxActual, 1)[0];
         paradasZona.splice(idxNuevo, 0, itemMover);
 
+        // Recalcular secuencias y clústeres atómicos
         const TAMANO_CLUSTER = 4;
         paradasZona.forEach((p, idx) => {
             const seq = idx + 1;
@@ -301,11 +157,18 @@ export function registrarHandlersGlobales() {
         const mapaActualizados = new Map(paradasZona.map(p => [String(p.id || p.scc || p.ssc || p.idParada || "").trim(), p]));
         const listaGlobalActualizada = todasLasParadas.map(p => {
             const key = String(p.id || p.scc || p.ssc || p.idParada || "").trim();
-            return mapaActualizados.has(key) ? mapaActualizados.get(key) : p;
+            return mapaActualizados.has(key) ? mapaActualizados.get(key) : structuredClone(p);
         });
 
+        // Persistir snapshot en IndexedDB y localStorage
         await guardarRutaZonificada(listaGlobalActualizada);
+        try {
+            localStorage.setItem("ruta_zonificada", JSON.stringify(listaGlobalActualizada));
+        } catch (e) {
+            console.warn("⚠️ [REORDER_MANUAL]: No se pudo escribir en localStorage:", e);
+        }
 
+        // AISLAMIENTO DE MEMORIA RAM: Asignación por copia profunda independiente
         window.__CACHE_PARADAS_MACONDO__ = structuredClone(listaGlobalActualizada);
         window.paradasMemoriaLocal = structuredClone(listaGlobalActualizada);
         window.paradasRutaActiva = structuredClone(listaGlobalActualizada);
@@ -317,53 +180,16 @@ export function registrarHandlersGlobales() {
         if (typeof window.refrescarConsolaOperacionesUI === "function") {
             await window.refrescarConsolaOperacionesUI(listaGlobalActualizada);
         }
-
-        if (typeof calcularRutaAisladaPorZona === "function") {
-            await calcularRutaAisladaPorZona(targetCanonico, true);
+        if (typeof window.calcularRutaAisladaPorZona === "function") {
+            await window.calcularRutaAisladaPorZona(targetCanonico, true);
         }
     };
 
     window.moverParadaManual = window.reordenarParadaManual;
-
-    /**
-     * Handler para abrir el modal de gestión manual cargando la información de la parada.
-     */
-    window.editarParadaManual = async function (paradaOId, zonaNombre = "") {
-        console.log(`✏️ [EDITAR_PARADA_HANDLERS]: Solicitando edición para:`, paradaOId);
-
-        let paradaTarget = null;
-
-        if (typeof paradaOId === "object" && paradaOId !== null) {
-            paradaTarget = paradaOId;
-        } else {
-            const cleanId = String(paradaOId || "").replace(/^[#PNT-]+/i, "").trim();
-            let todas = await obtenerParadasGuardadas();
-            if (!Array.isArray(todas) || todas.length === 0) {
-                todas = window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || window.paradasRutaActiva || [];
-            }
-
-            paradaTarget = todas.find(p => {
-                if (!p) return false;
-                const idActual = String(p.id || p.ssc || p.scc || p.idParada || "").replace(/^[#PNT-]+/i, "").trim();
-                return idActual === cleanId;
-            });
-        }
-
-        if (!paradaTarget) {
-            console.error(`❌ [EDITAR_PARADA_HANDLERS]: No se pudo localizar el objeto de la parada.`);
-            window.mostrarModalGestionParadaUI(paradaOId);
-            return;
-        }
-
-        console.log("📄 [EDITAR_PARADA_HANDLERS]: Objeto parada localizado:", paradaTarget);
-        window.mostrarModalGestionParadaUI(paradaTarget);
-    };
-
     window.__RUTAS_HANDLERS_INITIALIZED__ = true;
     console.log("🟢 [RUTAS_HANDLERS]: Handlers globales de rutas inicializados correctamente.");
 }
 
-// Auto-inicialización al cargar el módulo ES6
 if (typeof window !== "undefined") {
     registrarHandlersGlobales();
 }

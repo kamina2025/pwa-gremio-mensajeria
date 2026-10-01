@@ -1,0 +1,168 @@
+##### Diagnóstico y Resumen Técnico
+
+Para validar rigurosamente que el reordenamiento de paradas 
+**persista atómicamente** ante cualquier tipo de mutación local
+(**Drag & Drop**, **Inversión de Secuencia** u **Optimización
+por Proximidad**) sin realizar llamadas a un servidor PHP REST 
+($0.00 COP), se ha diseñado este protocolo de verificación paso a paso.
+
+El objetivo es confirmar que los 3 mecanismos de reordenamiento:
+
+1. Recalculen atómicamente las claves de secuencia 
+(`consecutivoZona`, `secuenciaZona`, `orden`, `grupoId` y `updated_at`).
+
+
+2. Sincronicen simultáneamente las 
+**4 memorias RAM de sesión** 
+(`window.__CACHE_PARADAS_MACONDO__`, 
+`window.paradasMemoriaLocal`, 
+`window.paradasRutaActiva`, 
+`window.pedidosGlobales`).
+
+
+3. Persistan la snapshot inmediatamente en **IndexedDB** 
+(`guardarRutaZonificada`) y **localStorage** (`ruta_zonificada`).
+
+
+4. Sobrevivan intactos a una recarga completa del navegador (**F5**).
+
+
+
+---
+
+##### Guía Paso a Paso para la Prueba de Persistencia Atómica Local-First
+
+Abre la PWA en el navegador 
+(`http://localhost/pwa-gremio-mensajeria/pwa-mensajero/`),
+presiona **F12** para abrir las **DevTools** y sigue estos pasos:
+
+###### Paso 1: Verificación de Red de Cero Costos ($0.00 COP)
+
+1. Ve a la pestaña **Network (Red)** en DevTools.
+2. Filtra por la palabra `api.php` o `googleapis.com`.
+3. **Criterio de éxito:** Durante los pasos 2, 3 y 4, 
+la lista de red para peticiones de mutación debe mantenerse 
+**completamente vacía (0 peticiones)**. 
+Todo el ciclo ocurre 100% en el cliente.
+
+
+
+---
+
+###### Paso 2: Escenario A — Reordenamiento Manual / Drag & Drop
+
+1. En la Consola de DevTools o interactuando en la interfaz
+(subiendo/bajando una tarjeta en el acordeón), 
+ejecuta un reordenamiento manual de la parada `#231093`:
+```javascript
+await window.reordenarParadaManual("231093", "arriba", "ORIENTE");
+
+```
+
+
+2. Inspecciona el estado de la primera parada en IndexedDB/RAM:
+```javascript
+const paradas = await window.procesarPayloadOStorage();
+console.log("Primera parada tras reordenamiento manual:", paradas[0].ssc, paradas[0].destinatario);
+
+```
+
+
+3. Presiona **F5** (o recarga la página) y vuelve a consultar la Consola:
+
+
+```javascript
+await window.procesarPayloadOStorage();
+
+```
+
+
+4. **Criterio de éxito:** La parada `#231093` se mantiene en el **Índice 0** tras la recarga.
+
+
+
+---
+
+###### Paso 3: Escenario B — Inversión de Secuencia de Ruta
+
+1. Invierte el orden completo de las paradas en la zona `ORIENTE`:
+```javascript
+await window.invertirSecuenciaZona("ORIENTE");
+
+```
+
+
+2. Verifica en la Consola el nuevo orden invertido:
+```javascript
+console.log("Orden tras inversión:", window.__CACHE_PARADAS_MACONDO__.map(p => p.ssc));
+
+```
+
+
+3. Presiona **F5** para recargar la aplicación.
+
+
+4. Ejecuta en Consola tras recargar:
+
+
+```javascript
+await window.procesarPayloadOStorage();
+
+```
+
+
+5. **Criterio de éxito:** La lista retornada mantiene el orden invertido exactamente igual que antes de presionar F5.
+
+
+
+---
+
+###### Paso 4: Escenario C — Optimización por Proximidad (Cascada $0 USD)
+
+1. Dispara la optimización en la zona:
+```javascript
+await window.optimizarProximidadZona("ORIENTE");
+
+```
+
+
+2. Observa la re-secuenciación en Consola (OSRM / Haversine local).
+
+
+3. Inspecciona la clave de respaldo en `localStorage`:
+```javascript
+JSON.parse(localStorage.getItem("ruta_zonificada")).map(p => `${p.ssc} -> Pos:${p.secuenciaZona}`);
+
+```
+
+
+4. Presiona **F5** para recargar la aplicación.
+
+
+5. Ejecuta el rehidratador de almacenamiento local:
+
+
+```javascript
+const datosRecuperados = await window.procesarPayloadOStorage();
+console.table(datosRecuperados.map(p => ({ SSC: p.ssc, Cliente: p.destinatario, Secuencia: p.secuenciaZona, Grupo: p.grupoId })));
+
+```
+
+
+6. **Criterio de éxito:** El orden optimizado, sus consecutivo de zona (`1, 2, 3...`) y sus grupos de clúster (`GRUPO-01`, etc.) coinciden al 100% con los datos almacenados antes de recargar.
+
+
+
+---
+
+###### Paso 5: Inspección Directa del Storage (IndexedDB + localStorage)
+
+Para comprobar visualmente la persisted snapshot sin usar código:
+
+1. En DevTools, ve a la pestaña **Application (Aplicación)**.
+2. Expande **IndexedDB** -> `pwa_mensajero_db` -> `paradas_rutas` (o `rutas_zonificadas`).
+3. Expande **Local Storage** -> `http://localhost` -> Selecciona la clave `ruta_zonificada`.
+4. **Criterio de éxito:** En ambas tecnologías de almacenamiento, 
+la lista de objetos refleja los campos `consecutivoZona`, 
+`secuenciaZona`, `orden`, `grupoId` e `updated_at`
+actualizados atómicamente en cada evento.

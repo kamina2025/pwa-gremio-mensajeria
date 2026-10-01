@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO, MINIRUTAS Y NAVEGACIÓN GPS INTRAMURAL
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-rutas.js
- * Arquitectura: Google Maps JavaScript API / Directions API / Local-First / Cyberpunk Dark Mode
+ * Arquitectura: Google Maps JavaScript API / Local-First / Cyberpunk Dark Mode / $0.00 COP
  */
 
 import { PALETA_ZONAS } from "./zonificacion/mensajero-zonificacion.js";
@@ -31,7 +31,7 @@ let polilineasCache = {
     tramosIntergrupales: []
 };
 
-// --- WATCHDOG: Observador de Estado para Restauración Automática ---
+// Watchdog: Observador de Estado para Restauración Automática
 let ultimaMapaInstancia = null;
 let ultimaListaGruposCache = null;
 let ultimoHashPendientes = "";
@@ -51,6 +51,8 @@ if (typeof window !== "undefined") {
 
 /**
  * Predicado global para evaluar estáticamente si una parada requiere enrutamiento visible.
+ * @param {Object} p
+ * @returns {boolean}
  */
 const esParadaPendiente = (p) => {
     if (!p) return false;
@@ -64,6 +66,7 @@ const esParadaPendiente = (p) => {
 
 /**
  * Genera una huella digital rápida para detectar mutaciones de estado en las paradas pendientes.
+ * @returns {string}
  */
 function generarHashPendientesActual() {
     if (!ultimaListaGruposCache) return "";
@@ -71,7 +74,7 @@ function generarHashPendientesActual() {
     ultimaListaGruposCache.forEach(grupo => {
         pendientes.push(...(grupo || []).filter(esParadaPendiente));
     });
-    return pendientes.map(p => p.id || p.ssc || p.direccion).join("|");
+    return pendientes.map(p => p.id || p.scc || p.ssc || p.direccion).join("|");
 }
 
 /**
@@ -85,7 +88,8 @@ function detenerAnimacionBarberPole() {
 }
 
 /**
- * Inicia el bucle de animación dinámico continuo para desplazar las barras de barbería en el tramo de navegación activa.
+ * Inicia el bucle de animación dinámico continuo para desplazar las barras de barbería.
+ * @param {Object} polyline 
  */
 function iniciarAnimacionBarberPole(polyline) {
     detenerAnimacionBarberPole();
@@ -105,19 +109,9 @@ function iniciarAnimacionBarberPole(polyline) {
 }
 
 /**
- * Sanitiza una dirección en texto añadiéndole el contexto geográfico si no lo posee.
- */
-function sanitizarDireccionContexto(direccion) {
-    if (!direccion || typeof direccion !== "string") return "Cali, Colombia";
-    const dirLower = direccion.toLowerCase();
-    if (dirLower.includes("cali") || dirLower.includes("jamundi") || dirLower.includes("yumbo") || dirLower.includes("palmira")) {
-        return direccion;
-    }
-    return `${direccion}, Cali, Colombia`;
-}
-
-/**
  * Extrae y valida un objeto google.maps.LatLng desde cualquier estructura de datos de parada.
+ * @param {Object} punto 
+ * @returns {google.maps.LatLng|null}
  */
 function extraerLatLngValido(punto) {
     if (!punto) return null;
@@ -154,7 +148,7 @@ export function limpiarRutaNavegacionGPS() {
 }
 
 /**
- * Limpia EXCLUSIVAMENTE los tramos estáticos del mapa. No afecta ni destruye la navegación GPS Cyan.
+ * Limpia EXCLUSIVAMENTE los tramos estáticos del mapa. No destruye la navegación GPS Cyan.
  */
 export function limpiarRutaTrazada() {
     if (polilineasCache.tramoActivo) {
@@ -188,34 +182,24 @@ export function limpiarRutaTrazada() {
 }
 
 /**
- * Consulta la Directions API de Google Maps para obtener la geometría exacta por las calles.
+ * Retorna de forma inmediata los puntos geodésicos en cliente ($0 USD)
+ * sin llamar a Google Directions API remoto.
+ * @param {google.maps.LatLng} origen 
+ * @param {google.maps.LatLng} destino 
+ * @returns {Promise<Array<google.maps.LatLng>>}
  */
 function obtenerPuntosRutaCalle(origen, destino) {
-    return new Promise((resolve) => {
-        if (!origen || !destino) return resolve([]);
-        if (!window.directionsServicePWA && typeof google !== "undefined" && google.maps) {
-            window.directionsServicePWA = new google.maps.DirectionsService();
-        }
-        if (!window.directionsServicePWA) return resolve([origen, destino]);
-
-        const request = {
-            origin: origen,
-            destination: destino,
-            travelMode: google.maps.TravelMode.DRIVING
-        };
-
-        window.directionsServicePWA.route(request, (result, status) => {
-            if ((status === google.maps.DirectionsStatus.OK || status === "OK") && result && result.routes && result.routes[0]) {
-                resolve(result.routes[0].overview_path || [origen, destino]);
-            } else {
-                resolve([origen, destino]);
-            }
-        });
-    });
+    return Promise.resolve([origen, destino]);
 }
 
 /**
- * Renderiza dinámicamente los trazados conectando linealmente los nodos pendientes y el ancla de origen actual.
+ * Renderiza dinámicamente los trazados conectando linealmente los nodos pendientes y el ancla.
+ * Modo Local-First / Vectorial Neón instantáneo.
+ * 
+ * @param {Object} mapaInstancia 
+ * @param {Object|null} posUbicacionMensajero 
+ * @param {Array<Array<Object>>} listaGruposParadas 
+ * @param {Object|null} paradaSeleccionada 
  */
 export async function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMensajero, listaGruposParadas = [], paradaSeleccionada = null) {
     if (!mapaInstancia || typeof google === "undefined" || !google.maps) return;
@@ -231,9 +215,8 @@ export async function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMen
         return; 
     }
 
-    console.group("🌀 [MAPA_RUTAS]: Trazando rutas viales contiguas (Ancla -> Paradas Pendientes)...");
+    console.group("🌀 [MAPA_RUTAS]: Trazando rutas viales contiguas (Local-First Vectorial $0.00 COP)...");
 
-    const promesasTrazados = [];
     const nodosPendientesLineales = [];
 
     // 1. Extraer todas las paradas pendientes en orden
@@ -244,16 +227,14 @@ export async function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMen
         });
     }
 
-    // 2. Anclar el inicio de la ruta a la posición actual para no perder el tramo hacia la próxima parada
+    // 2. Anclar el inicio de la ruta a la posición actual
     if (nodosPendientesLineales.length > 0) {
         let anclaOrigen = null;
         let indexGrupoAncla = nodosPendientesLineales[0].grupoIndex;
 
-        // Prioridad A: Posición GPS Actual
         if (posUbicacionMensajero && posUbicacionMensajero.lat && posUbicacionMensajero.lng) {
             anclaOrigen = new google.maps.LatLng(posUbicacionMensajero.lat, posUbicacionMensajero.lng);
         } else {
-            // Prioridad B: Buscar en el historial la parada más reciente completada para enlazar
             let ultimaCompletada = null;
             for (let gIdx = listaGruposParadas.length - 1; gIdx >= 0; gIdx--) {
                 const grupo = listaGruposParadas[gIdx] || [];
@@ -276,11 +257,10 @@ export async function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMen
                 const diffLat = Math.abs(anclaOrigen.lat() - latLngPrimerNodo.lat());
                 const diffLng = Math.abs(anclaOrigen.lng() - latLngPrimerNodo.lng());
                 
-                // Solo inyectar el ancla si el mensajero no está exactamente pisando la misma coordenada
                 if (diffLat > 0.0001 || diffLng > 0.0001) {
                     nodosPendientesLineales.unshift({
                         parada: anclaOrigen,
-                        grupoIndex: indexGrupoAncla // Mantiene el color del primer clúster a visitar
+                        grupoIndex: indexGrupoAncla
                     });
                 }
             }
@@ -288,6 +268,7 @@ export async function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMen
     }
 
     // 3. Dibujar vectores entre nodos sucesivos
+    let trazadosDesplegados = 0;
     for (let i = 0; i < nodosPendientesLineales.length - 1; i++) {
         const nodoOrigen = nodosPendientesLineales[i];
         const nodoDestino = nodosPendientesLineales[i + 1];
@@ -308,40 +289,40 @@ export async function dibujarTrazadosSecuenciales(mapaInstancia, posUbicacionMen
                 scale: 1.4
             };
 
-            promesasTrazados.push(
-                obtenerPuntosRutaCalle(latLngA, latLngB).then(pathCalle => {
-                    const polyTramo = new google.maps.Polyline({
-                        path: pathCalle,
-                        geodesic: true,
-                        strokeColor: colorTramo,
-                        strokeOpacity: opacidadTramo,
-                        strokeWeight: 5,
-                        icons: [{
-                            icon: simboloBarberPoleEstatico,
-                            offset: "0",
-                            repeat: "12px"
-                        }],
-                        zIndex: esMismoGrupo ? 900 : 950,
-                        map: mapaInstancia
-                    });
-                    
-                    if (esMismoGrupo) {
-                        polilineasCache.tramosFaltantes.push(polyTramo);
-                    } else {
-                        polilineasCache.tramosIntergrupales.push(polyTramo);
-                    }
-                })
-            );
+            const pathCalle = [latLngA, latLngB];
+            const polyTramo = new google.maps.Polyline({
+                path: pathCalle,
+                geodesic: true,
+                strokeColor: colorTramo,
+                strokeOpacity: opacidadTramo,
+                strokeWeight: 5,
+                icons: [{
+                    icon: simboloBarberPoleEstatico,
+                    offset: "0",
+                    repeat: "12px"
+                }],
+                zIndex: esMismoGrupo ? 900 : 950,
+                map: mapaInstancia
+            });
+            
+            if (esMismoGrupo) {
+                polilineasCache.tramosFaltantes.push(polyTramo);
+            } else {
+                polilineasCache.tramosIntergrupales.push(polyTramo);
+            }
+            trazadosDesplegados++;
         }
     }
 
-    await Promise.all(promesasTrazados);
-    console.log(`✅ [MAPA_RUTAS]: ${promesasTrazados.length} segmentos atenuados desplegados exitosamente.`);
+    console.log(`✅ [MAPA_RUTAS]: ${trazadosDesplegados} segmentos atenuados desplegados exitosamente.`);
     console.groupEnd();
 }
 
 /**
- * Traza las minirutas por clúster sobre las calles de la ciudad.
+ * Traza las minirutas por clúster sobre el visor del mapa.
+ * @param {Array<Object>} listaPedidos 
+ * @param {string|null} [zonaFoco=null] 
+ * @param {Object|null} [mapaInstancia=null] 
  */
 export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaInstancia = null) {
     const mapaTarget = mapaInstancia || (typeof window !== "undefined" && (window.mapaVisorInstancia || window.mapaMensajero || window.mapaInstanciaGlobal || (window.renderRutasMensajero && window.renderRutasMensajero.getMap())));
@@ -381,7 +362,9 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
 }
 
 /**
- * Traza la ruta navegable por calles reales en Azul Cyan (#00e5ff) aislando temporalmente las estáticas.
+ * Traza la ruta navegable en Azul Cyan (#00e5ff) aislando temporalmente las estáticas.
+ * @param {Object|null} [paradaDestino=null] 
+ * @param {boolean} [centrarVista=true] 
  */
 export async function trazarRutaNavegacionInternaGPS(paradaDestino = null, centrarVista = true) {
     const mapa = window.mapaMensajero || window.mapaInstancia || window.mapaInstanciaGlobal;
@@ -411,7 +394,7 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino = null, centr
     if (!destLatLng) return;
 
     const origenLatLng = new google.maps.LatLng(origenCoords.lat, origenCoords.lng);
-    const pathVial = await obtenerPuntosRutaCalle(origenLatLng, destLatLng);
+    const pathVial = [origenLatLng, destLatLng];
 
     if (pathVial && pathVial.length > 0) {
         window.rutaNavegacionPuntosActiva = pathVial.map(pt => ({ lat: pt.lat(), lng: pt.lng() }));
@@ -472,7 +455,7 @@ if (typeof window !== "undefined") {
         }
 
         navegadorActivoPrevio = estaNavegando;
-    }, 1500); // Audit interval cada 1.5s
+    }, 1500); // Intervalo de auditoría cada 1.5s
 }
 
 /**

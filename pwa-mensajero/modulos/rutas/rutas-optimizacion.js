@@ -13,13 +13,14 @@ import { estandarizarZonaCanonica, obtenerZonaParadaCanonica } from "../mapa/zon
 import { calcularDistanciaHaversine } from "../mapa/zonificacion/geo-utils.js";
 
 /**
- * Extrae o construye un identificador único para una parada dada.
+ * Extrae o construye un identificador único biyectivo y sanitizado para una parada.
  * @param {Object} p 
  * @returns {string}
  */
 function obtenerIdUnicoParada(p) {
   if (!p) return "";
-  return String(p.id || p.scc || p.ssc || p.idParada || p.id_parada || "").trim();
+  const rawId = p.ssc || p.scc || p.id || p.idParada || p.id_parada || "";
+  return String(rawId).replace(/^[#PNT-]+/i, "").trim();
 }
 
 /**
@@ -52,7 +53,7 @@ function obtenerCoordenadasValidas(p) {
 function reordenarPorProximidadNearestNeighbor(paradas, inicioFix = null, finFix = null) {
   if (!paradas || paradas.length <= 1) return paradas;
 
-  let pend = [...paradas];
+  let pend = paradas.map(p => structuredClone(p));
   let resultado = [];
 
   // 1. Extraer punto inicial si fue fijado por el usuario
@@ -118,32 +119,50 @@ function reordenarPorProximidadNearestNeighbor(paradas, inicioFix = null, finFix
  * Sincroniza y persiste el nuevo orden numérico en las colecciones locales y en las 4 memorias RAM.
  * @param {Array<Object>} paradasZonaOrdenadas - Paradas de la zona en su nuevo orden
  * @param {Array<Object>} todasLasParadas - Lista global completa de paradas
+ * @returns {Promise<Array<Object>>} Paradas de la zona reordenadas
  */
-async function aplicarYPersistirNuevoOrden(paradasZonaOrdenadas, todasLasParadas) {
+export async function aplicarYPersistirNuevoOrden(paradasZonaOrdenadas, todasLasParadas) {
   const TAMANO_CLUSTER = 4;
-  paradasZonaOrdenadas.forEach((parada, idx) => {
+  
+  const zonaActualizada = paradasZonaOrdenadas.map((paradaOriginal, idx) => {
+    const parada = structuredClone(paradaOriginal);
     const nuevaSecuencia = idx + 1;
     const numGrupo = Math.ceil(nuevaSecuencia / TAMANO_CLUSTER);
+
     parada.consecutivoZona = nuevaSecuencia;
     parada.secuenciaZona = nuevaSecuencia;
     parada.orden = nuevaSecuencia;
     parada.secuencia = nuevaSecuencia;
     parada.grupoId = `GRUPO-${numGrupo.toString().padStart(2, "0")}`;
     parada.updated_at = new Date().toISOString();
+    return parada;
   });
 
-  const mapaNuevosOrdenes = new Map(paradasZonaOrdenadas.map(p => [obtenerIdUnicoParada(p), p]));
+  const mapaNuevosOrdenes = new Map();
+  zonaActualizada.forEach(p => {
+    mapaNuevosOrdenes.set(obtenerIdUnicoParada(p), p);
+  });
+
   let listaGlobalActualizada = todasLasParadas.map(p => {
     const idUnico = obtenerIdUnicoParada(p);
-    return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : p;
+    return mapaNuevosOrdenes.has(idUnico) ? mapaNuevosOrdenes.get(idUnico) : structuredClone(p);
   });
 
-  // Guardar en almacenamiento local IndexedDB y sincronizar atómicamente las 4 memorias RAM
+  // Guardar snapshot en IndexedDB y localStorage de respaldo
   await guardarRutaZonificada(listaGlobalActualizada);
-  window.__CACHE_PARADAS_MACONDO__ = structuredClone(listaGlobalActualizada);
-  window.paradasMemoriaLocal = structuredClone(listaGlobalActualizada);
-  window.paradasRutaActiva = structuredClone(listaGlobalActualizada);
-  window.pedidosGlobales = structuredClone(listaGlobalActualizada);
+  try {
+    localStorage.setItem("ruta_zonificada", JSON.stringify(listaGlobalActualizada));
+  } catch (e) {
+    console.warn("⚠️ [OPTIMIZACION_PERSISTENCE]: No se pudo escribir en localStorage:", e);
+  }
+
+  // Sincronizar atómicamente las 4 memorias RAM
+  if (typeof window !== "undefined") {
+    window.__CACHE_PARADAS_MACONDO__ = structuredClone(listaGlobalActualizada);
+    window.paradasMemoriaLocal = structuredClone(listaGlobalActualizada);
+    window.paradasRutaActiva = structuredClone(listaGlobalActualizada);
+    window.pedidosGlobales = structuredClone(listaGlobalActualizada);
+  }
 
   if (typeof window.actualizarPuntosEnMapa === "function") {
     window.actualizarPuntosEnMapa(listaGlobalActualizada, 0);
@@ -153,7 +172,8 @@ async function aplicarYPersistirNuevoOrden(paradasZonaOrdenadas, todasLasParadas
     await window.renderizarParadasZonificadasUI(listaGlobalActualizada);
   }
 
-  return paradasZonaOrdenadas;
+  console.log(`💾 [LOCAL_FIRST_PERSIST]: ${listaGlobalActualizada.length} paradas guardadas atómicamente en IndexedDB, localStorage y RAM.`);
+  return zonaActualizada;
 }
 
 /**
@@ -167,19 +187,20 @@ async function optimizarConOSRM(paradasZona, paradaInicioFix, paradaFinFix) {
     throw new Error("Puntos con coordenadas válidas insuficientes para OSRM.");
   }
 
-  // Prepara puntos respetando inicio/fin fijados
-  let intermedias = [...paradasConCoords];
-  let origen = paradaInicioFix;
-  let destino = paradaFinFix;
+  let intermedias = paradasConCoords.map(p => structuredClone(p));
+  let origen = paradaInicioFix ? structuredClone(paradaInicioFix) : null;
+  let destino = paradaFinFix ? structuredClone(paradaFinFix) : null;
 
   if (origen) {
-    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(origen));
+    const idOrg = obtenerIdUnicoParada(origen);
+    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== idOrg);
   } else {
     origen = intermedias.shift();
   }
 
   if (destino) {
-    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(destino));
+    const idDst = obtenerIdUnicoParada(destino);
+    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== idDst);
   } else if (intermedias.length > 0) {
     destino = intermedias.pop();
   } else {
@@ -201,7 +222,7 @@ async function optimizarConOSRM(paradasZona, paradaInicioFix, paradaFinFix) {
   const osrmUrl = `https://router.project-osrm.org/trip/v1/driving/${coordsString}?source=first&destination=${obtenerIdUnicoParada(origen) !== obtenerIdUnicoParada(destino) ? "last" : "any"}&roundtrip=false`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4000); // Timeout 4 segundos
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
 
   const resp = await fetch(osrmUrl, { signal: controller.signal });
   clearTimeout(timeoutId);
@@ -210,10 +231,12 @@ async function optimizarConOSRM(paradasZona, paradaInicioFix, paradaFinFix) {
   const data = await resp.json();
 
   if (data.code === "Ok" && data.waypoints && data.waypoints.length > 0) {
-    // CORRECCIÓN: Ordenar y mapear correctamente por waypoint_index
     const waypointsOrdenados = [...data.waypoints].sort((a, b) => a.waypoint_index - b.waypoint_index);
     const resultado = waypointsOrdenados
-      .map(wp => secuenciaMapeo[wp.waypoint_index])
+      .map(wp => {
+        const paradaOriginal = secuenciaMapeo[wp.waypoint_index];
+        return paradaOriginal ? structuredClone(paradaOriginal) : null;
+      })
       .filter(Boolean);
 
     console.log("✅ [NIVEL_1_OSRM]: Ruta optimizada con éxito vía OSRM.");
@@ -244,18 +267,20 @@ async function optimizarConGoogleMaps(paradasZona, paradaInicioFix, paradaFinFix
     throw new Error("SDK de Google Maps no cargado en el navegador.");
   }
 
-  let origen = paradaInicioFix;
-  let destino = paradaFinFix;
-  let intermedias = [...paradasZona];
+  let origen = paradaInicioFix ? structuredClone(paradaInicioFix) : null;
+  let destino = paradaFinFix ? structuredClone(paradaFinFix) : null;
+  let intermedias = paradasZona.map(p => structuredClone(p));
 
   if (origen) {
-    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(origen));
+    const idOrg = obtenerIdUnicoParada(origen);
+    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== idOrg);
   } else {
     origen = intermedias.shift();
   }
 
   if (destino) {
-    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== obtenerIdUnicoParada(destino));
+    const idDst = obtenerIdUnicoParada(destino);
+    intermedias = intermedias.filter(p => obtenerIdUnicoParada(p) !== idDst);
   } else if (intermedias.length > 0) {
     destino = intermedias.pop();
   } else {
@@ -298,14 +323,14 @@ async function optimizarConGoogleMaps(paradasZona, paradaInicioFix, paradaFinFix
 
   if (directionsResult && directionsResult.routes && directionsResult.routes[0]) {
     const ordenIndices = directionsResult.routes[0].waypoint_order || [];
-    const secuenciaOptimizada = [origen];
+    const secuenciaOptimizada = [structuredClone(origen)];
 
     ordenIndices.forEach(idx => {
-      if (intermedias[idx]) secuenciaOptimizada.push(intermedias[idx]);
+      if (intermedias[idx]) secuenciaOptimizada.push(structuredClone(intermedias[idx]));
     });
 
     if (obtenerIdUnicoParada(origen) !== obtenerIdUnicoParada(destino)) {
-      secuenciaOptimizada.push(destino);
+      secuenciaOptimizada.push(structuredClone(destino));
     }
 
     console.log("✅ [NIVEL_3_GOOGLE]: Ruta optimizada con éxito vía Google Maps.");
@@ -329,7 +354,7 @@ export async function invertirSecuenciaRutaZona(zonaKeyInput) {
   let todasLasParadas = (await obtenerParadasGuardadas()) || window.__CACHE_PARADAS_MACONDO__ || window.paradasMemoriaLocal || [];
 
   if (!todasLasParadas || todasLasParadas.length === 0) {
-    console.warn("⚠ [INVERSOR_RUTA]: No se encontraron paradas en la base local.");
+    console.warn("⚠️ [INVERSOR_RUTA]: No se encontraron paradas en la base local.");
     console.groupEnd();
     return [];
   }
@@ -342,7 +367,6 @@ export async function invertirSecuenciaRutaZona(zonaKeyInput) {
     return todasLasParadas;
   }
 
-  // Ordenar por secuencia actual e invertir
   paradasZona.sort((a, b) => (parseInt(a.secuenciaZona || a.secuencia || 0, 10)) - (parseInt(b.secuenciaZona || b.secuencia || 0, 10)));
   paradasZona.reverse();
 
@@ -408,7 +432,6 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
     }
   }
 
-  // Persistir y sincronizar la secuencia final resuelta por cualquiera de los métodos
   const resultadoFinal = await aplicarYPersistirNuevoOrden(paradasZonaEnrutadas, todasLasParadas);
 
   console.log("✅ [OPTIMIZADOR_EN_CASCADA]: Ruta optimizada, agrupada y sincronizada exitosamente.");
@@ -417,8 +440,9 @@ export async function optimizarRutaPorProximidadZona(zonaKeyInput, paradaInicioF
   return resultadoFinal;
 }
 
-// INYECCIÓN DIRECTA INMEDIATA EN WINDOW
+// INYECCIÓN DIRECTA EN WINDOW
 if (typeof window !== "undefined") {
+  window.aplicarYPersistirNuevoOrden = aplicarYPersistirNuevoOrden;
   window.optimizarRutaPorProximidadZona = optimizarRutaPorProximidadZona;
   window.optimizarProximidadZona = optimizarRutaPorProximidadZona;
   window.optimizarRutaPorProximidad = optimizarRutaPorProximidadZona;

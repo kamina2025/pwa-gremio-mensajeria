@@ -70,33 +70,37 @@ self.addEventListener("activate", (event) => {
 });
 
 // Estrategia de interceptación Network First con respaldo local en Caché
-self.addEventListener("fetch", (event) => {
+// Ruta: pwa-mensajero/sw.js
+self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // BYPASS EXPLICITO DE RED PARA EL ENDPOINT API REST LOCAL O REMOTO
-    if (url.pathname.endsWith("api.php") || url.searchParams.has("action") || url.pathname.includes("/api/")) {
+    // Estrategia Bypass para llamadas explícitas a Google APIs
+    if (url.hostname.includes('googleapis.com') || url.hostname.includes('gstatic.com')) {
         console.log(`🌐 [SW_BYPASS]: Petición API enviada directamente a la red real -> [${event.request.method} ${url.pathname}]`);
-        return; 
-    }
-
-    if (event.request.method !== "GET") return;
-
-    event.respondWith(
-        fetch(event.request)
-            .then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
-                    const responseToCache = networkResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
-                }
-                return networkResponse;
-            })
-            .catch(() => {
-                return caches.match(event.request).then((cachedResponse) => {
-                    if (cachedResponse) return cachedResponse;
-                    if (event.request.headers.get("accept")?.includes("text/html")) {
-                        return caches.match("./index2.html");
-                    }
+        event.respondWith(
+            fetch(event.request).catch((err) => {
+                console.warn(`⚠️ [SW_BYPASS_OFFLINE]: Sin conexión para API externa: ${url.pathname}`);
+                // Retornar respuesta nula/vacía defensiva para evitar TypeError
+                return new Response(JSON.stringify({ error: 'offline', status: 'ERR_INTERNET_DISCONNECTED' }), {
+                    status: 503,
+                    headers: { 'Content-Type': 'application/json' }
                 });
             })
+        );
+        return;
+    }
+
+    // Manejo general de recursos estáticos e imágenes (Favicon, Fonts, etc.)
+    event.respondWith(
+        caches.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) {
+                return cachedResponse;
+            }
+            return fetch(event.request).catch((err) => {
+                console.warn(`⚠️ [SW_FETCH_OFFLINE]: Error al recuperar recurso de la red: ${event.request.url}`);
+                // Evita 'Failed to convert value to Response' devolviendo un estado HTTP 503 o recurso vacío
+                return new Response('', { status: 503, statusText: 'Service Unavailable (Offline)' });
+            });
+        })
     );
 });

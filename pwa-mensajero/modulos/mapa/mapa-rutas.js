@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA MAPA: SERVICIO DE TRAZADO, MINIRUTAS Y NAVEGACIÓN GPS INTRAMURAL
  * Ubicación: pwa-mensajero/modulos/mapa/mapa-rutas.js
- * Arquitectura: Google Maps JavaScript API / Local-First / Cyberpunk Dark Mode / $0.00 COP
+ * Arquitectura: Google Maps JavaScript API / OSRM Routing Client / Local-First / $0.00 COP
  */
 
 import { PALETA_ZONAS } from "./zonificacion/mensajero-zonificacion.js";
@@ -19,7 +19,7 @@ const PALETA_COLORES_CLUSTERS = [
 
 const COLOR_CONECTOR_INTERGRUPAL = "#d2a8ff"; // Morado para enlaces entre clústeres
 
-// Cache local de polílineas y estados
+// Cache local de polilíneas y estados
 let coleccionPolilineasActivas = [];
 let polylineVialNavegacion = null;
 let animacionPasoId = null;
@@ -65,7 +65,7 @@ const esParadaPendiente = (p) => {
 };
 
 /**
- * Genera una huella digital rápida para detectar mutaciones de estado en las paradas pendientes.
+ * Genera una huella digital determinista incorporando posición y secuencia para detectar mutaciones o reordenamientos.
  * @returns {string}
  */
 function generarHashPendientesActual() {
@@ -74,7 +74,11 @@ function generarHashPendientesActual() {
     ultimaListaGruposCache.forEach(grupo => {
         pendientes.push(...(grupo || []).filter(esParadaPendiente));
     });
-    return pendientes.map(p => p.id || p.scc || p.ssc || p.direccion).join("|");
+    return pendientes.map((p, index) => {
+        const idStr = String(p.id || p.scc || p.ssc || p.direccion || "").trim();
+        const seq = p.consecutivoZona || p.secuenciaZona || p.orden || index;
+        return `${idStr}_${seq}_${p.estado || 'pending'}`;
+    }).join("|");
 }
 
 /**
@@ -131,6 +135,74 @@ function extraerLatLngValido(punto) {
 }
 
 /**
+ * Decodifica una cadena de polilínea en formato comprimido OSRM.
+ * @param {string} str 
+ * @param {number} precision 
+ * @returns {Array<google.maps.LatLng>}
+ */
+function decodificarPolylineOSRM(str, precision = 5) {
+    let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
+    const factor = Math.pow(10, precision);
+
+    while (index < str.length) {
+        byte = null; shift = 0; result = 0;
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        const deltaLat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lat += deltaLat;
+
+        shift = 0; result = 0;
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+        const deltaLng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lng += deltaLng;
+
+        if (typeof google !== "undefined" && google.maps) {
+            coordinates.push(new google.maps.LatLng(lat / factor, lng / factor));
+        }
+    }
+    return coordinates;
+}
+
+/**
+ * Retorna la ruta por vías reales llamando al API público OSRM ($0.00 COP) sin tocar GCP.
+ * @param {google.maps.LatLng} origen 
+ * @param {google.maps.LatLng} destino 
+ * @returns {Promise<Array<google.maps.LatLng>>}
+ */
+async function obtenerPuntosRutaCalle(origen, destino) {
+    if (!origen || !destino) return [];
+
+    const latA = origen.lat();
+    const lngA = origen.lng();
+    const latB = destino.lat();
+    const lngB = destino.lng();
+
+    try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${lngA},${latA};${lngB},${latB}?overview=full&geometries=polyline`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP Error OSRM: ${resp.status}`);
+
+        const data = await resp.json();
+        if (data.routes && data.routes.length > 0 && data.routes[0].geometry) {
+            const puntosViales = decodificarPolylineOSRM(data.routes[0].geometry);
+            if (puntosViales.length > 0) return puntosViales;
+        }
+    } catch (err) {
+        console.warn("⚠️ [MAPA_RUTAS_OSRM]: Error consultando OSRM. Recurriendo a fallback vectorial directo local:", err);
+    }
+
+    // Fallback Local-First si falla la red o el servicio OSRM
+    return [origen, destino];
+}
+
+/**
  * Limpia únicamente la ruta Cyan de navegación GPS y resetea las variables de objetivo.
  */
 export function limpiarRutaNavegacionGPS() {
@@ -179,17 +251,6 @@ export function limpiarRutaTrazada() {
         });
         window.__POLILINEAS_CLUSTERS__ = [];
     }
-}
-
-/**
- * Retorna de forma inmediata los puntos geodésicos en cliente ($0 USD)
- * sin llamar a Google Directions API remoto.
- * @param {google.maps.LatLng} origen 
- * @param {google.maps.LatLng} destino 
- * @returns {Promise<Array<google.maps.LatLng>>}
- */
-function obtenerPuntosRutaCalle(origen, destino) {
-    return Promise.resolve([origen, destino]);
 }
 
 /**
@@ -362,7 +423,7 @@ export async function trazarPolilineaRuta(listaPedidos, zonaFoco = null, mapaIns
 }
 
 /**
- * Traza la ruta navegable en Azul Cyan (#00e5ff) aislando temporalmente las estáticas.
+ * Traza la ruta navegable por calles reales en Azul Cyan (#00e5ff) aislando temporalmente las estáticas.
  * @param {Object|null} [paradaDestino=null] 
  * @param {boolean} [centrarVista=true] 
  */
@@ -394,7 +455,9 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino = null, centr
     if (!destLatLng) return;
 
     const origenLatLng = new google.maps.LatLng(origenCoords.lat, origenCoords.lng);
-    const pathVial = [origenLatLng, destLatLng];
+    
+    // Obtener trazado por calles reales ($0.00 COP)
+    const pathVial = await obtenerPuntosRutaCalle(origenLatLng, destLatLng);
 
     if (pathVial && pathVial.length > 0) {
         window.rutaNavegacionPuntosActiva = pathVial.map(pt => ({ lat: pt.lat(), lng: pt.lng() }));
@@ -431,7 +494,7 @@ export async function trazarRutaNavegacionInternaGPS(paradaDestino = null, centr
 }
 
 /**
- * WATCHDOG PRINCIPAL: Bucle silencioso que evalúa llegadas y cambios de estado de marcadores
+ * WATCHDOG PRINCIPAL: Bucle silencioso que evalúa llegadas y cambios de estado/secuencia de marcadores
  * para auto-restaurar la red de polílineas.
  */
 if (typeof window !== "undefined") {
@@ -447,9 +510,9 @@ if (typeof window !== "undefined") {
             ultimoHashPendientes = hashActual;
             dibujarTrazadosSecuenciales(ultimaMapaInstancia, window.posicionActualMensajero || null, ultimaListaGruposCache);
         } 
-        // Escenario B: Modal modificó el estado ("entregado"), la red atenuada se re-conecta automáticamente.
+        // Escenario B: Modal o Reordenamiento modificó el estado o secuencia, la red atenuada se re-conecta automáticamente.
         else if (!estaNavegando && hashActual !== ultimoHashPendientes) {
-            console.log("♻️ [MAPA_RUTAS]: Cambio de estado detectado. Re-calculando ruta...");
+            console.log("♻️ [MAPA_RUTAS]: Cambio de estado/secuencia detectado. Re-calculando ruta...");
             ultimoHashPendientes = hashActual;
             dibujarTrazadosSecuenciales(ultimaMapaInstancia, window.posicionActualMensajero || null, ultimaListaGruposCache);
         }

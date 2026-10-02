@@ -1,7 +1,7 @@
 /**
  * PROTOCOLO MACONDO - SUBSISTEMA GPS, TELEMETRÍA Y SIMULADOR TÁCTICO
  * Ubicación: pwa-mensajero/modulos/mapa/gps/mapa-gps.js
- * Arquitectura: Telemetría GPS / Interpolación rAF / Auto-Rerouting / SpeechSynthesis API / Local-First
+ * Arquitectura: Telemetría GPS / Interpolación rAF / Auto-Rerouting / Local-First ($0.00 COP)
  */
 
 import { trazarRutaNavegacionInternaGPS, dibujarTrazadosSecuenciales, limpiarRutaNavegacionGPS } from "../mapa-rutas.js";
@@ -54,7 +54,7 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
  * @param {number} destinoLng 
  */
 function animarMovimientoMarcadorGps(destinoLat, destinoLng) {
-    if (!marcadorGpsMensajero) return;
+    if (!marcadorGpsMensajero || typeof google === "undefined" || !google.maps) return;
 
     const posOrigen = marcadorGpsMensajero.getPosition();
     if (!posOrigen) {
@@ -62,8 +62,8 @@ function animarMovimientoMarcadorGps(destinoLat, destinoLng) {
         return;
     }
 
-    const origLat = posOrigen.lat();
-    const origLng = posOrigen.lng();
+    const origLat = typeof posOrigen.lat === "function" ? posOrigen.lat() : posOrigen.lat;
+    const origLng = typeof posOrigen.lng === "function" ? posOrigen.lng() : posOrigen.lng;
 
     if (Math.abs(origLat - destinoLat) < 0.000001 && Math.abs(origLng - destinoLng) < 0.000001) return;
 
@@ -79,7 +79,9 @@ function animarMovimientoMarcadorGps(destinoLat, destinoLng) {
         const actualLat = origLat + (destinoLat - origLat) * progreso;
         const actualLng = origLng + (destinoLng - origLng) * progreso;
 
-        marcadorGpsMensajero.setPosition(new google.maps.LatLng(actualLat, actualLng));
+        if (marcadorGpsMensajero) {
+            marcadorGpsMensajero.setPosition(new google.maps.LatLng(actualLat, actualLng));
+        }
 
         if (progreso < 1) {
             animacionGpsFrameId = requestAnimationFrame(pasoAnimacion);
@@ -97,14 +99,17 @@ function animarMovimientoMarcadorGps(destinoLat, destinoLng) {
  */
 export function renderizarUbicacionGpsEnMapa(lat, lng, velocidad = 0) {
     const mapa = window.mapaMensajero || window.mapaInstancia || window.mapaVisorInstancia || window.mapaInstanciaGlobal;
-    if (!mapa || typeof google === "undefined" || !google.maps) return;
+    if (!mapa || typeof google === "undefined" || !google.maps) {
+        console.warn("⚠️ [MAPA_GPS]: Objeto mapa o Google SDK no disponible.");
+        return;
+    }
 
     const posActual = { lat, lng };
     window.posicionActualMensajero = posActual;
 
     if (!marcadorGpsMensajero) {
         const iconoGpsSvg = {
-            path: google.maps.SymbolPath.CIRCLE,
+            path: google.maps.SymbolPath ? google.maps.SymbolPath.CIRCLE : 0,
             scale: 10,
             fillColor: "#00e5ff",
             fillOpacity: 1,
@@ -126,7 +131,7 @@ export function renderizarUbicacionGpsEnMapa(lat, lng, velocidad = 0) {
     }
 
     // Centrado suave de cámara ajustado a velocidad
-    if (velocidad > 1) {
+    if (velocidad > 1 && typeof mapa.panTo === "function") {
         mapa.panTo(posActual);
     }
 
@@ -143,7 +148,6 @@ export function renderizarUbicacionGpsEnMapa(lat, lng, velocidad = 0) {
             } else if (distMetros <= 15 && ultimaDistanciaNotificada > 15) {
                 hablarAlertaGps("Has llegado a la parada destino");
                 ultimaDistanciaNotificada = distMetros;
-                // Limpiar la traza navegable para evitar tramos residuales al arribar
                 limpiarRutaNavegacionGPS();
             }
         }
@@ -186,11 +190,36 @@ function activarFallbackUbicacionGPS() {
 }
 
 /**
- * SIMULADOR TÁCTICO DE GEOLOCALIZACIÓN NAVEGABLE POR VÍAS REALES
- * @param {number} [intervaloMs=800] - Tiempo en milisegundos entre cada vértice vial
+ * Genera micro-pasos interpolados localmente entre nodos de coordenadas para simular fluidez sin API comercial.
+ * @param {Array<{lat: number, lng: number}>} puntosBase 
+ * @param {number} pasosPorTramo 
+ * @returns {Array<{lat: number, lng: number}>}
+ */
+function interpolarPuntosTelemetria(puntosBase, pasosPorTramo = 15) {
+    if (!Array.isArray(puntosBase) || puntosBase.length < 2) return puntosBase || [];
+
+    const rutaInterpolada = [];
+    for (let i = 0; i < puntosBase.length - 1; i++) {
+        const p1 = puntosBase[i];
+        const p2 = puntosBase[i + 1];
+
+        for (let paso = 0; paso < pasosPorTramo; paso++) {
+            const t = paso / pasosPorTramo;
+            const latInterp = p1.lat + (p2.lat - p1.lat) * t;
+            const lngInterp = p1.lng + (p2.lng - p1.lng) * t;
+            rutaInterpolada.push({ lat: latInterp, lng: lngInterp });
+        }
+    }
+    rutaInterpolada.push(puntosBase[puntosBase.length - 1]);
+    return rutaInterpolada;
+}
+
+/**
+ * SIMULADOR TÁCTICO DE GEOLOCALIZACIÓN NAVEGABLE POR VÍAS REALES (LOCAL-FIRST $0.00 COP)
+ * @param {number} [intervaloMs=800] - Tiempo en milisegundos entre cada paso
  */
 export function simularMovimientoGPS(intervaloMs = 800) {
-    const puntosViales = window.rutaNavegacionPuntosActiva;
+    let puntosViales = window.rutaNavegacionPuntosActiva;
 
     if (!Array.isArray(puntosViales) || puntosViales.length === 0) {
         console.warn("⚠️ [SIMULADOR_GPS]: Activa primero 'Viajar GPS' sobre una parada.");
@@ -200,16 +229,26 @@ export function simularMovimientoGPS(intervaloMs = 800) {
         return;
     }
 
-    console.log(`🎮 [SIMULADOR_GPS]: Iniciando recorrido realista por las calles (${puntosViales.length} puntos)...`);
+    // Interpolación dinámica para garantizar animación fluida local
+    if (puntosViales.length < 10) {
+        console.log("🎮 [SIMULADOR_GPS]: Generando micro-pasos de telemetría local ($0.00 COP)...");
+        puntosViales = interpolarPuntosTelemetria(puntosViales, 20);
+    }
+
+    console.log(`🎮 [SIMULADOR_GPS]: Iniciando recorrido simular por (${puntosViales.length} puntos)...`);
     let pasoActual = 0;
 
-    const timerSimulador = setInterval(() => {
+    if (window.__TIMER_SIMULADOR_GPS__) {
+        clearInterval(window.__TIMER_SIMULADOR_GPS__);
+    }
+
+    window.__TIMER_SIMULADOR_GPS__ = setInterval(() => {
         if (pasoActual >= puntosViales.length) {
-            clearInterval(timerSimulador);
+            clearInterval(window.__TIMER_SIMULADOR_GPS__);
+            window.__TIMER_SIMULADOR_GPS__ = null;
+
             console.log("🏁 [SIMULADOR_GPS]: Recorrido completado. Limpiando traza residual de la polilínea...");
             hablarAlertaGps("Has llegado a la parada destino");
-            
-            // Destruir polilínea Cyan y ocultar botón flotante al finalizar
             limpiarRutaNavegacionGPS();
 
             if (typeof window.notificarMensajeroUI === "function") {
@@ -220,6 +259,7 @@ export function simularMovimientoGPS(intervaloMs = 800) {
 
         const puntoVial = puntosViales[pasoActual];
         renderizarUbicacionGpsEnMapa(puntoVial.lat, puntoVial.lng, 8); // Simula ~28 km/h
+        console.log(`📍 [SIMULADOR_GPS_STEP]: Paso [${pasoActual + 1}/${puntosViales.length}] -> Lat: ${puntoVial.lat.toFixed(5)}, Lng: ${puntoVial.lng.toFixed(5)}`);
         pasoActual++;
     }, intervaloMs);
 }

@@ -52,10 +52,10 @@ import "./modulos/mapa/mapa-controlador.js";
 // Importaciones Módulo Planillas
 import { cambiarPestanaPlanillas, cargarPlanillasReportadasUI } from "./modulos/planilla/planillas-ui.js";
 import { exportarYRespaldarPlanillaPDF } from "./modulos/planilla/planillas-pdf-sync.js";
-import { guardarPlanillaReportada } from "./modulos/planilla/planillas-db.js";
+import { guardarPlanillaReportada } from "./modulos/procesamiento-datos/planillas-db.js";
 
 // Importaciones Módulo Perfil del Conductor
-import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil/perfil-ui.js";
+import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil-ui.js";
 
 // --- CONFIGURACIÓN DE ENDPOINT API (RESOLUCIÓN DINÁMICA DE RUTA BASE) ---
 /**

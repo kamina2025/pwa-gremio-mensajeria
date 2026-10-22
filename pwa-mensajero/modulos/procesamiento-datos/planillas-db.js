@@ -3,7 +3,7 @@
  * Ubicación: pwa-mensajero/modulos/procesamiento-datos/planillas-db.js
  */
 
-import { obtenerDB } from '../base-de-datos.js';
+import { obtenerDB } from './base-de-datos.js';
 
 export async function obtenerPlanillasReportadas() {
     try {

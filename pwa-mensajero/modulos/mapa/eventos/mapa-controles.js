@@ -12,7 +12,7 @@ import { obtenerCoordenadasValidasParada } from "../utils/mapa-coordenadas.js";
 const KEY_PERSISTENCIA_LOCK = "map_interaction_locked";
 const KEY_PERSISTENCIA_TEMA = "macondo_mapa_theme_mode";
 
-// Estilo Noche (Dark Cyberpunk)
+// Estilo Noche (Dark Cyberpunk) - Fallback para mapas dinámicos sin Map ID Cloud
 const ESTILO_MAPA_NOCHE = [
     { elementType: "geometry", stylers: [{ color: "#0d1117" }] },
     { elementType: "labels.text.stroke", stylers: [{ color: "#0d1117" }] },
@@ -28,11 +28,10 @@ const ESTILO_MAPA_NOCHE = [
     { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#58a6ff" }] }
 ];
 
-// Estilo Día (Claro Estándar / Alto Contraste)
-const ESTILO_MAPA_DIA = []; // Array vacío restaura la paleta estándar de Google Maps
+const ESTILO_MAPA_DIA = []; 
 
 /**
- * Obtiene de forma resiliente la instancia activa del mapa en memoria RAM.
+ * Obtiene de forma resiliente la instancia activa del mapa en RAM.
  * @returns {google.maps.Map|null}
  */
 function obtenerInstanciaMapaActiva() {
@@ -46,9 +45,9 @@ function obtenerInstanciaMapaActiva() {
 }
 
 /**
- * Asigna manualmente una parada como destino activo, autoenfoca y guarda persistencia Local-First.
+ * Asigna manualmente una parada como destino activo y autoenfoca la cámara.
  * @param {Object} parada - Objeto de la parada seleccionada
- * @param {google.maps.Map} [mapaInstancia=null] - Instancia del mapa
+ * @param {google.maps.Map} [mapaInstancia=null]
  */
 export function seleccionarParadaDestino(parada, mapaInstancia = null) {
     if (!parada) return;
@@ -65,7 +64,6 @@ export function seleccionarParadaDestino(parada, mapaInstancia = null) {
     if (mapa && coords) {
         mapa.panTo({ lat: coords.lat, lng: coords.lng });
 
-        // Persistencia Local-First del estado de navegación
         const payloadEstado = {
             paradaId: idParada,
             centro: { lat: coords.lat, lng: coords.lng },
@@ -78,11 +76,10 @@ export function seleccionarParadaDestino(parada, mapaInstancia = null) {
             try {
                 localStorage.setItem("macondo_ultimo_estado_mapa", JSON.stringify(payloadEstado));
             } catch (err) {
-                console.warn("⚠️ [MAPA_CONTROLES]: Error en fallback localStorage:", err);
+                console.warn("⚠️️ [MAPA_CONTROLES]: Error en fallback localStorage:", err);
             }
         }
 
-        // Re-dibujar polilíneas dinámicas con la nueva parada destino
         const posGps = window.posicionActualMensajero || null;
         const grupos = window.gruposParadasRutaActiva || [];
 
@@ -93,7 +90,7 @@ export function seleccionarParadaDestino(parada, mapaInstancia = null) {
 }
 
 /**
- * Enfoca suavemente la cámara sobre la última parada del grupo activo.
+ * Enfoca la cámara sobre la última parada del grupo activo.
  */
 export function enfocarUltimaParadaDelGrupo() {
     const mapa = obtenerInstanciaMapaActiva();
@@ -104,12 +101,10 @@ export function enfocarUltimaParadaDelGrupo() {
         return;
     }
 
-    // Obtener el grupo activo (primer grupo con paradas pendientes o primer grupo disponible)
     const grupoActivo = grupos.find(g => Array.isArray(g) && g.some(p => !p.completada && !p.entregado)) || grupos[0];
 
     if (!grupoActivo || grupoActivo.length === 0) return;
 
-    // Obtener la última parada del grupo
     const ultimaParada = grupoActivo[grupoActivo.length - 1];
     const coords = obtenerCoordenadasValidasParada(ultimaParada);
 
@@ -134,10 +129,6 @@ export function enfocarUltimaParadaDelGrupo() {
 export const mapaControles = {
     mapaInstancia: null,
 
-    /**
-     * Vincula los botones de interacción y controles del lienzo.
-     * @param {google.maps.Map} [mapa=null] 
-     */
     inicializar(mapa = null) {
         this.mapaInstancia = mapa || obtenerInstanciaMapaActiva();
         console.log("🎮 [MAPA_CONTROLES]: Inicializando controlador de eventos laterales...");
@@ -148,48 +139,44 @@ export const mapaControles = {
     },
 
     registrarEventListeners() {
-        // 1. Botón Zoom In
-        const btnZoomIn = document.getElementById("btn-zoom-in");
-        if (btnZoomIn) {
-            btnZoomIn.onclick = (e) => {
-                e.preventDefault();
-                this.ejecutarZoom(1);
-            };
-        }
+        const agregarEventoSeguro = (idSelector, evento, handler) => {
+            const el = document.getElementById(idSelector) || document.querySelector(`.${idSelector}`);
+            if (el) {
+                el.removeEventListener(evento, handler);
+                el.addEventListener(evento, handler);
+            }
+        };
 
-        // 2. Botón Zoom Out
-        const btnZoomOut = document.getElementById("btn-zoom-out");
-        if (btnZoomOut) {
-            btnZoomOut.onclick = (e) => {
-                e.preventDefault();
-                this.ejecutarZoom(-1);
-            };
-        }
+        const handleZoomIn = (e) => {
+            e.preventDefault();
+            this.ejecutarZoom(1);
+        };
+        agregarEventoSeguro("btn-zoom-in", "click", handleZoomIn);
 
-        // 3. Botón Recentrante / GPS
-        const btnGPS = document.getElementById("btn-recenter-gps");
-        if (btnGPS) {
-            btnGPS.onclick = (e) => {
-                e.preventDefault();
-                const pos = window.posicionActualMensajero;
-                const mapa = this.mapaInstancia || obtenerInstanciaMapaActiva();
-                if (pos && mapa) {
-                    mapa.panTo(pos);
-                    mapa.setZoom(17);
-                }
-            };
-        }
+        const handleZoomOut = (e) => {
+            e.preventDefault();
+            this.ejecutarZoom(-1);
+        };
+        agregarEventoSeguro("btn-zoom-out", "click", handleZoomOut);
 
-        // 4. Botón Enfocar Última Parada del Grupo
-        const btnEnfocarUltima = document.getElementById("btn-enfocar-ultima-parada") || document.querySelector(".btn-enfocar-parada");
-        if (btnEnfocarUltima) {
-            btnEnfocarUltima.onclick = (e) => {
-                e.preventDefault();
-                enfocarUltimaParadaDelGrupo();
-            };
-        }
+        const handleGps = (e) => {
+            e.preventDefault();
+            const pos = window.posicionActualMensajero;
+            const mapa = this.mapaInstancia || obtenerInstanciaMapaActiva();
+            if (pos && mapa) {
+                mapa.panTo(pos);
+                mapa.setZoom(17);
+                console.log("🛰️ [MAPA_CONTROLES]: Recentrando cámara en posición GPS actual:", pos);
+            }
+        };
+        agregarEventoSeguro("btn-recenter-gps", "click", handleGps);
 
-        // 5. Botón Refrescar Mapa
+        const handleEnfocar = (e) => {
+            e.preventDefault();
+            enfocarUltimaParadaDelGrupo();
+        };
+        agregarEventoSeguro("btn-enfocar-ultima-parada", "click", handleEnfocar);
+
         const btnRefresh = document.getElementById("btn-refresh-map") || document.getElementById("btn-refrescar-mapa");
         if (btnRefresh) {
             btnRefresh.onclick = async (e) => {
@@ -219,59 +206,72 @@ export const mapaControles = {
             };
         }
 
-        // 6. Botón Toggle Lock/Unlock Mapa
-        const btnToggleLock = document.getElementById("btn-toggle-lock");
-        if (btnToggleLock) {
-            btnToggleLock.onclick = (e) => {
-                e.preventDefault();
-                this.alternarBloqueoMapa();
-            };
-        }
+        const handleToggleLock = (e) => {
+            e.preventDefault();
+            this.alternarBloqueoMapa();
+        };
+        agregarEventoSeguro("btn-toggle-lock", "click", handleToggleLock);
 
-        // 7. Botón Conmutador de Tema Día/Noche
-        const btnToggleTema = document.getElementById("btn-toggle-tema-mapa");
-        if (btnToggleTema) {
-            btnToggleTema.onclick = (e) => {
-                e.preventDefault();
-                this.alternarTemaMapa();
-            };
-        }
+        const handleToggleTema = (e) => {
+            e.preventDefault();
+            this.alternarTemaMapa();
+        };
+        agregarEventoSeguro("btn-toggle-tema-mapa", "click", handleToggleTema);
     },
 
     /**
-     * Alterna entre el tema Noche (Oscuro Cyberpunk) y Día (Claro Alto Contraste).
-     * @param {string|null} [temaForzado=null] - 'dia' | 'noche' (opcional)
+     * Alterna o impone el tema visual en el mapa.
+     * Forzado en NOCHE para garantizar estética Cyberpunk.
+     * @param {string|null} [temaForzado=null]
      */
     alternarTemaMapa(temaForzado = null) {
         const mapa = this.mapaInstancia || obtenerInstanciaMapaActiva();
         const iconTema = document.getElementById("icon-tema-state");
-        const esNocheActual = iconTema ? iconTema.textContent.trim() === "🌙" : true;
-
+        
         let nuevoTema = temaForzado;
         if (!nuevoTema) {
-            nuevoTema = esNocheActual ? "dia" : "noche";
+            const esNocheActual = iconTema ? iconTema.textContent.trim() === "🌙" : true;
+            nuevoTema = esNocheActual ? "DIA" : "NOCHE";
         }
 
-        console.log(`🎨 [MAPA_CONTROLES]: Conmutando tema de mapa a -> ${nuevoTema.toUpperCase()}`);
+        nuevoTema = String(nuevoTema).toUpperCase();
+        console.log(`🎨 [MAPA_CONTROLES]: Conmutando tema de mapa a -> ${nuevoTema}`);
 
         if (iconTema) {
-            iconTema.textContent = nuevoTema === "dia" ? "☀️" : "🌙";
+            iconTema.textContent = nuevoTema === "DIA" ? "☀️" : "🌙";
         }
 
-        if (nuevoTema === "dia") {
+        if (nuevoTema === "DIA") {
             document.body.classList.add("mapa-tema-dia");
         } else {
             document.body.classList.remove("mapa-tema-dia");
         }
 
-        if (mapa && typeof mapa.setOptions === "function") {
+        const contenedorMapa = mapa && typeof mapa.getDiv === "function" 
+            ? mapa.getDiv() 
+            : document.getElementById("mapa-fullscreen-container");
+
+        const tieneMapId = mapa && (typeof mapa.get === "function" ? mapa.get("mapId") : mapa.mapId);
+
+        if (tieneMapId && contenedorMapa) {
+            const capaTiles = contenedorMapa.querySelector(".gm-style > div:first-child");
+            const objetivoFiltro = capaTiles || contenedorMapa;
+
+            if (nuevoTema === "DIA") {
+                objetivoFiltro.style.filter = "none";
+                contenedorMapa.style.backgroundColor = "#ffffff";
+            } else {
+                objetivoFiltro.style.filter = "invert(100%) hue-rotate(180deg) contrast(1.2) brightness(0.95)";
+                contenedorMapa.style.backgroundColor = "#0c080f";
+            }
+        } else if (mapa && typeof mapa.setOptions === "function") {
             mapa.setOptions({
-                styles: nuevoTema === "dia" ? ESTILO_MAPA_DIA : ESTILO_MAPA_NOCHE
+                styles: nuevoTema === "DIA" ? ESTILO_MAPA_DIA : ESTILO_MAPA_NOCHE
             });
         }
 
         try {
-            localStorage.setItem(KEY_PERSISTENCIA_TEMA, nuevoTema);
+            localStorage.setItem(KEY_PERSISTENCIA_TEMA, nuevoTema.toLowerCase());
         } catch (err) {
             console.warn("⚠️ [MAPA_CONTROLES]: Error guardando preferencia de tema:", err);
         }
@@ -279,10 +279,12 @@ export const mapaControles = {
 
     restaurarTemaMapa() {
         try {
-            const temaGuardado = localStorage.getItem(KEY_PERSISTENCIA_TEMA) || "noche";
-            this.alternarTemaMapa(temaGuardado);
+            // Purgar explícitamente cualquier persistencia 'dia' heredada para imponer el modo Cyberpunk NOCHE
+            localStorage.setItem(KEY_PERSISTENCIA_TEMA, "noche");
+            this.alternarTemaMapa("NOCHE");
         } catch (err) {
             console.warn("⚠️ [MAPA_CONTROLES]: Error al recuperar preferencia de tema:", err);
+            this.alternarTemaMapa("NOCHE");
         }
     },
 
@@ -293,6 +295,7 @@ export const mapaControles = {
         if (typeof mapa.getZoom === "function") {
             const currentZoom = mapa.getZoom();
             mapa.setZoom(currentZoom + delta);
+            console.log(`🔍 [MAPA_CONTROLES]: Zoom modificado (${delta > 0 ? '+1' : '-1'}). Nivel actual: ${currentZoom + delta}`);
         }
     },
 
@@ -325,6 +328,8 @@ export const mapaControles = {
             });
         }
 
+        console.log(`🔒 [MAPA_CONTROLES]: Estado de interacción del mapa conmutado a -> ${nuevoEstado ? "BLOQUEADO" : "DESBLOQUEADO"}`);
+
         try {
             localStorage.setItem(KEY_PERSISTENCIA_LOCK, JSON.stringify(nuevoEstado));
         } catch (err) {
@@ -347,7 +352,6 @@ export const mapaControles = {
     }
 };
 
-// BINDINGS GLOBALES Y RETROCOMPATIBILIDAD EN WINDOW
 if (typeof window !== "undefined") {
     window.mapaControles = mapaControles;
     window.MapaControles = mapaControles;

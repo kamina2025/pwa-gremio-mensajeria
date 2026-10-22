@@ -1,0 +1,12 @@
+Verificación en Consola DevTools (Comandos Rápidos)
+Puedes ejecutar estos comandos directamente en la Consola del navegador para validar la disponibilidad global de las funciones expuestas por script2.js:
+
+JavaScript
+// Validar endpoint inmutable de la API PHP
+console.log(window.ENDPOINT_API_PHP);
+
+// Probar navegación programática
+window.navegarA('pestana-monedero-saldo');
+
+// Validar que el puente de Google Maps responda
+window.inicializarMapaMensajero();

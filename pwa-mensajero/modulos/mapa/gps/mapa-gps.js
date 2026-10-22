@@ -15,6 +15,34 @@ let ultimoRecalculoRutaTime = 0;
 let ultimaDistanciaNotificada = Infinity;
 
 /**
+ * Crea un elemento DOM HTML animado para representar la ubicación GPS del mensajero en AdvancedMarkerElement.
+ * @returns {HTMLElement}
+ */
+function crearNodoDOMIndicadorGps() {
+    const contenedor = document.createElement("div");
+    contenedor.className = "macondo-gps-pulse-wrapper";
+    contenedor.style.width = "32px";
+    contenedor.style.height = "32px";
+    contenedor.style.position = "relative";
+    contenedor.style.display = "flex";
+    contenedor.style.alignItems = "center";
+    contenedor.style.justifyContent = "center";
+    contenedor.style.zIndex = "1000000";
+
+    contenedor.innerHTML = `
+        <div style="position: absolute; width: 100%; height: 100%; border-radius: 50%; background: rgba(0, 229, 255, 0.4); animation: macondoGpsPulse 2s infinite ease-out;"></div>
+        <div style="width: 14px; height: 14px; border-radius: 50%; background: #00e5ff; border: 2px solid #ffffff; box-shadow: 0 0 10px #00e5ff;"></div>
+        <style>
+            @keyframes macondoGpsPulse {
+                0% { transform: scale(0.5); opacity: 1; }
+                100% { transform: scale(2.2); opacity: 0; }
+            }
+        </style>
+    `;
+    return contenedor;
+}
+
+/**
  * Emite una alerta auditiva mediante la SpeechSynthesis API.
  * @param {string} texto - Mensaje a reproducir por voz
  */
@@ -22,7 +50,7 @@ export function hablarAlertaGps(texto) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
     try {
-        window.speechSynthesis.cancel(); // Cancelar locuciones anteriores
+        window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(texto);
         utterance.lang = "es-CO";
         utterance.rate = 1.0;
@@ -56,14 +84,25 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
 function animarMovimientoMarcadorGps(destinoLat, destinoLng) {
     if (!marcadorGpsMensajero || typeof google === "undefined" || !google.maps) return;
 
-    const posOrigen = marcadorGpsMensajero.getPosition();
-    if (!posOrigen) {
-        marcadorGpsMensajero.setPosition(new google.maps.LatLng(destinoLat, destinoLng));
-        return;
-    }
+    let origLat, origLng;
 
-    const origLat = typeof posOrigen.lat === "function" ? posOrigen.lat() : posOrigen.lat;
-    const origLng = typeof posOrigen.lng === "function" ? posOrigen.lng() : posOrigen.lng;
+    if (marcadorGpsMensajero.esAvanzado) {
+        const pos = marcadorGpsMensajero.position;
+        if (!pos) {
+            marcadorGpsMensajero.position = { lat: destinoLat, lng: destinoLng };
+            return;
+        }
+        origLat = typeof pos.lat === "function" ? pos.lat() : pos.lat;
+        origLng = typeof pos.lng === "function" ? pos.lng() : pos.lng;
+    } else {
+        const posOrigen = marcadorGpsMensajero.getPosition();
+        if (!posOrigen) {
+            marcadorGpsMensajero.setPosition(new google.maps.LatLng(destinoLat, destinoLng));
+            return;
+        }
+        origLat = typeof posOrigen.lat === "function" ? posOrigen.lat() : posOrigen.lat;
+        origLng = typeof posOrigen.lng === "function" ? posOrigen.lng() : posOrigen.lng;
+    }
 
     if (Math.abs(origLat - destinoLat) < 0.000001 && Math.abs(origLng - destinoLng) < 0.000001) return;
 
@@ -80,7 +119,11 @@ function animarMovimientoMarcadorGps(destinoLat, destinoLng) {
         const actualLng = origLng + (destinoLng - origLng) * progreso;
 
         if (marcadorGpsMensajero) {
-            marcadorGpsMensajero.setPosition(new google.maps.LatLng(actualLat, actualLng));
+            if (marcadorGpsMensajero.esAvanzado) {
+                marcadorGpsMensajero.position = { lat: actualLat, lng: actualLng };
+            } else {
+                marcadorGpsMensajero.setPosition(new google.maps.LatLng(actualLat, actualLng));
+            }
         }
 
         if (progreso < 1) {
@@ -108,34 +151,47 @@ export function renderizarUbicacionGpsEnMapa(lat, lng, velocidad = 0) {
     window.posicionActualMensajero = posActual;
 
     if (!marcadorGpsMensajero) {
-        const iconoGpsSvg = {
-            path: google.maps.SymbolPath ? google.maps.SymbolPath.CIRCLE : 0,
-            scale: 10,
-            fillColor: "#00e5ff",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 3
-        };
+        const tieneMapId = mapa && (typeof mapa.get === "function" ? mapa.get("mapId") : mapa.mapId);
 
-        marcadorGpsMensajero = new google.maps.Marker({
-            position: new google.maps.LatLng(lat, lng),
-            map: mapa,
-            title: "Mi Ubicación Táctica (GPS)",
-            icon: iconoGpsSvg,
-            zIndex: 999999
-        });
+        if (typeof google.maps.marker !== "undefined" && typeof google.maps.marker.AdvancedMarkerElement === "function" && tieneMapId) {
+            const nodoGps = crearNodoDOMIndicadorGps();
+            marcadorGpsMensajero = new google.maps.marker.AdvancedMarkerElement({
+                map: mapa,
+                position: { lat, lng },
+                content: nodoGps,
+                title: "Mi Ubicación Táctica (GPS)",
+                zIndex: 1000000
+            });
+            marcadorGpsMensajero.esAvanzado = true;
+            console.log(`📍 [MAPA_GPS]: Marcador GPS (AdvancedMarkerElement) creado en [${lat.toFixed(5)}, ${lng.toFixed(5)}]`);
+        } else {
+            const iconoGpsSvg = {
+                path: google.maps.SymbolPath ? google.maps.SymbolPath.CIRCLE : 0,
+                scale: 10,
+                fillColor: "#00e5ff",
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 3
+            };
 
-        console.log(`📍 [MAPA_GPS]: Marcador GPS creado exitosamente en [${lat.toFixed(5)}, ${lng.toFixed(5)}]`);
+            marcadorGpsMensajero = new google.maps.Marker({
+                position: new google.maps.LatLng(lat, lng),
+                map: mapa,
+                title: "Mi Ubicación Táctica (GPS)",
+                icon: iconoGpsSvg,
+                zIndex: 1000000
+            });
+            marcadorGpsMensajero.esAvanzado = false;
+            console.log(`📍 [MAPA_GPS]: Marcador GPS (Legacy) creado en [${lat.toFixed(5)}, ${lng.toFixed(5)}]`);
+        }
     } else {
         animarMovimientoMarcadorGps(lat, lng);
     }
 
-    // Centrado suave de cámara ajustado a velocidad
     if (velocidad > 1 && typeof mapa.panTo === "function") {
         mapa.panTo(posActual);
     }
 
-    // Evaluación de proximidad y alertas de voz hacia la parada objetivo activa
     const objetivo = window.paradaObjetivoNavegacion || window.paradaDestinoSeleccionada;
     if (objetivo) {
         const destCoords = obtenerCoordenadasValidasParada(objetivo);
@@ -153,7 +209,6 @@ export function renderizarUbicacionGpsEnMapa(lat, lng, velocidad = 0) {
         }
     }
 
-    // AUTO-REROUTE Y TRAZADOS DINÁMICOS EN VIVO
     const ahora = Date.now();
     if (ahora - ultimoRecalculoRutaTime > 3000) {
         ultimoRecalculoRutaTime = ahora;
@@ -229,7 +284,6 @@ export function simularMovimientoGPS(intervaloMs = 800) {
         return;
     }
 
-    // Interpolación dinámica para garantizar animación fluida local
     if (puntosViales.length < 10) {
         console.log("🎮 [SIMULADOR_GPS]: Generando micro-pasos de telemetría local ($0.00 COP)...");
         puntosViales = interpolarPuntosTelemetria(puntosViales, 20);
@@ -258,7 +312,7 @@ export function simularMovimientoGPS(intervaloMs = 800) {
         }
 
         const puntoVial = puntosViales[pasoActual];
-        renderizarUbicacionGpsEnMapa(puntoVial.lat, puntoVial.lng, 8); // Simula ~28 km/h
+        renderizarUbicacionGpsEnMapa(puntoVial.lat, puntoVial.lng, 8);
         console.log(`📍 [SIMULADOR_GPS_STEP]: Paso [${pasoActual + 1}/${puntosViales.length}] -> Lat: ${puntoVial.lat.toFixed(5)}, Lng: ${puntoVial.lng.toFixed(5)}`);
         pasoActual++;
     }, intervaloMs);

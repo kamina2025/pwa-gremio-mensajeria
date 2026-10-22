@@ -814,5 +814,19 @@
         "longitud": -76.51165043448486,
         "direccion": "Cl. 32 # 31-11, Conquistadores, Cali, Valle del Cauca, Colombia",
         "updated_at": "2026-10-01 04:42:35"
+    },
+    {
+        "action": "actualizar_parada",
+        "id": "246723",
+        "ssc": "246723",
+        "planilla_id": null,
+        "estado": "entregado",
+        "status": "entregado",
+        "destinatario": "CAROLINA MONROY POSSO",
+        "direccion": "CRA 22 33 e 116",
+        "telefono": "3175901707",
+        "lat": 0,
+        "lng": 0,
+        "updated_at": "2026-10-02 03:53:58"
     }
 ]

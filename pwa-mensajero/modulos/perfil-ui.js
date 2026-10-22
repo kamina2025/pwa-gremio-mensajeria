@@ -3,7 +3,7 @@
  * Ubicación: pwa-mensajero/modulos/perfil-ui.js
  */
 
-import { obtenerPerfilLocal, guardarPerfilLocal } from './perfil-db.js';
+import { obtenerPerfilLocal, guardarPerfilLocal } from './procesamiento-datos/perfil-db.js';
 
 /**
  * Convierte un archivo a formato Base64 para optimización Local-First.

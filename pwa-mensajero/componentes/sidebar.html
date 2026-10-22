@@ -1,7 +1,24 @@
 <!-- pwa-mensajero/componentes/siderbar.html -->
 <aside class="sidebar">
     <nav class="sidebar-nav">
-
+        <!-- SECCIÓN 1: PEDIDOS -->
+        <div class="menu-item-has-submenu">
+            <button class="nav-btn btn-submenu-toggle">
+                <span>_PEDIDOS</span>
+                <i class="arrow-icon">▼</i>
+            </button>
+            <div class="submenu">
+                <button class="nav-btn sub-nav-btn" data-target="pestana-pedido-actual">
+                    <span>_ACTUAL</span>
+                </button>
+                <button class="nav-btn sub-nav-btn" data-target="pestana-en-pool">
+                    <span>_EN_POOL</span>
+                </button>
+                <button class="nav-btn sub-nav-btn" data-target="pestana-finalizados">
+                    <span>_FINALIZADOS</span>
+                </button>
+            </div>
+        </div>
         <!-- SECCIÓN 1: RUTA -->
         <div class="menu-item-has-submenu">
             <button class="nav-btn btn-submenu-toggle">
@@ -68,6 +85,5 @@
                 <span>_CERRAR</span>
             </button>
         </div>
-
     </nav>
 </aside>

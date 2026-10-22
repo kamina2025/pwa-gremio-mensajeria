@@ -3,7 +3,7 @@
  * Ubicación: pwa-mensajero/modulos/mensajero-importer.js
  */
 
-import { procesarArchivoTextoCSV } from "./base-de-datos.js";
+import { procesarArchivoTextoCSV } from "./procesamiento-datos/base-de-datos.js";
 import { procesarImagenConGemini } from "./procesamiento-datos/ia-gemini.js";
 import { fusionarYGuardarParadas } from "./importer/fusionador.js";
 import { parsearTextoPlanoWhatsApp, parsearPayloadODocumento } from "./importer/parser-payload.js";

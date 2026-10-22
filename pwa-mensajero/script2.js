@@ -52,24 +52,16 @@ import "./modulos/mapa/mapa-controlador.js";
 // Importaciones Módulo Planillas
 import { cambiarPestanaPlanillas, cargarPlanillasReportadasUI } from "./modulos/planilla/planillas-ui.js";
 import { exportarYRespaldarPlanillaPDF } from "./modulos/planilla/planillas-pdf-sync.js";
-import { guardarPlanillaReportada } from "./modulos/planilla/planillas-db.js";
+import { guardarPlanillaReportada } from "./modulos/procesamiento-datos/planillas-db.js";
 
 // Importaciones Módulo Perfil del Conductor
-import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil/perfil-ui.js";
-
-// --- CONFIGURACIÓN DE ENDPOINT API (RESOLUCIÓN DINÁMICA DE RUTA BASE) ---
-/**
- * PROTOCOLO MACONDO - CONTROLADOR PRINCIPAL Y ORQUESTADOR PWA TÁCTICO
- * Ubicación: pwa-mensajero/script2.js
- */
+import { cargarPerfilUI, manejarGuardarPerfil } from "./modulos/perfil-ui.js";
 
 // --- CONFIGURACIÓN DE ENDPOINT API (RESOLUCIÓN ABSOLUTA INMUTABLE) ---
 if (typeof window !== "undefined") {
-    // Calculamos la ruta absoluta de api.php un nivel arriba de pwa-mensajero de forma inmutable
     let endpointAbsoluto = "../api.php";
 
     try {
-        // window.location.href garantiza que se incluya el host (ej. localhost) y el puerto
         endpointAbsoluto = new URL("../api.php", window.location.href).href;
     } catch (e) {
         endpointAbsoluto = "../api.php";
@@ -94,7 +86,7 @@ export async function cargarBarraInferior(vistaTarget = "", reintentos = 3) {
             setTimeout(() => cargarBarraInferior(vistaTarget, reintentos - 1), 100);
             return;
         }
-        console.warn("⚠️️ [BARRA_INFERIOR]: Contenedor de barra inferior no hallado en el DOM.");
+        console.warn("⚠️ [BARRA_INFERIOR]: Contenedor de barra inferior no hallado en el DOM.");
         return;
     }
 
@@ -117,7 +109,7 @@ export async function cargarBarraInferior(vistaTarget = "", reintentos = 3) {
         if (contenedorFooter.dataset.componenteCargado === rutaComponente) return;
     }
 
-    console.log(`[BARRA_INFERIOR] Cargando barra [Target: ${vistaActivaActual}] -> ${rutaComponente}`);
+    console.log(`🔄 [BARRA_INFERIOR] Cargando barra [Target: ${vistaActivaActual}] -> ${rutaComponente}`);
 
     cargandoBarraPromesa = fetch(rutaComponente)
         .then((res) => {
@@ -607,7 +599,7 @@ window.guardarParadaManualUI = async () => {
 window.generarPlanillaDesdeRuta = async () => {
     const paradasActuales = (await obtenerParadasGuardadas()) || [];
     if (!paradasActuales || paradasActuales.length === 0) {
-        alert("⚠️️ [ALERTA]: No hay datos de paradas para planillar.");
+        alert("⚠️ [ALERTA]: No hay datos de paradas para planillar.");
         return;
     }
 

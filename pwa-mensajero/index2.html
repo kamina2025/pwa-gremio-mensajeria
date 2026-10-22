@@ -27,7 +27,7 @@
         <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
-        <!-- LIBRERÍAS EXTERNAS PARA GENERACIÓN DE CANVAS Y PDF -->
+        <!-- Librerías Externas para Generación de Canvas y PDF -->
         <script
             src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
             crossorigin="anonymous"
@@ -39,45 +39,78 @@
             referrerpolicy="no-referrer"></script>
 
         <!-- Puente para exposición global de la callback de Google Maps -->
-        <script>
-            console.log("🚀 [INDEX2]: Inicializando puente de callback Google Maps");
-            window.inicializarMapaMensajero = function () {
-                console.log("🗺️ [MAPA_CALLBACK_BRIDGE]: Google Maps SDK listo. Delegando a módulo...");
-                if (window.inicializarMapaMensajeroModulo) {
+       <!-- Puente refactorizado para la callback de Google Maps -->
+<!-- Puente refactorizado para exposición global y diferida del callback de Google Maps -->
+<script>
+    console.log("🚀 [INDEX2]: Inicializando puente de callback Google Maps");
+    window.inicializarMapaMensajero = function () {
+        console.log("🗺️ [MAPA_CALLBACK_BRIDGE]: Google Maps SDK listo. Delegando a módulo...");
+        
+        if (typeof window.inicializarMapaMensajeroModulo === "function") {
+            window.inicializarMapaMensajeroModulo();
+        } else {
+            console.log("⏳ [MAPA_CALLBACK_BRIDGE]: Módulo ES6 en proceso de carga. Programando reintento...");
+            
+            const verificarYEjecutar = () => {
+                if (typeof window.inicializarMapaMensajeroModulo === "function") {
+                    console.log("✅ [MAPA_CALLBACK_BRIDGE]: Módulo registrado. Ejecutando inicialización diferida.");
                     window.inicializarMapaMensajeroModulo();
+                    return true;
                 }
+                return false;
             };
-        </script>
+
+            // Reintento inmediato en microtarea o en modulosCargados
+            if (!verificarYEjecutar()) {
+                document.addEventListener("modulosCargados", verificarYEjecutar, { once: true });
+            }
+        }
+    };
+</script>
     </head>
     <body class="cyber-theme">
         <!-- Cabecera Principal (Header Grid Area) -->
         <header class="header-principal">
-            <button id="toggle-menu-btn" class="nav-btn" type="button">
+            <button id="toggle-menu-btn" class="nav-btn" type="button" aria-label="Abrir menú lateral" aria-expanded="false">
                 <i class="fa-solid fa-bars" aria-hidden="true"></i>
                 <span>_MENU</span>
             </button>
             <div class="logo">RUNNER</div>
-            <button id="install-btn" class="nav-btn" type="button">_INSTALAR_PWA</button>
+            <button id="install-btn" class="nav-btn" type="button" aria-label="Instalar aplicación PWA">_INSTALAR_PWA</button>
         </header>
 
         <!-- Contenedor Principal del Dashboard (Grid de 2 Columnas) -->
         <div class="dashboard-container">
-            <!-- Componente de Barra Lateral (Sidebar Area) -->
-            <div data-include="componentes/siderbar.html"></div>
+            <!-- Componente de Barra Lateral (Sidebar Area) - Corrección de Typos -->
+            <div data-include="componentes/sidebar.html"></div>
 
             <!-- Contenedor de Vistas y Pestañas (Main Area) -->
             <main class="main-content main-container">
+                <!-- Vista: Pedidos -->
+                <div
+                    id="pestana-pedido-actual"
+                    class="contenedor-pestana"
+                    data-include="vistas/pedidos/pedido-actual.html"></div>
+                <div
+                    id="pestana-en-pool"
+                    class="contenedor-pestana"
+                    data-include="vistas/pedidos/pedidos-en-pool.html"></div>
+                <div
+                    id="pestana-finalizados"
+                    class="contenedor-pestana"
+                    data-include="vistas/pedidos/pedidos-finalizados.html"></div>
+
                 <!-- Vista: Ruta Activa -->
                 <div
                     id="pestana-ruta-activa"
-                    class="contenedor-pestana activa"
+                    class="contenedor-pestana"
                     data-include="vistas/ruta/ruta-activa.html"></div>
 
                 <div id="pestana-ruta-crear" class="contenedor-pestana" data-include="vistas/ruta/crear.html"></div>
 
                 <div
                     id="mapa-fullscreen-container"
-                    class="contenedor-pestana"
+                    class="contenedor-pestana activa"
                     data-include="vistas/ruta/mapa-activa.html"></div>
 
                 <!-- Submenú de Monedero -->
@@ -130,7 +163,6 @@
         <script type="module" src="./modulos/ui/avisos/visor-animaciones.js"></script>
         <script type="module" src="./modulos/ui/avisos/avisos-controller.js"></script>
         <script type="module" src="./modulos/mensajero-ui.js"></script>
-        <!-- En pwa-mensajero/index2.html justo antes de script2.js -->
         <script type="module" src="./modulos/mensajero-rutas.js"></script>
 
         <!-- SDK de Mapas -->
